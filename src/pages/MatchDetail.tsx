@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { MOCK_MATCHES } from '@/src/data/matches';
-import { analyzeMatch, streamAgentThoughts, MatchAnalysis } from '@/src/services/ai';
+import { analyzeMatch, streamAgentThoughts, streamRemotionCode, MatchAnalysis } from '@/src/services/ai';
 import { saveHistory, getHistory } from '@/src/services/history';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
-import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate, FileText } from 'lucide-react';
+import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate, FileText, ChevronDown, ChevronUp, Video } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
+import { parseAgentStream, AgentResult } from '@/src/services/agentParser';
+import { RemotionPlayer } from '@/src/components/RemotionPlayer';
 
 export default function MatchDetail() {
   const { id } = useParams();
@@ -29,6 +31,10 @@ export default function MatchDetail() {
 
   const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null);
   const [thoughts, setThoughts] = useState<string>('');
+  const [parsedStream, setParsedStream] = useState<AgentResult | null>(null);
+  const [collapsedSegments, setCollapsedSegments] = useState<Record<string, boolean>>({});
+  const [generatedCodes, setGeneratedCodes] = useState<Record<string, string>>({});
+  const [isGeneratingCode, setIsGeneratingCode] = useState<Record<string, boolean>>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -89,6 +95,37 @@ export default function MatchDetail() {
     
     setEditableData(JSON.stringify(dataToSend, null, 2));
   }, [match, selectedSources, step]);
+
+  const generateCodeForSegment = async (seg: any) => {
+    if (isGeneratingCode[seg.id]) return;
+
+    setIsGeneratingCode(prev => ({ ...prev, [seg.id]: true }));
+    
+    try {
+      let fullCode = '';
+      const stream = streamRemotionCode(seg.animation);
+      
+      for await (const chunk of stream) {
+        fullCode += chunk;
+        setGeneratedCodes(prev => ({ ...prev, [seg.id]: fullCode }));
+      }
+    } catch (error) {
+      console.error(`Error generating code for segment ${seg.id}:`, error);
+    } finally {
+      setIsGeneratingCode(prev => ({ ...prev, [seg.id]: false }));
+    }
+  };
+
+  // Auto-generate Remotion code when animation data is available
+  useEffect(() => {
+    if (!parsedStream) return;
+
+    parsedStream.segments.forEach(seg => {
+      if (seg.animation && !generatedCodes[seg.id] && !isGeneratingCode[seg.id]) {
+        generateCodeForSegment(seg);
+      }
+    });
+  }, [parsedStream]);
 
   const handleDataChange = (path: string[], value: any) => {
     try {
@@ -275,28 +312,46 @@ export default function MatchDetail() {
     setStep('analyzing');
     setIsAnalyzing(true);
     setThoughts('');
+    setParsedStream(null);
+    setCollapsedSegments({});
+    setGeneratedCodes({});
+    setIsGeneratingCode({});
     
     try {
-      // 1. Stream thoughts
+      let currentThoughts = '';
       const stream = streamAgentThoughts(dataToAnalyze);
       for await (const chunk of stream) {
-        setThoughts(prev => prev + chunk);
+        currentThoughts += chunk;
+        setThoughts(currentThoughts);
+        
+        const parsed = parseAgentStream(currentThoughts);
+        setParsedStream(parsed);
+        
+        // Auto-collapse completed thoughts
+        parsed.segments.forEach(seg => {
+          if (seg.isThoughtComplete && !collapsedSegments[seg.id]) {
+            setCollapsedSegments(prev => ({ ...prev, [seg.id]: true }));
+          }
+        });
       }
 
-      // 2. Get final structured analysis
-      const result = await analyzeMatch(dataToAnalyze);
-      setAnalysis(result);
-      
-      // Update match object with edited names before saving
-      const finalMatch = { ...match! };
-      if (dataToAnalyze.homeTeam?.name) finalMatch.homeTeam.name = dataToAnalyze.homeTeam.name;
-      if (dataToAnalyze.awayTeam?.name) finalMatch.awayTeam.name = dataToAnalyze.awayTeam.name;
-      if (dataToAnalyze.league) finalMatch.league = dataToAnalyze.league;
-      
-      // Save to history
-      saveHistory(finalMatch, result);
+      // Final parse after stream completes
+      const finalParsed = parseAgentStream(currentThoughts);
+      setParsedStream(finalParsed);
 
-      // Auto-play the visualization once analysis is done
+      if (finalParsed.summary) {
+        setAnalysis(finalParsed.summary as MatchAnalysis);
+        
+        // Update match object with edited names before saving
+        const finalMatch = { ...match! };
+        if (dataToAnalyze.homeTeam?.name) finalMatch.homeTeam.name = dataToAnalyze.homeTeam.name;
+        if (dataToAnalyze.awayTeam?.name) finalMatch.awayTeam.name = dataToAnalyze.awayTeam.name;
+        if (dataToAnalyze.league) finalMatch.league = dataToAnalyze.league;
+        
+        // Save to history
+        saveHistory(finalMatch, finalParsed.summary as MatchAnalysis);
+      }
+
       setIsPlaying(true);
       setStep('result');
     } catch (error) {
@@ -478,57 +533,113 @@ export default function MatchDetail() {
       {(step === 'analyzing' || step === 'result') && (
         <main className="flex-1 flex flex-col gap-4 p-4 max-w-md mx-auto w-full">
           
-          {/* Render Engine (Simulated Remotion) - Top on Mobile */}
-          <Card className="flex flex-col border-zinc-800 bg-zinc-950 overflow-hidden relative shadow-lg">
-            <CardHeader className="border-b border-white/5 py-3 px-4 flex flex-row items-center justify-between bg-zinc-900/50">
-              <CardTitle className="flex items-center gap-2 text-blue-400 text-sm">
-                <Play className="w-4 h-4" /> 
-                渲染引擎
-              </CardTitle>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                onClick={() => setIsPlaying(!isPlaying)}
-                className="h-6 w-6 text-zinc-400 hover:text-white"
+          {isAnalyzing && !parsedStream?.segments?.length && (
+            <div className="flex items-center justify-center p-8 text-emerald-500 animate-pulse font-mono text-xs">
+              <Activity className="w-4 h-4 mr-2" /> [SYSTEM] 初始化分析引擎...
+            </div>
+          )}
+
+          {parsedStream?.segments.map((seg, i) => {
+            const isCollapsed = collapsedSegments[seg.id];
+            return (
+              <motion.div 
+                key={seg.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col border border-zinc-800 rounded-xl bg-zinc-950 overflow-hidden shadow-lg"
               >
-                {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-              </Button>
-            </CardHeader>
-            
-            <CardContent className="p-0 flex items-center justify-center bg-black relative overflow-hidden aspect-video">
-              {/* Simulated Video Player Area */}
-              <AnimatePresence>
-                {analysis && isPlaying && (
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-gradient-to-br from-zinc-900 to-black"
-                  >
+                {/* Thoughts Header (Collapsible) */}
+                <div 
+                  className="bg-zinc-900/80 p-3 flex justify-between items-center cursor-pointer hover:bg-zinc-800 transition-colors"
+                  onClick={() => setCollapsedSegments(prev => ({ ...prev, [seg.id]: !isCollapsed }))}
+                >
+                  <span className={`text-xs font-mono flex items-center gap-2 ${seg.isThoughtComplete ? 'text-zinc-400' : 'text-emerald-500'}`}>
+                    {seg.isThoughtComplete ? <CheckCircle2 className="w-3.5 h-3.5"/> : <Activity className="w-3.5 h-3.5 animate-pulse"/>}
+                    分析阶段 {i + 1}
+                  </span>
+                  {isCollapsed ? <ChevronDown className="w-4 h-4 text-zinc-500" /> : <ChevronUp className="w-4 h-4 text-zinc-500" />}
+                </div>
+                
+                {/* Thoughts Content */}
+                <AnimatePresence>
+                  {!isCollapsed && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="p-4 text-[11px] font-mono text-zinc-300 whitespace-pre-wrap leading-relaxed bg-black/50"
+                    >
+                      {seg.thoughts}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Animation Block */}
+                {seg.animation && (
+                  <div className="border-t border-zinc-800 bg-black p-4">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 text-blue-400 text-xs font-bold border-b border-white/10 pb-2">
+                        <Video className="w-4 h-4" /> {seg.animation.title || '数据可视化'}
+                      </div>
+                      <div className="text-zinc-300 text-xs italic bg-zinc-900/50 p-3 rounded-lg border-l-2 border-blue-500">
+                        "{seg.animation.narration}"
+                      </div>
+                      
+                      {/* Remotion Player */}
+                      {(isGeneratingCode[seg.id] || generatedCodes[seg.id]) && (
+                        <div className="mt-2">
+                          <RemotionPlayer 
+                            code={generatedCodes[seg.id]} 
+                            data={seg.animation.data}
+                            title={seg.animation.title || ''}
+                            narration={seg.animation.narration || ''}
+                            isGenerating={isGeneratingCode[seg.id]}
+                          />
+                        </div>
+                      )}
+
+                      {/* Raw Code Toggle */}
+                      {generatedCodes[seg.id] && (
+                        <details className="mt-2 group">
+                          <summary className="text-[10px] text-emerald-500 cursor-pointer hover:text-emerald-400 font-mono flex items-center gap-1">
+                            <Code2 className="w-3 h-3" /> 查看生成的 Remotion 代码
+                          </summary>
+                          <div className="bg-zinc-950 rounded-lg p-4 border border-white/5 font-mono text-[10px] text-zinc-400 overflow-x-auto mt-2">
+                            <pre>{generatedCodes[seg.id]}</pre>
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+
+          {/* Final Summary Card */}
+          {analysis && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.5 }}
+            >
+              <Card className="flex flex-col border-emerald-500/30 bg-zinc-950 overflow-hidden relative shadow-lg shadow-emerald-500/10">
+                <CardHeader className="border-b border-white/5 py-3 px-4 flex flex-row items-center justify-between bg-emerald-500/10">
+                  <CardTitle className="flex items-center gap-2 text-emerald-400 text-sm">
+                    <BrainCircuit className="w-4 h-4" /> 
+                    最终分析摘要
+                  </CardTitle>
+                </CardHeader>
+                
+                <CardContent className="p-0 flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-black relative overflow-hidden">
+                  <div className="p-6 w-full flex flex-col items-center">
                     <div className="flex items-center gap-6 mb-6">
-                      <motion.img 
-                        initial={{ x: -20, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        transition={{ delay: 0.2 }}
-                        src={match.homeTeam.logo} 
-                        className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5" 
-                      />
+                      <img src={match.homeTeam.logo} className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5" />
                       <div className="text-xl font-bold font-mono text-zinc-500">VS</div>
-                      <motion.img 
-                        initial={{ x: 20, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        transition={{ delay: 0.2 }}
-                        src={match.awayTeam.logo} 
-                        className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5" 
-                      />
+                      <img src={match.awayTeam.logo} className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5" />
                     </div>
 
-                    <motion.div 
-                      initial={{ y: 10, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: 0.6 }}
-                      className="w-full max-w-[240px] space-y-3"
-                    >
+                    <div className="w-full max-w-[240px] space-y-4">
                       <div className="space-y-1">
                         <div className="flex justify-between text-[10px] font-mono text-zinc-400">
                           <span className="truncate max-w-[80px]">
@@ -545,8 +656,23 @@ export default function MatchDetail() {
                           <motion.div 
                             initial={{ width: 0 }}
                             animate={{ width: `${analysis.winProbability.home}%` }}
-                            transition={{ delay: 1, duration: 1 }}
+                            transition={{ duration: 1 }}
                             className="h-full bg-emerald-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] font-mono text-zinc-400">
+                          <span className="truncate max-w-[80px]">平局</span>
+                          <span>{analysis.winProbability.draw}%</span>
+                        </div>
+                        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${analysis.winProbability.draw}%` }}
+                            transition={{ duration: 1 }}
+                            className="h-full bg-zinc-500"
                           />
                         </div>
                       </div>
@@ -567,52 +693,35 @@ export default function MatchDetail() {
                           <motion.div 
                             initial={{ width: 0 }}
                             animate={{ width: `${analysis.winProbability.away}%` }}
-                            transition={{ delay: 1.2, duration: 1 }}
+                            transition={{ duration: 1 }}
                             className="h-full bg-blue-500"
                           />
                         </div>
                       </div>
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    </div>
 
-              {!analysis && !isAnalyzing && (
-                <div className="text-zinc-600 font-mono text-xs">等待分析...</div>
-              )}
-            </CardContent>
-          </Card>
+                    <div className="mt-6 p-4 rounded-xl bg-black/50 border border-white/5 w-full">
+                      <p className="text-xs text-zinc-300 leading-relaxed italic text-center">
+                        "{analysis.prediction}"
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
 
-          {/* Agent Runtime - Bottom on Mobile */}
-          <Card className="flex flex-col border-zinc-800 bg-zinc-950 shadow-lg flex-1 min-h-[300px]">
-            <CardHeader className="border-b border-white/5 py-3 px-4 bg-zinc-900/50">
-              <CardTitle className="flex items-center gap-2 text-emerald-500 text-sm">
-                <BrainCircuit className="w-4 h-4" /> 
-                Agent 运行环境
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 flex-1 overflow-y-auto font-mono text-[11px] text-zinc-400 leading-relaxed space-y-4 bg-black/50 rounded-b-xl border-t border-white/5">
-              {isAnalyzing && (
-                <div className="flex items-center gap-2 text-emerald-500 animate-pulse mb-4">
-                  <Activity className="w-3 h-3" /> [SYSTEM] 正在执行沙盒...
-                </div>
-              )}
-              <div className="whitespace-pre-wrap text-zinc-300">{thoughts}</div>
-              
-              {analysis && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-6 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-100"
-                >
-                  <h4 className="font-bold mb-2 text-emerald-400 uppercase tracking-wider text-[9px]">[FINAL_OUTPUT_JSON]</h4>
-                  <pre className="text-[9px] overflow-x-auto text-emerald-300/80">
-                    {JSON.stringify(analysis, null, 2)}
-                  </pre>
-                </motion.div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Raw Output Fallback (if parsing fails completely but we have thoughts) */}
+          {!parsedStream?.segments?.length && thoughts && !isAnalyzing && !analysis && (
+            <Card className="border-red-500/30 bg-zinc-950">
+              <CardHeader className="border-b border-white/5 py-3 px-4">
+                <CardTitle className="text-red-400 text-sm">解析失败 (原始输出)</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 font-mono text-[10px] text-zinc-400 whitespace-pre-wrap">
+                {thoughts}
+              </CardContent>
+            </Card>
+          )}
         </main>
       )}
 
