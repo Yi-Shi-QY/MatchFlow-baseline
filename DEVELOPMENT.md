@@ -75,17 +75,43 @@ npm run cap:sync
 
 _(此命令等同于 `npx cap sync`)_
 
-### 3. 打开原生 IDE 进行编译和打包
+### 3. 自定义图标和启动图 (Custom Icons)
 
-#### 🤖 Android 打包
+我们已经集成了 `@capacitor/assets` 工具，可以一键生成所有平台所需的图标和启动图。
+
+1. 在项目根目录创建一个 `assets` 文件夹。
+2. 准备您的图标和启动图文件，并放入 `assets` 文件夹中：
+   - `icon.png` (至少 1024x1024 像素，不带透明背景)
+   - `splash.png` (至少 2732x2732 像素，不带透明背景)
+3. 运行生成命令：
+   ```bash
+   npm run cap:assets
+   ```
+4. 工具会自动将生成的图标覆盖到 `android` 和 `ios` 目录下的对应位置。
+
+### 4. 打开原生 IDE 进行编译和打包
+
+#### 🤖 Android 打包 (构建正式版 Release APK/AAB)
+
+如果您直接点击 Run，生成的只是 Debug 测试版。要构建可以发布到应用商店或分享给用户的**正式版 (Release)**，请按照以下步骤操作：
 
 1.  打开 Android Studio:
     ```bash
     npx cap open android
     ```
 2.  在 Android Studio 中，等待 Gradle 同步完成。
-3.  点击顶部的 **Run** 按钮在模拟器或真机上运行。
-4.  **生成 APK/AAB**: 点击菜单栏的 `Build` -> `Generate Signed Bundle / APK...`，按照向导生成用于发布的安装包。
+3.  **生成签名密钥 (Keystore)**:
+    - 点击顶部菜单栏的 `Build` -> `Generate Signed Bundle / APK...`
+    - 选择 `APK` (用于直接安装) 或 `Android App Bundle` (用于上架 Google Play)，点击 `Next`。
+    - 在 `Key store path` 下方，点击 `Create new...`。
+    - 选择一个保存路径（例如项目根目录下的 `keystore.jks`），设置密码，并填写您的证书信息（如 Alias 别名和密码），点击 `OK`。
+4.  **构建正式版**:
+    - 回到向导页面，确保选择了刚刚创建的 Keystore，输入密码，点击 `Next`。
+    - 在 `Build Variants` 中，**必须选择 `release`**。
+    - 勾选 `V1 (Jar Signature)` 和 `V2 (Full APK Signature)` (如果出现该选项)。
+    - 点击 `Finish`。
+5.  **获取安装包**:
+    - 构建完成后，Android Studio 右下角会弹出提示。点击 `locate`，即可在 `android/app/release/` 目录下找到生成的 `app-release.apk`。
 
 #### 🍎 iOS 打包 (需要 macOS)
 
@@ -104,10 +130,12 @@ _(此命令等同于 `npx cap sync`)_
 ## ⚠️ 常见问题 (FAQ)
 
 1.  **扫码功能在 Web 端无法使用？**
+
     - 浏览器出于安全考虑，要求必须在 `https://` 协议或 `localhost` 下才能访问摄像头。请确保您的开发环境满足此条件。
     - 在原生 App 中，Capacitor 会自动处理摄像头权限请求。
 
 2.  **Android 打包时提示缺少 SDK？**
+
     - 请打开 Android Studio 的 SDK Manager，确保安装了最新的 Android SDK Platform 和 Build-Tools。
 
 3.  **如何更新 App 图标和启动图？**
