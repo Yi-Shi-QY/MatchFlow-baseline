@@ -5,14 +5,27 @@ import { analyzeMatch, streamAgentThoughts, MatchAnalysis } from '@/src/services
 import { saveHistory, getHistory } from '@/src/services/history';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
-import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate } from 'lucide-react';
+import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate, FileText } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function MatchDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const match = MOCK_MATCHES.find(m => m.id === id);
+  
+  const isCustom = id === 'custom';
+  const customMatch = React.useMemo(() => ({
+    id: `custom_${Date.now()}`,
+    league: '自定义赛事',
+    date: new Date().toISOString().split('T')[0],
+    status: '未开始',
+    homeTeam: { name: '主队', logo: 'https://picsum.photos/seed/home/200/200', form: ['?', '?', '?', '?', '?'] },
+    awayTeam: { name: '客队', logo: 'https://picsum.photos/seed/away/200/200', form: ['?', '?', '?', '?', '?'] },
+    stats: { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } }
+  }), []);
+  
+  const historyRecord = React.useMemo(() => getHistory().find(h => h.matchId === id), [id]);
+  const match = isCustom ? customMatch : (MOCK_MATCHES.find(m => m.id === id) || historyRecord?.match);
 
   const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null);
   const [thoughts, setThoughts] = useState<string>('');
@@ -25,6 +38,7 @@ export default function MatchDetail() {
     basic: true,
     form: true,
     stats: true,
+    custom: false,
   });
   const [editableData, setEditableData] = useState("");
   const [showJson, setShowJson] = useState(false);
@@ -67,6 +81,10 @@ export default function MatchDetail() {
     
     if (selectedSources.stats && match.stats) {
       dataToSend.stats = match.stats;
+    }
+    
+    if (selectedSources.custom) {
+      dataToSend.customInfo = "";
     }
     
     setEditableData(JSON.stringify(dataToSend, null, 2));
@@ -229,6 +247,18 @@ export default function MatchDetail() {
             </div>
           </div>
         )}
+
+        {selectedSources.custom && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">自定义数据</h3>
+            <textarea 
+              value={data.customInfo || ''} 
+              onChange={(e) => handleDataChange(['customInfo'], e.target.value)}
+              placeholder="输入伤停信息、天气、裁判、战意等其他因素..."
+              className="w-full bg-zinc-900 border border-white/10 rounded p-2 text-xs text-white focus:border-emerald-500 focus:outline-none min-h-[80px] resize-none"
+            />
+          </div>
+        )}
       </div>
     );
   };
@@ -257,8 +287,14 @@ export default function MatchDetail() {
       const result = await analyzeMatch(dataToAnalyze);
       setAnalysis(result);
       
+      // Update match object with edited names before saving
+      const finalMatch = { ...match! };
+      if (dataToAnalyze.homeTeam?.name) finalMatch.homeTeam.name = dataToAnalyze.homeTeam.name;
+      if (dataToAnalyze.awayTeam?.name) finalMatch.awayTeam.name = dataToAnalyze.awayTeam.name;
+      if (dataToAnalyze.league) finalMatch.league = dataToAnalyze.league;
+      
       // Save to history
-      saveHistory(match!, result);
+      saveHistory(finalMatch, result);
 
       // Auto-play the visualization once analysis is done
       setIsPlaying(true);
@@ -275,7 +311,8 @@ export default function MatchDetail() {
   if (!match) return <div className="p-8 text-white text-center">Match not found</div>;
 
   const shareData = analysis ? btoa(encodeURIComponent(JSON.stringify({
-    m: match.id,
+    m: match?.id,
+    matchData: match,
     a: analysis
   }))) : '';
 
@@ -290,9 +327,21 @@ export default function MatchDetail() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex flex-col">
-            <span className="text-[10px] text-zinc-500 uppercase font-mono">{match.league}</span>
+            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+              {(() => {
+                try {
+                  const d = JSON.parse(editableData);
+                  return d.league || match.league;
+                } catch(e) { return match.league; }
+              })()}
+            </span>
             <h1 className="text-sm font-bold tracking-tight text-white line-clamp-1">
-              {match.homeTeam.name} vs {match.awayTeam.name}
+              {(() => {
+                try {
+                  const d = JSON.parse(editableData);
+                  return `${d.homeTeam?.name || match.homeTeam.name} vs ${d.awayTeam?.name || match.awayTeam.name}`;
+                } catch(e) { return `${match.homeTeam.name} vs ${match.awayTeam.name}`; }
+              })()}
             </h1>
           </div>
         </div>
@@ -358,7 +407,7 @@ export default function MatchDetail() {
 
             {match.stats && (
               <Card 
-                className={`cursor-pointer transition-colors col-span-2 ${selectedSources.stats ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}
+                className={`cursor-pointer transition-colors ${selectedSources.stats ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}
                 onClick={() => setSelectedSources(s => ({...s, stats: !s.stats}))}
               >
                 <CardContent className="p-4 flex flex-col gap-2">
@@ -371,6 +420,20 @@ export default function MatchDetail() {
                 </CardContent>
               </Card>
             )}
+
+            <Card 
+              className={`cursor-pointer transition-colors ${!match.stats ? 'col-span-2' : ''} ${selectedSources.custom ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}
+              onClick={() => setSelectedSources(s => ({...s, custom: !s.custom}))}
+            >
+              <CardContent className="p-4 flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <FileText className="w-5 h-5 text-zinc-400" />
+                  {selectedSources.custom && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                </div>
+                <span className="text-sm font-medium">自定义数据</span>
+                <span className="text-[10px] text-zinc-500">伤停、天气、战意等</span>
+              </CardContent>
+            </Card>
           </div>
 
           <div className="mt-4 flex flex-col gap-2 flex-1">
@@ -448,7 +511,7 @@ export default function MatchDetail() {
                         animate={{ x: 0, opacity: 1 }}
                         transition={{ delay: 0.2 }}
                         src={match.homeTeam.logo} 
-                        className="w-16 h-16 object-contain drop-shadow-2xl" 
+                        className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5" 
                       />
                       <div className="text-xl font-bold font-mono text-zinc-500">VS</div>
                       <motion.img 
@@ -456,7 +519,7 @@ export default function MatchDetail() {
                         animate={{ x: 0, opacity: 1 }}
                         transition={{ delay: 0.2 }}
                         src={match.awayTeam.logo} 
-                        className="w-16 h-16 object-contain drop-shadow-2xl" 
+                        className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5" 
                       />
                     </div>
 
@@ -468,7 +531,14 @@ export default function MatchDetail() {
                     >
                       <div className="space-y-1">
                         <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                          <span className="truncate max-w-[80px]">{match.homeTeam.name}</span>
+                          <span className="truncate max-w-[80px]">
+                            {(() => {
+                              try {
+                                const d = JSON.parse(editableData);
+                                return d.homeTeam?.name || match.homeTeam.name;
+                              } catch(e) { return match.homeTeam.name; }
+                            })()}
+                          </span>
                           <span>{analysis.winProbability.home}%</span>
                         </div>
                         <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -483,7 +553,14 @@ export default function MatchDetail() {
 
                       <div className="space-y-1">
                         <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                          <span className="truncate max-w-[80px]">{match.awayTeam.name}</span>
+                          <span className="truncate max-w-[80px]">
+                            {(() => {
+                              try {
+                                const d = JSON.parse(editableData);
+                                return d.awayTeam?.name || match.awayTeam.name;
+                              } catch(e) { return match.awayTeam.name; }
+                            })()}
+                          </span>
                           <span>{analysis.winProbability.away}%</span>
                         </div>
                         <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">

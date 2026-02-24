@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MOCK_MATCHES } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
-import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X } from 'lucide-react';
+import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Plus } from 'lucide-react';
 import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord } from '@/src/services/history';
 import { Button } from '@/src/components/ui/Button';
 import { motion, AnimatePresence } from 'motion/react';
@@ -168,7 +168,15 @@ export default function Home() {
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Calendar className="w-5 h-5 text-zinc-400" /> 热门赛事
             </h2>
-            <span className="text-xs text-emerald-500 font-medium">直播 & 即将开始</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-emerald-500 font-medium hidden sm:inline-block">直播 & 即将开始</span>
+              <button 
+                onClick={() => navigate('/match/custom')}
+                className="flex items-center gap-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-2 py-1 rounded border border-white/10 transition-colors"
+              >
+                <Plus className="w-3 h-3" /> 自定义赛事
+              </button>
+            </div>
           </div>
           
           <div className="grid gap-4">

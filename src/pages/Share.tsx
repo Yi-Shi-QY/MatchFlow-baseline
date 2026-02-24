@@ -36,7 +36,7 @@ export default function Share() {
           setData(decoded);
         }
         
-        const m = MOCK_MATCHES.find(x => x.id === decoded.m);
+        const m = decoded.matchData || MOCK_MATCHES.find(x => x.id === decoded.m);
         setMatch(m);
       } catch (e) {
         console.error("Failed to decode share data", e);

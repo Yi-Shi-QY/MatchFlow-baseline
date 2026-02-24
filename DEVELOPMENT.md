@@ -101,7 +101,7 @@ _(此命令等同于 `npx cap sync`)_
     ```
 2.  在 Android Studio 中，等待 Gradle 同步完成。
 3.  **生成签名密钥 (Keystore)**:
-    - 点击顶部菜单栏的 `Build` -> `Generate Signed Bundle / APK...`
+    - **注意 (新版 UI)**: 如果您使用的是 Android Studio 的新版 UI（顶部没有传统的菜单栏），请点击左上角的 **汉堡菜单 (四个横线 ≡)**，然后选择 `Build` -> `Generate Signed Bundle / APK...`。
     - 选择 `APK` (用于直接安装) 或 `Android App Bundle` (用于上架 Google Play)，点击 `Next`。
     - 在 `Key store path` 下方，点击 `Create new...`。
     - 选择一个保存路径（例如项目根目录下的 `keystore.jks`），设置密码，并填写您的证书信息（如 Alias 别名和密码），点击 `OK`。
