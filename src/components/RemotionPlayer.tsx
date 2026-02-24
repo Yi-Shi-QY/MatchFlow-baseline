@@ -64,11 +64,13 @@ export function RemotionPlayer({ code, data, title, narration, isGenerating }: R
         inputProps={{ data, title, narration }}
         durationInFrames={150} // Default duration, can be adjusted
         fps={30}
-        compositionWidth={1920}
-        compositionHeight={1080}
+        compositionWidth={1080}
+        compositionHeight={1920}
         style={{
           width: '100%',
-          aspectRatio: '16 / 9',
+          aspectRatio: '9 / 16',
+          maxHeight: '600px',
+          margin: '0 auto',
         }}
         controls
         autoPlay

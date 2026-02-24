@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { MOCK_MATCHES } from '@/src/data/matches';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { MOCK_MATCHES, Match } from '@/src/data/matches';
 import { analyzeMatch, streamAgentThoughts, streamRemotionCode, MatchAnalysis } from '@/src/services/ai';
 import { saveHistory, getHistory } from '@/src/services/history';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
@@ -14,22 +14,46 @@ import { RemotionPlayer } from '@/src/components/RemotionPlayer';
 export default function MatchDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const importedData = location.state?.importedData;
   
   const isCustom = id === 'custom';
-  const customMatch = React.useMemo(() => ({
-    id: `custom_${Date.now()}`,
-    league: '自定义赛事',
-    date: new Date().toISOString().split('T')[0],
-    status: '未开始',
-    homeTeam: { name: '主队', logo: 'https://picsum.photos/seed/home/200/200', form: ['?', '?', '?', '?', '?'] },
-    awayTeam: { name: '客队', logo: 'https://picsum.photos/seed/away/200/200', form: ['?', '?', '?', '?', '?'] },
-    stats: { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } }
-  }), []);
+  const customMatch = React.useMemo(() => {
+    if (importedData) {
+      return {
+        id: importedData.id || `custom_${Date.now()}`,
+        league: importedData.league || '自定义赛事',
+        date: importedData.date || new Date().toISOString().split('T')[0],
+        status: importedData.status || '未开始',
+        homeTeam: { 
+          name: importedData.homeTeam?.name || '主队', 
+          logo: importedData.homeTeam?.logo || 'https://picsum.photos/seed/home/200/200', 
+          form: importedData.homeTeam?.form || ['?', '?', '?', '?', '?'] 
+        },
+        awayTeam: { 
+          name: importedData.awayTeam?.name || '客队', 
+          logo: importedData.awayTeam?.logo || 'https://picsum.photos/seed/away/200/200', 
+          form: importedData.awayTeam?.form || ['?', '?', '?', '?', '?'] 
+        },
+        stats: importedData.stats || { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } }
+      };
+    }
+    return {
+      id: `custom_${Date.now()}`,
+      league: '自定义赛事',
+      date: new Date().toISOString().split('T')[0],
+      status: '未开始',
+      homeTeam: { name: '主队', logo: 'https://picsum.photos/seed/home/200/200', form: ['?', '?', '?', '?', '?'] },
+      awayTeam: { name: '客队', logo: 'https://picsum.photos/seed/away/200/200', form: ['?', '?', '?', '?', '?'] },
+      stats: { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } }
+    };
+  }, [importedData]);
   
   const historyRecord = React.useMemo(() => getHistory().find(h => h.matchId === id), [id]);
   const match = isCustom ? customMatch : (MOCK_MATCHES.find(m => m.id === id) || historyRecord?.match);
 
   const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null);
+  const [analyzedMatch, setAnalyzedMatch] = useState<Match | null>(null);
   const [thoughts, setThoughts] = useState<string>('');
   const [parsedStream, setParsedStream] = useState<AgentResult | null>(null);
   const [collapsedSegments, setCollapsedSegments] = useState<Record<string, boolean>>({});
@@ -40,6 +64,7 @@ export default function MatchDetail() {
   const [isPlaying, setIsPlaying] = useState(false);
   
   const [step, setStep] = useState<'selection' | 'analyzing' | 'result'>('selection');
+  const [includeAnimations, setIncludeAnimations] = useState(true);
   const [selectedSources, setSelectedSources] = useState({
     basic: true,
     form: true,
@@ -58,6 +83,13 @@ export default function MatchDetail() {
 
     if (existingRecord) {
       setAnalysis(existingRecord.analysis);
+      setAnalyzedMatch(existingRecord.match);
+      if (existingRecord.parsedStream) {
+        setParsedStream(existingRecord.parsedStream);
+      }
+      if (existingRecord.generatedCodes) {
+        setGeneratedCodes(existingRecord.generatedCodes);
+      }
       setThoughts('[SYSTEM] Loaded from local history cache.\n\nAnalysis complete.');
       setIsPlaying(true);
       setStep('result');
@@ -126,6 +158,13 @@ export default function MatchDetail() {
       }
     });
   }, [parsedStream]);
+
+  // Auto-save history when generated codes are updated
+  useEffect(() => {
+    if (analyzedMatch && analysis && parsedStream && Object.keys(generatedCodes).length > 0) {
+      saveHistory(analyzedMatch, analysis, parsedStream, generatedCodes);
+    }
+  }, [generatedCodes, analyzedMatch, analysis, parsedStream]);
 
   const handleDataChange = (path: string[], value: any) => {
     try {
@@ -319,7 +358,7 @@ export default function MatchDetail() {
     
     try {
       let currentThoughts = '';
-      const stream = streamAgentThoughts(dataToAnalyze);
+      const stream = streamAgentThoughts(dataToAnalyze, includeAnimations);
       for await (const chunk of stream) {
         currentThoughts += chunk;
         setThoughts(currentThoughts);
@@ -348,8 +387,10 @@ export default function MatchDetail() {
         if (dataToAnalyze.awayTeam?.name) finalMatch.awayTeam.name = dataToAnalyze.awayTeam.name;
         if (dataToAnalyze.league) finalMatch.league = dataToAnalyze.league;
         
+        setAnalyzedMatch(finalMatch);
+        
         // Save to history
-        saveHistory(finalMatch, finalParsed.summary as MatchAnalysis);
+        saveHistory(finalMatch, finalParsed.summary as MatchAnalysis, finalParsed, generatedCodes);
       }
 
       setIsPlaying(true);
@@ -365,11 +406,18 @@ export default function MatchDetail() {
 
   if (!match) return <div className="p-8 text-white text-center">Match not found</div>;
 
-  const shareData = analysis ? btoa(encodeURIComponent(JSON.stringify({
-    m: match?.id,
-    matchData: match,
-    a: analysis
-  }))) : '';
+  const shareData = React.useMemo(() => {
+    if (!editableData) return '';
+    try {
+      const data = JSON.parse(editableData);
+      return btoa(encodeURIComponent(JSON.stringify({
+        v: 2,
+        d: data
+      })));
+    } catch (e) {
+      return '';
+    }
+  }, [editableData]);
 
   const shareUrl = `${window.location.origin}/share?d=${shareData}`;
 
@@ -415,7 +463,7 @@ export default function MatchDetail() {
             variant="outline" 
             size="icon"
             onClick={() => setShowShare(true)}
-            disabled={!analysis}
+            disabled={!editableData}
             className="h-8 w-8 rounded-full border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 transition-colors"
           >
             <Share2 className="w-4 h-4" />
@@ -521,6 +569,19 @@ export default function MatchDetail() {
             </p>
           </div>
 
+          <div className="flex items-center gap-2 mt-4 px-1">
+            <input 
+              type="checkbox" 
+              id="includeAnimations" 
+              checked={includeAnimations}
+              onChange={(e) => setIncludeAnimations(e.target.checked)}
+              className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 accent-emerald-500"
+            />
+            <label htmlFor="includeAnimations" className="text-xs text-zinc-400 select-none cursor-pointer flex items-center gap-2">
+              <Video className="w-3 h-3" /> 生成演示动画 (可能会增加分析时间)
+            </label>
+          </div>
+
           <Button 
             className="w-full mt-4 gap-2"
             onClick={startAnalysis}
@@ -556,6 +617,11 @@ export default function MatchDetail() {
                   <span className={`text-xs font-mono flex items-center gap-2 ${seg.isThoughtComplete ? 'text-zinc-400' : 'text-emerald-500'}`}>
                     {seg.isThoughtComplete ? <CheckCircle2 className="w-3.5 h-3.5"/> : <Activity className="w-3.5 h-3.5 animate-pulse"/>}
                     分析阶段 {i + 1}
+                    {seg.title && (
+                      <span className="ml-2 text-zinc-500 font-bold border-l border-zinc-700 pl-2">
+                        {seg.title}
+                      </span>
+                    )}
                   </span>
                   {isCollapsed ? <ChevronDown className="w-4 h-4 text-zinc-500" /> : <ChevronUp className="w-4 h-4 text-zinc-500" />}
                 </div>
@@ -587,7 +653,7 @@ export default function MatchDetail() {
                       
                       {/* Remotion Player */}
                       {(isGeneratingCode[seg.id] || generatedCodes[seg.id]) && (
-                        <div className="mt-2">
+                        <div className="mt-2 w-full max-w-[300px] mx-auto">
                           <RemotionPlayer 
                             code={generatedCodes[seg.id]} 
                             data={seg.animation.data}
@@ -727,7 +793,7 @@ export default function MatchDetail() {
 
       {/* Share Modal */}
       <AnimatePresence>
-        {showShare && analysis && (
+        {showShare && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -742,12 +808,12 @@ export default function MatchDetail() {
               className="bg-zinc-900 border border-white/10 rounded-2xl p-6 max-w-xs w-full shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
-              <h3 className="text-lg font-bold mb-4 text-center text-white">分享分析结果</h3>
+              <h3 className="text-lg font-bold mb-4 text-center text-white">分享赛事配置</h3>
               <div className="bg-white p-4 rounded-xl flex items-center justify-center mb-4">
                 <QRCodeSVG value={shareUrl} size={180} />
               </div>
               <p className="text-xs text-zinc-400 text-center mb-6 font-mono">
-                扫码查看赛事分析
+                扫码导入赛事数据并开始分析
               </p>
               <Button className="w-full" onClick={() => setShowShare(false)}>
                 关闭

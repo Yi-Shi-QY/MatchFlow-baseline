@@ -287,43 +287,152 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
   }
 }
 
-export async function* streamAgentThoughts(matchData: any) {
-  const settings = getSettings();
+export async function* streamPlanningAgent(matchData: any, includeAnimations: boolean = true) {
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
+  
+  const animationSchema = `
+    <animation>
+    {
+      "type": "comparison" | "tactical" | "stats" | "formation",
+      "title": "Segment Title (e.g., 控球率对比)",
+      "narration": "A short, engaging voiceover script for this animation.",
+      "data": {
+        // For 'comparison' or 'stats':
+        "homeLabel": "${homeName}", "awayLabel": "${awayName}",
+        "homeValue": 55, "awayValue": 45,
+        "metric": "Possession %",
+        
+        // For 'tactical' or 'formation':
+        "formation": "4-3-3",
+        "keyPlayer": { "name": "Player Name", "x": 50, "y": 70 }, // x,y in percentage (0-100)
+        "movement": "attack" | "defense"
+      }
+    }
+    </animation>`;
+
+  const animationRules = includeAnimations ? `
+    **ANIMATION DECISION RULES:**
+    - For EACH segment, you must DECIDE if a visual animation is necessary.
+    - **INCLUDE** an <animation> block if the segment involves:
+      - Comparing stats (Possession, Shots, xG) -> Use "comparison" or "stats".
+      - Team Form (W/D/L) -> Use "stats".
+      - Tactical formations or player positions -> Use "formation" or "tactical".
+    - **OMIT** the <animation> block if the segment is purely narrative, abstract, or if the data is insufficient for a visualization.
+    - If including an animation, use this format:
+    ${animationSchema}
+  ` : `
+    **ANIMATION RULES:**
+    - Do NOT generate any <animation> tags. Text analysis only.
+  `;
+
   const prompt = `
-    You are an expert football analyst director. Your task is to analyze the match data between ${homeName} and ${awayName} and generate a multi-segment presentation script with animations.
+    You are a Senior Football Analyst Director. Your job is to PLAN the analysis structure for the match between ${homeName} and ${awayName}.
+    
+    **CRITICAL PLANNING RULES:**
+    1. **Analyze Data Richness:** Look at the provided Match Data.
+       - If only basic info (names, league) is available -> Plan 3 segments (Overview, Form, Prediction).
+       - If stats (possession, shots) are available -> Add "Tactical Analysis" segments.
+       - If custom info (injuries, weather) is available -> Add specific segments for those factors.
+    2. **Avoid Redundancy:** Do NOT create multiple segments for the same data point. Group related stats together.
+    3. **Logical Flow:** Overview -> Form -> Tactics/Stats -> Key Factors -> Conclusion.
+    4. **Segment Count:** Typically 3 to 6 segments. Do not force a specific number.
 
-    You MUST output your response as a continuous stream of XML-like tags. 
-    Follow this exact sequence for 3 distinct segments, followed by a final summary. Do not output anything outside these tags.
+    ${animationRules}
 
-    For each segment, output:
+    **OUTPUT FORMAT:**
+    1. First, output a <plan> block with your structural reasoning. This is for your internal use.
+    2. Then, output the ACTUAL analysis segments.
+    
+    **CRITICAL:**
+    - Inside <thought>, write the **FINAL NARRATION SCRIPT** for the video, not a description of what the segment will be.
+    - Do NOT say "In this segment I will analyze...".
+    - DO say "Arsenal's form has been impeccable..." (Direct analysis).
+
+    **ONE-SHOT EXAMPLE (Follow this structure exactly):**
+    
+    <plan>
+    Data shows Arsenal (Home) vs Man City (Away). Stats available. Form available.
+    Plan:
+    1. Overview: Title race context.
+    2. Form: Arsenal 4 wins vs City 2 wins. (Needs Animation)
+    3. Tactics: Possession stats. (Needs Animation)
+    4. Prediction.
+    </plan>
+
+    <title>Match Overview</title>
     <thought>
-    Your detailed analysis and reasoning for this specific segment (e.g., analyzing recent form, tactical matchups, or key players).
+    Welcome to the Emirates Stadium for this crucial Premier League clash. Arsenal hosts Manchester City in a match that could decide the title race. The atmosphere is electric as the two giants of English football prepare to face off.
+    </thought>
+
+    <title>Recent Form</title>
+    <thought>
+    Looking at recent form, the momentum is clearly with the Gunners. They have won 4 of their last 5 matches, showing incredible consistency. City, uncharacteristically, have struggled, managing only 2 wins in the same period.
     </thought>
     <animation>
     {
-      "type": "comparison" | "tactical" | "stats",
-      "title": "Segment Title (e.g., 近期状态对比)",
-      "narration": "A short, engaging voiceover script for this animation.",
-      "data": { "homeValue": "...", "awayValue": "..." }
+      "type": "stats",
+      "title": "近期状态对比",
+      "narration": "阿森纳近期状态火热，过去五场比赛赢下了四场。相比之下，曼城则显得有些挣扎，仅取得了两个胜场。",
+      "data": {
+        "homeLabel": "Arsenal", "awayLabel": "Man City",
+        "homeValue": 4, "awayValue": 2,
+        "metric": "近5场胜场"
+      }
     }
     </animation>
 
-    After exactly 3 segments are complete, output the final summary:
-    <summary>
-    {
-      "prediction": "Final match prediction text",
-      "winProbability": { "home": 40, "draw": 30, "away": 30 },
-      "expectedGoals": { "home": 1.5, "away": 1.2 },
-      "keyFactors": ["factor 1", "factor 2"]
-    }
-    </summary>
+    <title>Tactical Analysis</title>
+    <thought>
+    Tactically, this will be a battle for control...
+    </thought>
 
     Match Data: ${JSON.stringify(matchData)}
   `;
 
-  yield* streamAIRequest(prompt, true);
+  yield* streamAIRequest(prompt, false);
+}
+
+export async function* streamSummaryAgent(matchData: any, previousAnalysis: string) {
+  const prompt = `
+    You are a Senior Football Analyst. Based on the detailed analysis segments provided below, generate a final match summary and prediction.
+
+    **PREVIOUS ANALYSIS:**
+    ${previousAnalysis}
+
+    **MATCH DATA:**
+    ${JSON.stringify(matchData)}
+
+    **OUTPUT FORMAT:**
+    Output ONLY the summary tag with valid JSON content.
+    <summary>
+    {
+      "prediction": "Final match prediction text (concise, decisive)",
+      "winProbability": { "home": 40, "draw": 30, "away": 30 },
+      "expectedGoals": { "home": 1.5, "away": 1.2 },
+      "keyFactors": ["factor 1", "factor 2", "factor 3"]
+    }
+    </summary>
+  `;
+
+  yield* streamAIRequest(prompt, false);
+}
+
+export async function* streamAgentThoughts(matchData: any, includeAnimations: boolean = true) {
+  // 1. Run Planning Agent
+  let fullAnalysisText = "";
+  const planStream = streamPlanningAgent(matchData, includeAnimations);
+  
+  for await (const chunk of planStream) {
+    fullAnalysisText += chunk;
+    yield chunk;
+  }
+
+  // 2. Run Summary Agent
+  const summaryStream = streamSummaryAgent(matchData, fullAnalysisText);
+  for await (const chunk of summaryStream) {
+    yield chunk;
+  }
 }
 
 export async function* streamRegenerateSegment(matchData: any, segmentIndex: number) {
@@ -349,7 +458,7 @@ export async function* streamRegenerateSegment(matchData: any, segmentIndex: num
     Match Data: ${JSON.stringify(matchData)}
   `;
 
-  yield* streamAIRequest(prompt, true);
+  yield* streamAIRequest(prompt, false);
 }
 
 export async function* streamRemotionCode(segmentData: any) {

@@ -1,11 +1,14 @@
 import { MatchAnalysis } from './ai';
 import { Match } from '../data/matches';
+import { AgentResult } from './agentParser';
 
 export interface HistoryRecord {
   id: string; // unique id for the record
   matchId: string;
   match: Match;
   analysis: MatchAnalysis;
+  parsedStream?: AgentResult;
+  generatedCodes?: Record<string, string>;
   timestamp: number;
 }
 
@@ -23,7 +26,12 @@ export function getHistory(): HistoryRecord[] {
   return [];
 }
 
-export function saveHistory(match: Match, analysis: MatchAnalysis) {
+export function saveHistory(
+  match: Match, 
+  analysis: MatchAnalysis, 
+  parsedStream?: AgentResult, 
+  generatedCodes?: Record<string, string>
+) {
   try {
     const history = getHistory();
     // Check if we already have this match analyzed recently (e.g., within 1 hour)
@@ -35,6 +43,8 @@ export function saveHistory(match: Match, analysis: MatchAnalysis) {
       matchId: match.id,
       match,
       analysis,
+      parsedStream,
+      generatedCodes,
       timestamp: Date.now(),
     };
 
