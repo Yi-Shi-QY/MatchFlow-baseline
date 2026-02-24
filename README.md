@@ -1,20 +1,29 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# MatchFlow 2.0 ⚽️
 
-# Run and deploy your AI Studio app
+**MatchFlow 2.0** 是一个本地化智能足球分析与生成平台。它结合了最新的大语言模型（LLM）技术，为足球爱好者、分析师和球迷提供深度的赛事预测、战术分析和胜率计算。
 
-This contains everything you need to run your app locally.
+## ✨ 核心功能
 
-View your app in AI Studio: https://ai.studio/apps/32771d35-d273-409b-b500-5b9aea966d39
+- **🤖 双 AI 引擎支持**：内置支持 **Google Gemini** 和 **DeepSeek**（支持 V3 及 R1 推理模型），用户可根据需求在设置中自由切换。
+- **📊 智能赛事分析**：基于球队基本信息、近期状态（胜平负）和详细比赛数据（控球率、射门数等），自动生成结构化的分析报告。
+- **🧠 Agent 运行环境可视化**：在分析过程中，实时展示 AI 的“思考过程”（Agent Runtime），让预测过程更加透明和有趣。
+- **🔗 便捷的分享与导入**：
+  - **生成二维码**：一键将赛事分析结果生成二维码。
+  - **扫码导入**：通过内置的扫码功能，快速读取他人的分析结果，并支持一键保存到本地历史记录。
+- **📱 跨平台支持**：基于 Web 技术构建，并通过 **Capacitor** 完美封装为 Android 和 iOS 原生应用。
+- **💾 本地化存储**：用户的历史分析记录和 API 密钥均安全地存储在本地设备中。
 
-## Run Locally
+## 🛠 技术栈
 
-**Prerequisites:**  Node.js
+- **前端框架**: React 19 + Vite
+- **路由**: React Router v7
+- **样式**: Tailwind CSS v4
+- **动画**: Motion (Framer Motion)
+- **图标**: Lucide React
+- **AI 接入**: `@google/genai` (Gemini), 原生 Fetch (DeepSeek)
+- **二维码**: `qrcode.react` (生成), `@yudiel/react-qr-scanner` (扫描)
+- **移动端打包**: Capacitor (Android / iOS)
 
+## 🚀 快速体验
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+请参阅 [DEVELOPMENT.md](./DEVELOPMENT.md) 获取详细的开发、调试和打包指南。

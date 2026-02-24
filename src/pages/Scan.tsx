@@ -10,16 +10,20 @@ export default function Scan() {
 
   const handleScan = (result: string) => {
     if (result) {
+      let dParam = null;
       try {
-        // Expected format: http://localhost:3000/share?d=...
         const url = new URL(result);
-        if (url.pathname === '/share' && url.searchParams.has('d')) {
-          navigate(`/share?d=${url.searchParams.get('d')}`);
-        } else {
-          setError('无效的赛事分析二维码');
-        }
+        dParam = url.searchParams.get('d');
       } catch (e) {
-        setError('无效的二维码格式');
+        // Fallback if URL parsing fails
+        const match = result.match(/[?&]d=([^&]+)/);
+        if (match) dParam = match[1];
+      }
+
+      if (dParam) {
+        navigate(`/share?d=${dParam}`);
+      } else {
+        setError('无效的赛事分析二维码');
       }
     }
   };

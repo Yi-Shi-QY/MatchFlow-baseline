@@ -274,11 +274,10 @@ export default function MatchDetail() {
 
   if (!match) return <div className="p-8 text-white text-center">Match not found</div>;
 
-  const shareData = analysis ? btoa(JSON.stringify({
+  const shareData = analysis ? btoa(encodeURIComponent(JSON.stringify({
     m: match.id,
-    p: analysis.prediction,
-    w: analysis.winProbability
-  })) : '';
+    a: analysis
+  }))) : '';
 
   const shareUrl = `${window.location.origin}/share?d=${shareData}`;
 

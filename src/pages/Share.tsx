@@ -3,8 +3,9 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { MOCK_MATCHES } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
-import { ArrowLeft, Activity } from 'lucide-react';
+import { ArrowLeft, Activity, Download } from 'lucide-react';
 import { motion } from 'motion/react';
+import { saveHistory } from '@/src/services/history';
 
 export default function Share() {
   const [searchParams] = useSearchParams();
@@ -16,8 +17,25 @@ export default function Share() {
     const d = searchParams.get('d');
     if (d) {
       try {
-        const decoded = JSON.parse(atob(d));
-        setData(decoded);
+        const decodedStr = atob(d);
+        let decoded;
+        try {
+          decoded = JSON.parse(decodeURIComponent(decodedStr));
+        } catch (e) {
+          decoded = JSON.parse(decodedStr); // fallback for old format
+        }
+        
+        if (decoded.a) {
+          setData({
+            m: decoded.m,
+            p: decoded.a.prediction,
+            w: decoded.a.winProbability,
+            fullAnalysis: decoded.a
+          });
+        } else {
+          setData(decoded);
+        }
+        
         const m = MOCK_MATCHES.find(x => x.id === decoded.m);
         setMatch(m);
       } catch (e) {
@@ -25,6 +43,13 @@ export default function Share() {
       }
     }
   }, [searchParams]);
+
+  const handleSave = () => {
+    if (match && data?.fullAnalysis) {
+      saveHistory(match, data.fullAnalysis);
+      navigate(`/match/${match.id}`);
+    }
+  };
 
   if (!data || !match) {
     return (
@@ -96,13 +121,25 @@ export default function Share() {
               "{data.p}"
             </div>
 
-            <Button 
-              className="w-full mt-6 gap-2" 
-              onClick={() => navigate(`/match/${match.id}`)}
-              size="sm"
-            >
-              <Activity className="w-4 h-4" /> 查看完整分析
-            </Button>
+            <div className="w-full mt-6 flex flex-col gap-2">
+              {data.fullAnalysis && (
+                <Button 
+                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-500 text-white" 
+                  onClick={handleSave}
+                  size="sm"
+                >
+                  <Download className="w-4 h-4" /> 导入并保存到我的记录
+                </Button>
+              )}
+              <Button 
+                variant="outline"
+                className="w-full gap-2 border-zinc-700 text-zinc-300 hover:bg-zinc-800" 
+                onClick={() => navigate(`/match/${match.id}`)}
+                size="sm"
+              >
+                <Activity className="w-4 h-4" /> 查看赛事详情
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </motion.div>
