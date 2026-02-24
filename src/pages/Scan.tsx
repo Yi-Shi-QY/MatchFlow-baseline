@@ -16,10 +16,10 @@ export default function Scan() {
         if (url.pathname === '/share' && url.searchParams.has('d')) {
           navigate(`/share?d=${url.searchParams.get('d')}`);
         } else {
-          setError('Invalid MatchFlow QR Code');
+          setError('无效的赛事分析二维码');
         }
       } catch (e) {
-        setError('Invalid QR Code format');
+        setError('无效的二维码格式');
       }
     }
   };
@@ -32,7 +32,7 @@ export default function Scan() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-            <QrCode className="w-4 h-4 text-emerald-500" /> Scan Match Code
+            <QrCode className="w-4 h-4 text-emerald-500" /> 扫描赛事二维码
           </h1>
         </div>
       </header>
@@ -62,7 +62,7 @@ export default function Scan() {
           </div>
         ) : (
           <div className="mt-8 text-zinc-400 text-sm font-mono text-center">
-            Align QR code within the frame to scan
+            将二维码放入框内即可扫描
           </div>
         )}
       </main>

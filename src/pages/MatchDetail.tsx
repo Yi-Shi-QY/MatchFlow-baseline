@@ -99,10 +99,10 @@ export default function MatchDetail() {
       <div className="space-y-4 text-sm">
         {selectedSources.basic && (
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">Basic Info</h3>
+            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">基本信息</h3>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">League</label>
+                <label className="text-[10px] text-zinc-500 block mb-1">联赛</label>
                 <input 
                   type="text" 
                   value={data.league || ''} 
@@ -111,7 +111,7 @@ export default function MatchDetail() {
                 />
               </div>
               <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">Status</label>
+                <label className="text-[10px] text-zinc-500 block mb-1">状态</label>
                 <input 
                   type="text" 
                   value={data.status || ''} 
@@ -120,7 +120,7 @@ export default function MatchDetail() {
                 />
               </div>
               <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">Home Team</label>
+                <label className="text-[10px] text-zinc-500 block mb-1">主队</label>
                 <input 
                   type="text" 
                   value={data.homeTeam?.name || ''} 
@@ -129,7 +129,7 @@ export default function MatchDetail() {
                 />
               </div>
               <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">Away Team</label>
+                <label className="text-[10px] text-zinc-500 block mb-1">客队</label>
                 <input 
                   type="text" 
                   value={data.awayTeam?.name || ''} 
@@ -143,10 +143,10 @@ export default function MatchDetail() {
 
         {selectedSources.form && (
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">Recent Form</h3>
+            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">近期状态</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">Home Form (W,D,L)</label>
+                <label className="text-[10px] text-zinc-500 block mb-1">主队状态 (胜,平,负)</label>
                 <input 
                   type="text" 
                   value={(data.homeTeam?.form || []).join(', ')} 
@@ -155,7 +155,7 @@ export default function MatchDetail() {
                 />
               </div>
               <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">Away Form (W,D,L)</label>
+                <label className="text-[10px] text-zinc-500 block mb-1">客队状态 (胜,平,负)</label>
                 <input 
                   type="text" 
                   value={(data.awayTeam?.form || []).join(', ')} 
@@ -169,10 +169,10 @@ export default function MatchDetail() {
 
         {selectedSources.stats && data.stats && (
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">Match Stats</h3>
+            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">比赛数据</h3>
             
             <div className="space-y-2">
-              <label className="text-[10px] text-zinc-500 block">Possession (%)</label>
+              <label className="text-[10px] text-zinc-500 block">控球率 (%)</label>
               <div className="flex gap-2 items-center">
                 <input 
                   type="number" 
@@ -191,7 +191,7 @@ export default function MatchDetail() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] text-zinc-500 block">Shots</label>
+              <label className="text-[10px] text-zinc-500 block">射门次数</label>
               <div className="flex gap-2 items-center">
                 <input 
                   type="number" 
@@ -210,7 +210,7 @@ export default function MatchDetail() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] text-zinc-500 block">Shots on Target</label>
+              <label className="text-[10px] text-zinc-500 block">射正次数</label>
               <div className="flex gap-2 items-center">
                 <input 
                   type="number" 
@@ -421,7 +421,7 @@ export default function MatchDetail() {
             <CardHeader className="border-b border-white/5 py-3 px-4 flex flex-row items-center justify-between bg-zinc-900/50">
               <CardTitle className="flex items-center gap-2 text-blue-400 text-sm">
                 <Play className="w-4 h-4" /> 
-                Render Engine
+                渲染引擎
               </CardTitle>
               <Button 
                 variant="ghost" 
@@ -502,7 +502,7 @@ export default function MatchDetail() {
               </AnimatePresence>
 
               {!analysis && !isAnalyzing && (
-                <div className="text-zinc-600 font-mono text-xs">Waiting for analysis...</div>
+                <div className="text-zinc-600 font-mono text-xs">等待分析...</div>
               )}
             </CardContent>
           </Card>
@@ -512,13 +512,13 @@ export default function MatchDetail() {
             <CardHeader className="border-b border-white/5 py-3 px-4 bg-zinc-900/50">
               <CardTitle className="flex items-center gap-2 text-emerald-500 text-sm">
                 <BrainCircuit className="w-4 h-4" /> 
-                Agent Runtime
+                Agent 运行环境
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 flex-1 overflow-y-auto font-mono text-[11px] text-zinc-400 leading-relaxed space-y-4 bg-black/50 rounded-b-xl border-t border-white/5">
               {isAnalyzing && (
                 <div className="flex items-center gap-2 text-emerald-500 animate-pulse mb-4">
-                  <Activity className="w-3 h-3" /> [SYSTEM] Executing Sandbox...
+                  <Activity className="w-3 h-3" /> [SYSTEM] 正在执行沙盒...
                 </div>
               )}
               <div className="whitespace-pre-wrap text-zinc-300">{thoughts}</div>
@@ -557,15 +557,15 @@ export default function MatchDetail() {
               className="bg-zinc-900 border border-white/10 rounded-2xl p-6 max-w-xs w-full shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
-              <h3 className="text-lg font-bold mb-4 text-center">Share Analysis</h3>
+              <h3 className="text-lg font-bold mb-4 text-center text-white">分享分析结果</h3>
               <div className="bg-white p-4 rounded-xl flex items-center justify-center mb-4">
                 <QRCodeSVG value={shareUrl} size={180} />
               </div>
               <p className="text-xs text-zinc-400 text-center mb-6 font-mono">
-                Scan to view match analysis
+                扫码查看赛事分析
               </p>
               <Button className="w-full" onClick={() => setShowShare(false)}>
-                Close
+                关闭
               </Button>
             </motion.div>
           </motion.div>

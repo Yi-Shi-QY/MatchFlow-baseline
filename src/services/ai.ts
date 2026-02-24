@@ -162,7 +162,7 @@ export async function testConnection(settings: any): Promise<boolean> {
     console.error("Connection test failed:", e);
     // Provide a more helpful message for Failed to fetch
     if (e.message === 'Failed to fetch') {
-      throw new Error('Failed to fetch. This might be due to a network issue, an invalid API URL, or CORS restrictions.');
+      throw new Error('网络请求失败。这可能是由于网络问题、API地址无效或跨域(CORS)限制导致。请检查您的网络连接或API密钥。');
     }
     throw e;
   }
@@ -181,7 +181,7 @@ export async function* streamAgentThoughts(matchData: any) {
 
   if (settings.provider === 'deepseek') {
     if (!settings.deepseekApiKey) {
-      yield "[ERROR] DeepSeek API Key is not configured. Please set it in Settings.";
+      yield "[错误] 未配置 DeepSeek API Key。请在设置中配置。";
       return;
     }
     
@@ -232,7 +232,7 @@ export async function* streamAgentThoughts(matchData: any) {
         }
       }
     } catch (e: any) {
-       yield `\n[ERROR] DeepSeek API Error: ${e.message === 'Failed to fetch' ? 'Network or CORS error' : e.message}`;
+       yield `\n[错误] DeepSeek API 错误: ${e.message === 'Failed to fetch' ? '网络或跨域(CORS)错误' : e.message}`;
     }
     
   } else {
@@ -248,7 +248,7 @@ export async function* streamAgentThoughts(matchData: any) {
         yield (chunk as GenerateContentResponse).text;
       }
     } catch (e: any) {
-       yield `\n[ERROR] Gemini API Error: ${e.message}`;
+       yield `\n[错误] Gemini API 错误: ${e.message}`;
     }
   }
 }

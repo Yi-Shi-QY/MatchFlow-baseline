@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MatchFlow</string>
+    <string name="title_activity_main">MatchFlow</string>
+    <string name="package_name">com.matchflow.app</string>
+    <string name="custom_url_scheme">com.matchflow.app</string>
+</resources>

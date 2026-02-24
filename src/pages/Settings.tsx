@@ -44,10 +44,10 @@ export default function Settings() {
     try {
       await testConnection(settings);
       setTestStatus('success');
-      setTestMessage('Connection successful!');
+      setTestMessage('连接成功！');
     } catch (e: any) {
       setTestStatus('error');
-      setTestMessage(e.message || 'Connection failed.');
+      setTestMessage(e.message || '连接失败。');
     }
   };
 
@@ -59,7 +59,7 @@ export default function Settings() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-            <SettingsIcon className="w-4 h-4 text-emerald-500" /> Settings
+            <SettingsIcon className="w-4 h-4 text-emerald-500" /> 设置
           </h1>
         </div>
       </header>
@@ -69,7 +69,7 @@ export default function Settings() {
           <CardContent className="p-6 space-y-6">
             
             <div className="space-y-2">
-              <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">AI Provider</label>
+              <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">AI 提供商</label>
               <select 
                 value={settings.provider}
                 onChange={handleProviderChange}
@@ -81,7 +81,7 @@ export default function Settings() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Model</label>
+              <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">模型</label>
               <select 
                 value={settings.model}
                 onChange={(e) => {
@@ -92,19 +92,19 @@ export default function Settings() {
               >
                 {settings.provider === 'gemini' ? (
                   <>
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash Preview (Fast)</option>
-                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview (Smart)</option>
+                    <option value="gemini-3-flash-preview">Gemini 3 Flash Preview (快速)</option>
+                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview (智能)</option>
                   </>
                 ) : (
                   <>
                     <option value="deepseek-chat">DeepSeek Chat (V3)</option>
-                    <option value="deepseek-reasoner">DeepSeek Reasoner (R1 - Thinking)</option>
+                    <option value="deepseek-reasoner">DeepSeek Reasoner (R1 - 思考模型)</option>
                   </>
                 )}
               </select>
               {settings.model === 'deepseek-reasoner' && (
                 <p className="text-[10px] text-emerald-500/80 mt-1">
-                  Note: Reasoner model will output thinking process in the Agent Runtime.
+                  注意：Reasoner 模型将在 Agent 运行环境中输出思考过程。
                 </p>
               )}
             </div>
@@ -123,7 +123,7 @@ export default function Settings() {
                   className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
                 />
                 <p className="text-[10px] text-zinc-500 mt-1">
-                  Stored locally in your browser. Get one from <a href="https://platform.deepseek.com/" target="_blank" rel="noreferrer" className="text-emerald-500 hover:underline">DeepSeek Platform</a>.
+                  密钥仅保存在您的浏览器本地。您可以前往 <a href="https://platform.deepseek.com/" target="_blank" rel="noreferrer" className="text-emerald-500 hover:underline">DeepSeek 开放平台</a> 获取。
                 </p>
               </div>
             )}
@@ -141,7 +141,7 @@ export default function Settings() {
                   ) : (
                     <Activity className="w-4 h-4" />
                   )}
-                  Test Connection
+                  测试连接
                 </Button>
                 
                 <Button 
@@ -150,7 +150,7 @@ export default function Settings() {
                   variant={saved ? "outline" : "default"}
                 >
                   <Save className="w-4 h-4" />
-                  {saved ? "Saved!" : "Save Settings"}
+                  {saved ? "已保存！" : "保存设置"}
                 </Button>
               </div>
 
@@ -163,7 +163,7 @@ export default function Settings() {
                   {testStatus === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
                   {testStatus === 'error' && <XCircle className="w-4 h-4 shrink-0" />}
                   {testStatus === 'testing' && <Activity className="w-4 h-4 shrink-0 animate-pulse" />}
-                  <span className="break-all">{testMessage || 'Testing connection...'}</span>
+                  <span className="break-all">{testMessage || '正在测试连接...'}</span>
                 </div>
               )}
             </div>

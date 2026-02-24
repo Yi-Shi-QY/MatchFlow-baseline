@@ -30,8 +30,8 @@ export default function Share() {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
         <Card className="max-w-xs w-full text-center p-6 border-red-500/20 bg-red-500/5">
-          <h2 className="text-lg font-bold text-red-400 mb-4">Invalid Link</h2>
-          <Button onClick={() => navigate('/')} size="sm">Return Home</Button>
+          <h2 className="text-lg font-bold text-red-400 mb-4">无效链接</h2>
+          <Button onClick={() => navigate('/')} size="sm">返回首页</Button>
         </Card>
       </div>
     );
@@ -63,7 +63,7 @@ export default function Share() {
             <div className="w-full space-y-4 bg-black/50 p-4 rounded-xl border border-white/5">
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs font-mono text-zinc-400">
-                  <span>Home Win</span>
+                  <span>主胜</span>
                   <span>{data.w.home}%</span>
                 </div>
                 <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -78,7 +78,7 @@ export default function Share() {
 
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs font-mono text-zinc-400">
-                  <span>Away Win</span>
+                  <span>客胜</span>
                   <span>{data.w.away}%</span>
                 </div>
                 <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -101,7 +101,7 @@ export default function Share() {
               onClick={() => navigate(`/match/${match.id}`)}
               size="sm"
             >
-              <Activity className="w-4 h-4" /> View Full Analysis
+              <Activity className="w-4 h-4" /> 查看完整分析
             </Button>
           </CardContent>
         </Card>
