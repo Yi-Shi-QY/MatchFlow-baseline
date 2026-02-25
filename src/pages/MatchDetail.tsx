@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { MOCK_MATCHES, Match } from '@/src/data/matches';
 import { analyzeMatch, streamAgentThoughts, streamRemotionCode, MatchAnalysis } from '@/src/services/ai';
 import { saveHistory, getHistory } from '@/src/services/history';
@@ -652,9 +654,27 @@ export default function MatchDetail() {
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="p-4 text-[11px] font-mono text-zinc-300 whitespace-pre-wrap leading-relaxed bg-black/50"
+                      className="p-4 text-[11px] font-mono text-zinc-300 leading-relaxed bg-black/50"
                     >
-                      {seg.thoughts}
+                      <div className="prose prose-invert prose-xs max-w-none [&>ul]:list-disc [&>ul]:pl-4 [&>ol]:list-decimal [&>ol]:pl-4 [&>h3]:text-emerald-400 [&>h3]:font-bold [&>h3]:mt-2 [&>h3]:mb-1 [&>p]:mb-2 [&>strong]:text-white">
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            table: ({node, ...props}) => (
+                              <div className="overflow-x-auto my-4 border border-zinc-800 rounded-lg">
+                                <table className="w-full text-left text-[10px]" {...props} />
+                              </div>
+                            ),
+                            thead: ({node, ...props}) => <thead className="bg-zinc-900 text-zinc-400 uppercase font-bold border-b border-zinc-800" {...props} />,
+                            tbody: ({node, ...props}) => <tbody className="divide-y divide-zinc-800" {...props} />,
+                            tr: ({node, ...props}) => <tr className="hover:bg-zinc-900/50 transition-colors" {...props} />,
+                            th: ({node, ...props}) => <th className="px-3 py-2 whitespace-nowrap font-semibold" {...props} />,
+                            td: ({node, ...props}) => <td className="px-3 py-2 whitespace-nowrap text-zinc-300" {...props} />,
+                          }}
+                        >
+                          {seg.thoughts}
+                        </ReactMarkdown>
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
