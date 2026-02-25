@@ -1,13 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { ArrowLeft, QrCode, AlertCircle } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
+import { Camera } from '@capacitor/camera';
+import { Capacitor } from '@capacitor/core';
 
 export default function Scan() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const requestNativePermissions = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const permissions = await Camera.checkPermissions();
+          if (permissions.camera !== 'granted') {
+            const request = await Camera.requestPermissions();
+            if (request.camera !== 'granted') {
+              setHasPermission(false);
+              setError('无法访问摄像头，请在系统设置中授予权限');
+              return;
+            }
+          }
+          setHasPermission(true);
+        } catch (err) {
+          console.error('Failed to request native camera permission:', err);
+          // Fallback to true to let the web scanner try
+          setHasPermission(true);
+        }
+      } else {
+        // On web, the browser handles the prompt automatically when getUserMedia is called
+        setHasPermission(true);
+      }
+    };
+
+    requestNativePermissions();
+  }, []);
 
   const handleScan = (result: string) => {
     if (result) {
@@ -57,12 +87,17 @@ export default function Scan() {
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center p-4 max-w-md mx-auto w-full">
-        {hasPermission === false ? (
+        {hasPermission === null ? (
+          <div className="w-full aspect-square max-w-sm rounded-2xl border-2 border-emerald-500/50 flex flex-col items-center justify-center p-6 text-center bg-zinc-900">
+            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-sm text-zinc-400">正在请求摄像头权限...</p>
+          </div>
+        ) : hasPermission === false ? (
           <div className="w-full aspect-square max-w-sm rounded-2xl border-2 border-red-500/50 flex flex-col items-center justify-center p-6 text-center bg-red-500/5">
             <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
             <h3 className="text-lg font-bold text-white mb-2">无摄像头权限</h3>
             <p className="text-sm text-zinc-400 mb-6">
-              请在浏览器或系统设置中允许访问摄像头，然后刷新页面重试。
+              请在系统设置中允许应用访问摄像头，然后刷新页面重试。
             </p>
             <Button onClick={() => window.location.reload()} variant="outline" className="border-white/10">
               刷新重试
