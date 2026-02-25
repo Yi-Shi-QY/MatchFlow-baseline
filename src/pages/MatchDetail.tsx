@@ -614,15 +614,34 @@ export default function MatchDetail() {
                   className="bg-zinc-900/80 p-3 flex justify-between items-center cursor-pointer hover:bg-zinc-800 transition-colors"
                   onClick={() => setCollapsedSegments(prev => ({ ...prev, [seg.id]: !isCollapsed }))}
                 >
-                  <span className={`text-xs font-mono flex items-center gap-2 ${seg.isThoughtComplete ? 'text-zinc-400' : 'text-emerald-500'}`}>
-                    {seg.isThoughtComplete ? <CheckCircle2 className="w-3.5 h-3.5"/> : <Activity className="w-3.5 h-3.5 animate-pulse"/>}
-                    分析阶段 {i + 1}
-                    {seg.title && (
-                      <span className="ml-2 text-zinc-500 font-bold border-l border-zinc-700 pl-2">
-                        {seg.title}
-                      </span>
+                  <div className="flex flex-col gap-1">
+                    <span className={`text-xs font-mono flex items-center gap-2 ${seg.isThoughtComplete ? 'text-zinc-400' : 'text-emerald-500'}`}>
+                      {seg.isThoughtComplete ? <CheckCircle2 className="w-3.5 h-3.5"/> : <Activity className="w-3.5 h-3.5 animate-pulse"/>}
+                      分析阶段 {i + 1}
+                      {seg.title && (
+                        <span className="ml-2 text-zinc-500 font-bold border-l border-zinc-700 pl-2">
+                          {seg.title}
+                        </span>
+                      )}
+                    </span>
+                    
+                    {/* Tags Display (Visible even when collapsed) */}
+                    {seg.tags && seg.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1 ml-6">
+                        {seg.tags.map((tag, idx) => {
+                          let colorClass = "bg-zinc-800 text-zinc-400 border-zinc-700";
+                          if (tag.team === 'home') colorClass = "bg-emerald-950/30 text-emerald-400 border-emerald-500/30";
+                          if (tag.team === 'away') colorClass = "bg-blue-950/30 text-blue-400 border-blue-500/30";
+                          
+                          return (
+                            <span key={idx} className={`text-[9px] px-1.5 py-0.5 rounded border ${colorClass}`}>
+                              {tag.label}
+                            </span>
+                          );
+                        })}
+                      </div>
                     )}
-                  </span>
+                  </div>
                   {isCollapsed ? <ChevronDown className="w-4 h-4 text-zinc-500" /> : <ChevronUp className="w-4 h-4 text-zinc-500" />}
                 </div>
                 

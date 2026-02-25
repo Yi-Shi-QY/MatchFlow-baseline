@@ -287,107 +287,161 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
   }
 }
 
-export async function* streamPlanningAgent(matchData: any, includeAnimations: boolean = true) {
+export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
+  const homeName = matchData?.homeTeam?.name || "Home Team";
+  const awayName = matchData?.awayTeam?.name || "Away Team";
+  
+  const prompt = `
+    You are a Senior Football Analyst Director. Your job is to PLAN the analysis structure for the match between ${homeName} and ${awayName}.
+    
+    **CRITICAL PLANNING RULES:**
+    1. **Analyze Data Richness:** Look at the provided Match Data.
+       - If only basic info -> Plan 3 segments (Overview, Form, Prediction).
+       - If stats available -> Add "Tactical Analysis" segments.
+       - If custom info available -> Add specific segments.
+    2. **Avoid Redundancy:** Group related stats.
+    3. **Logical Flow:** Overview -> Form -> Tactics/Stats -> Key Factors -> Conclusion.
+    4. **Segment Count:** 3 to 6 segments.
+
+    **OUTPUT FORMAT:**
+    Return a STRICT JSON array of objects. Do NOT use markdown code blocks.
+    Each object MUST include an "agentType" field: 'overview' | 'stats' | 'tactical' | 'prediction' | 'general'.
+    
+    Example:
+    [
+      { "title": "Match Overview", "focus": "Context and stakes", "animationType": "none", "agentType": "overview" },
+      { "title": "Recent Form", "focus": "Compare last 5 games", "animationType": "stats", "agentType": "stats" },
+      { "title": "Tactical Battle", "focus": "Possession and control", "animationType": "tactical", "agentType": "tactical" }
+    ]
+
+    Match Data: ${JSON.stringify(matchData)}
+  `;
+
+  const settings = getSettings();
+  let responseText = "";
+
+  if (settings.provider === "deepseek") {
+    if (!settings.deepseekApiKey) throw new Error("DeepSeek API Key missing");
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${settings.deepseekApiKey}`,
+      },
+      body: JSON.stringify({
+        model: settings.model || "deepseek-chat",
+        messages: [{ role: "user", content: prompt }],
+        stream: false
+      }),
+    });
+    const data = await response.json();
+    responseText = data.choices[0]?.message?.content || "[]";
+  } else {
+    const ai = getGeminiAI();
+    const response = await ai.models.generateContent({
+      model: settings.model || "gemini-3-flash-preview",
+      contents: prompt,
+      config: { responseMimeType: "application/json" }
+    });
+    responseText = response.text || "[]";
+  }
+
+  try {
+    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanJson);
+  } catch (e) {
+    console.error("Failed to parse plan JSON", e);
+    return [
+      { title: "Match Overview", focus: "General context", animationType: "none", agentType: "overview" },
+      { title: "Key Analysis", focus: "Main talking points", animationType: "none", agentType: "general" }
+    ];
+  }
+}
+
+function getAnalysisPrompt(agentType: string, segmentPlan: any, matchData: any, animationSchema: string): string {
+  const basePrompt = `
+    **SEGMENT DETAILS:**
+    - Title: "${segmentPlan.title}"
+    - Focus: "${segmentPlan.focus}"
+    - Animation Needed: ${segmentPlan.animationType !== 'none' ? 'YES (' + segmentPlan.animationType + ')' : 'NO'}
+
+    **INSTRUCTIONS:**
+    1. Write a **PROFESSIONAL ANALYSIS REPORT** for this segment. 
+       - Do NOT write a "narration script" or "voiceover". 
+       - Use a formal, analytical tone suitable for a written report.
+       - Use bullet points, bold text, and clear structure.
+       - Focus on data-driven insights.
+    2. If Animation is needed, generate the <animation> block with REAL data.
+    3. Do NOT output any other segments. Focus ONLY on this one.
+
+    **OUTPUT FORMAT:**
+    <title>${segmentPlan.title}</title>
+    <thought>
+    (Your professional report here. Use Markdown formatting.)
+    </thought>
+    ${segmentPlan.animationType !== 'none' ? animationSchema : ''}
+
+    Match Data: ${JSON.stringify(matchData)}
+  `;
+
+  switch (agentType) {
+    case 'overview':
+      return `You are a Lead Sports Journalist. Write a compelling introduction setting the stage, history, and stakes of the match.\n${basePrompt}`;
+    case 'stats':
+      return `You are a Data Scientist. Analyze the numbers deeply. Compare form, head-to-head records, and key metrics. Be precise.\n${basePrompt}`;
+    case 'tactical':
+      return `You are a Tactical Analyst (like Gary Neville). Break down the formations, key battles, and strategic approaches. Use technical terms.\n${basePrompt}`;
+    case 'prediction':
+      return `You are a Senior Pundit. Weigh all factors and provide a reasoned prediction. Discuss psychological factors.\n${basePrompt}`;
+    default:
+      return `You are a Senior Football Analyst.\n${basePrompt}`;
+  }
+}
+
+export async function* streamAnalysisAgent(matchData: any, segmentPlan: any) {
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
   
   const animationSchema = `
     <animation>
     {
-      "type": "comparison" | "tactical" | "stats" | "formation",
-      "title": "Segment Title (e.g., 控球率对比)",
+      "type": "${segmentPlan.animationType}",
+      "title": "${segmentPlan.title}",
       "narration": "A short, engaging voiceover script for this animation.",
       "data": {
-        // For 'comparison' or 'stats':
         "homeLabel": "${homeName}", "awayLabel": "${awayName}",
-        "homeValue": 55, "awayValue": 45,
-        "metric": "Possession %",
-        
-        // For 'tactical' or 'formation':
-        "formation": "4-3-3",
-        "keyPlayer": { "name": "Player Name", "x": 50, "y": 70 }, // x,y in percentage (0-100)
-        "movement": "attack" | "defense"
+        "homeValue": 0, "awayValue": 0,
+        "metric": "Label"
       }
     }
     </animation>`;
 
-  const animationRules = includeAnimations ? `
-    **ANIMATION DECISION RULES:**
-    - For EACH segment, you must DECIDE if a visual animation is necessary.
-    - **INCLUDE** an <animation> block if the segment involves:
-      - Comparing stats (Possession, Shots, xG) -> Use "comparison" or "stats".
-      - Team Form (W/D/L) -> Use "stats".
-      - Tactical formations or player positions -> Use "formation" or "tactical".
-    - **OMIT** the <animation> block if the segment is purely narrative, abstract, or if the data is insufficient for a visualization.
-    - If including an animation, use this format:
-    ${animationSchema}
-  ` : `
-    **ANIMATION RULES:**
-    - Do NOT generate any <animation> tags. Text analysis only.
-  `;
+  const prompt = getAnalysisPrompt(segmentPlan.agentType || 'general', segmentPlan, matchData, animationSchema);
 
+  yield* streamAIRequest(prompt, false);
+}
+
+export async function* streamTagAgent(analysisText: string) {
   const prompt = `
-    You are a Senior Football Analyst Director. Your job is to PLAN the analysis structure for the match between ${homeName} and ${awayName}.
+    Analyze the following football analysis text and extract 3-5 key "tags" or insights.
     
-    **CRITICAL PLANNING RULES:**
-    1. **Analyze Data Richness:** Look at the provided Match Data.
-       - If only basic info (names, league) is available -> Plan 3 segments (Overview, Form, Prediction).
-       - If stats (possession, shots) are available -> Add "Tactical Analysis" segments.
-       - If custom info (injuries, weather) is available -> Add specific segments for those factors.
-    2. **Avoid Redundancy:** Do NOT create multiple segments for the same data point. Group related stats together.
-    3. **Logical Flow:** Overview -> Form -> Tactics/Stats -> Key Factors -> Conclusion.
-    4. **Segment Count:** Typically 3 to 6 segments. Do not force a specific number.
+    **ANALYSIS TEXT:**
+    ${analysisText}
 
-    ${animationRules}
+    **RULES:**
+    - Tags should be short (2-4 words).
+    - Classify each tag by team ('home', 'away') or 'neutral'.
+    - Assign a sentiment/type if applicable.
 
     **OUTPUT FORMAT:**
-    1. First, output a <plan> block with your structural reasoning. This is for your internal use.
-    2. Then, output the ACTUAL analysis segments.
-    
-    **CRITICAL:**
-    - Inside <thought>, write the **FINAL NARRATION SCRIPT** for the video, not a description of what the segment will be.
-    - Do NOT say "In this segment I will analyze...".
-    - DO say "Arsenal's form has been impeccable..." (Direct analysis).
-
-    **ONE-SHOT EXAMPLE (Follow this structure exactly):**
-    
-    <plan>
-    Data shows Arsenal (Home) vs Man City (Away). Stats available. Form available.
-    Plan:
-    1. Overview: Title race context.
-    2. Form: Arsenal 4 wins vs City 2 wins. (Needs Animation)
-    3. Tactics: Possession stats. (Needs Animation)
-    4. Prediction.
-    </plan>
-
-    <title>Match Overview</title>
-    <thought>
-    Welcome to the Emirates Stadium for this crucial Premier League clash. Arsenal hosts Manchester City in a match that could decide the title race. The atmosphere is electric as the two giants of English football prepare to face off.
-    </thought>
-
-    <title>Recent Form</title>
-    <thought>
-    Looking at recent form, the momentum is clearly with the Gunners. They have won 4 of their last 5 matches, showing incredible consistency. City, uncharacteristically, have struggled, managing only 2 wins in the same period.
-    </thought>
-    <animation>
-    {
-      "type": "stats",
-      "title": "近期状态对比",
-      "narration": "阿森纳近期状态火热，过去五场比赛赢下了四场。相比之下，曼城则显得有些挣扎，仅取得了两个胜场。",
-      "data": {
-        "homeLabel": "Arsenal", "awayLabel": "Man City",
-        "homeValue": 4, "awayValue": 2,
-        "metric": "近5场胜场"
-      }
-    }
-    </animation>
-
-    <title>Tactical Analysis</title>
-    <thought>
-    Tactically, this will be a battle for control...
-    </thought>
-
-    Match Data: ${JSON.stringify(matchData)}
+    Output ONLY a <tags> block containing a valid JSON array.
+    <tags>
+    [
+      { "label": "High Pressing", "team": "home", "color": "emerald" },
+      { "label": "Weak Defense", "team": "away", "color": "blue" },
+      { "label": "Title Decider", "team": "neutral", "color": "zinc" }
+    ]
+    </tags>
   `;
 
   yield* streamAIRequest(prompt, false);
@@ -419,16 +473,45 @@ export async function* streamSummaryAgent(matchData: any, previousAnalysis: stri
 }
 
 export async function* streamAgentThoughts(matchData: any, includeAnimations: boolean = true) {
-  // 1. Run Planning Agent
-  let fullAnalysisText = "";
-  const planStream = streamPlanningAgent(matchData, includeAnimations);
-  
-  for await (const chunk of planStream) {
-    fullAnalysisText += chunk;
-    yield chunk;
+  // 1. Planning Phase (Hidden)
+  let plan = [];
+  try {
+    plan = await generateAnalysisPlan(matchData);
+  } catch (e) {
+    plan = [{ title: "Analysis", focus: "General analysis", animationType: "none", agentType: "general" }];
   }
 
-  // 2. Run Summary Agent
+  // 2. Analysis Phase (Iterative)
+  let fullAnalysisText = "";
+  
+  for (const segment of plan) {
+    if (!includeAnimations) {
+      segment.animationType = 'none';
+    }
+
+    // A. Run Analysis Agent
+    let segmentText = "";
+    const segmentStream = streamAnalysisAgent(matchData, segment);
+    for await (const chunk of segmentStream) {
+      segmentText += chunk;
+      fullAnalysisText += chunk;
+      yield chunk;
+    }
+
+    // B. Run Tag Generation Agent (After analysis is done for this segment)
+    // We need to extract the pure text content from the segment output to feed the tag agent
+    // Simple regex to strip tags for the prompt
+    const cleanText = segmentText.replace(/<[^>]+>/g, ' ').trim();
+    const tagStream = streamTagAgent(cleanText);
+    for await (const chunk of tagStream) {
+      yield chunk;
+    }
+
+    yield "\n";
+    fullAnalysisText += "\n";
+  }
+
+  // 3. Summary Phase
   const summaryStream = streamSummaryAgent(matchData, fullAnalysisText);
   for await (const chunk of summaryStream) {
     yield chunk;
