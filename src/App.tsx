@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import Home from './pages/Home';
 import MatchDetail from './pages/MatchDetail';
@@ -12,6 +12,42 @@ import Scan from './pages/Scan';
 import Settings from './pages/Settings';
 import { AnalysisProvider } from './contexts/AnalysisContext';
 import { App as CapacitorApp } from '@capacitor/app';
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-8 text-center">
+          <h1 className="text-xl font-bold text-red-500 mb-4">Something went wrong</h1>
+          <pre className="text-xs text-zinc-500 bg-zinc-900 p-4 rounded overflow-auto max-w-full">
+            {this.state.error?.toString()}
+          </pre>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-8 bg-emerald-600 px-6 py-2 rounded-full text-sm font-bold"
+          >
+            Reload App
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 function AppRoutes() {
   const navigate = useNavigate();
@@ -46,7 +82,9 @@ export default function App() {
   return (
     <AnalysisProvider>
       <Router>
-        <AppRoutes />
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
       </Router>
     </AnalysisProvider>
   );

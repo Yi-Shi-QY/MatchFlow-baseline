@@ -88,7 +88,7 @@ export default function Share() {
       }
       
       await saveMatch(m);
-      navigate(`/match/${m.id}`, { state: { importedData } });
+      navigate(`/match/${m.id}`, { state: { importedData: m } });
     }
   };
 

@@ -10,6 +10,7 @@ export default function Scan() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [isScanning, setIsScanning] = useState(true);
 
   useEffect(() => {
     const requestNativePermissions = async () => {
@@ -40,7 +41,10 @@ export default function Scan() {
   }, []);
 
   const handleScan = (result: string) => {
+    if (!isScanning) return;
+    
     if (result) {
+      setIsScanning(false);
       let dParam = null;
       try {
         const url = new URL(result);
@@ -55,6 +59,7 @@ export default function Scan() {
         navigate(`/share?d=${dParam}`);
       } else {
         setError('无效的赛事分析二维码');
+        setIsScanning(true);
       }
     }
   };

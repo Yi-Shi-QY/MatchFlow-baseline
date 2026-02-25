@@ -75,7 +75,7 @@ export default function MatchDetail() {
     loadData();
   }, [id]);
 
-  const match = isCustom ? customMatch : (MOCK_MATCHES.find(m => m.id === id) || historyRecord?.match || savedMatchRecord?.match);
+  const match = (importedData ? customMatch : null) || (isCustom ? customMatch : (MOCK_MATCHES.find(m => m.id === id) || historyRecord?.match || savedMatchRecord?.match));
 
   const activeAnalysis = match ? activeAnalyses[match.id] : null;
 
