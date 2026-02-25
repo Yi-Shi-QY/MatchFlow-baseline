@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MOCK_MATCHES } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
-import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Plus } from 'lucide-react';
+import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Plus, Loader2 } from 'lucide-react';
 import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord } from '@/src/services/history';
 import { Button } from '@/src/components/ui/Button';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAnalysis } from '@/src/contexts/AnalysisContext';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const { activeAnalyses } = useAnalysis();
 
   useEffect(() => {
     setHistory(getHistory());
@@ -30,7 +32,27 @@ export default function Home() {
     setHistory(getHistory());
   };
 
-  const filteredAndSortedHistory = history
+  // Combine history and active analyses
+  const allRecords = React.useMemo(() => {
+    const activeRecords = Object.values(activeAnalyses)
+      .filter(active => active.isAnalyzing)
+      .map(active => ({
+        id: `active_${active.matchId}`,
+        matchId: active.matchId,
+        match: active.match,
+        timestamp: Date.now(), // Keep active ones at the top
+        isActive: true,
+        analysis: active.analysis,
+        parsedStream: active.parsedStream
+      }));
+
+    // Filter out history records that are currently active
+    const filteredHistory = history.filter(h => !activeAnalyses[h.matchId] || !activeAnalyses[h.matchId].isAnalyzing);
+
+    return [...activeRecords, ...filteredHistory];
+  }, [history, activeAnalyses]);
+
+  const filteredAndSortedHistory = allRecords
     .filter(record => {
       const searchLower = searchQuery.toLowerCase();
       return (
@@ -74,7 +96,7 @@ export default function Home() {
 
       <main className="px-4 pt-6 max-w-md mx-auto space-y-8">
         {/* History Section */}
-        {history.length > 0 && (
+        {allRecords.length > 0 && (
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -110,49 +132,101 @@ export default function Home() {
             </div>
             
             {filteredAndSortedHistory.length > 0 ? (
-              <div className="flex overflow-x-auto gap-4 pb-4 snap-x snap-mandatory hide-scrollbar">
-                {filteredAndSortedHistory.map((record) => (
-                  <Card 
-                    key={record.id} 
-                    className="snap-center shrink-0 w-64 cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/80"
-                    onClick={() => navigate(`/match/${record.matchId}`)}
-                  >
-                    <CardContent className="p-4 relative group">
-                      <button 
-                        onClick={(e) => handleDeleteRecord(e, record.id)}
-                        className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400 hover:bg-black"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                      <div className="flex items-center justify-between mb-3 pr-6">
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">{record.match.league}</span>
-                        <span className="text-[10px] text-zinc-500 font-mono">
-                          {new Date(record.timestamp).toLocaleDateString()}
-                        </span>
-                      </div>
+              <div className="flex overflow-x-auto gap-3 pb-4 snap-x snap-mandatory hide-scrollbar px-1">
+                {filteredAndSortedHistory.map((record: any) => {
+                  const winProb = record.analysis?.winProbability;
+                  const isActive = record.isActive;
+                  const parsedStream = record.parsedStream;
+                  
+                  let statusText = isActive ? "分析中..." : "已完成";
+                  if (isActive && parsedStream) {
+                    const totalSegments = parsedStream.segments.length;
+                    const completedSegments = parsedStream.segments.filter((s: any) => s.isThoughtComplete).length;
+                    if (totalSegments > 0) {
+                      statusText = `分析中 (${completedSegments}/${totalSegments})`;
+                    }
+                  }
 
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-col items-center gap-2 w-16">
-                          <img src={record.match.homeTeam.logo} alt={record.match.homeTeam.name} className="w-8 h-8 object-contain drop-shadow-md" />
-                          <span className="text-[10px] font-medium text-center line-clamp-1">{record.match.homeTeam.name}</span>
+                  return (
+                    <Card 
+                      key={record.id} 
+                      className={`snap-center shrink-0 w-48 cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900 hover:border-zinc-700 group relative overflow-hidden ${isActive ? 'ring-1 ring-emerald-500/50' : ''}`}
+                      onClick={() => navigate(`/match/${record.matchId}`)}
+                    >
+                      {/* Delete Button (only for non-active) */}
+                      {!isActive && (
+                        <button 
+                          onClick={(e) => handleDeleteRecord(e, record.id)}
+                          className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400 hover:bg-black"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+
+                      <CardContent className="p-3">
+                        {/* Header: League & Time */}
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono truncate max-w-[80px]">
+                            {record.match.league}
+                          </span>
+                          <span className="text-[9px] text-zinc-600 font-mono flex items-center gap-1">
+                            {isActive && <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />}
+                            {new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        {/* Teams */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex flex-col items-center gap-1.5 w-12">
+                            <img src={record.match.homeTeam.logo} alt={record.match.homeTeam.name} className="w-8 h-8 object-contain drop-shadow-sm" />
+                            <span className="text-[9px] font-medium text-center line-clamp-1 w-full text-zinc-300">
+                              {record.match.homeTeam.name}
+                            </span>
+                          </div>
+                          
+                          <div className="text-[10px] font-bold font-mono text-zinc-600">VS</div>
+
+                          <div className="flex flex-col items-center gap-1.5 w-12">
+                            <img src={record.match.awayTeam.logo} alt={record.match.awayTeam.name} className="w-8 h-8 object-contain drop-shadow-sm" />
+                            <span className="text-[9px] font-medium text-center line-clamp-1 w-full text-zinc-300">
+                              {record.match.awayTeam.name}
+                            </span>
+                          </div>
                         </div>
                         
-                        <div className="flex flex-col items-center justify-center flex-1">
-                          <div className="text-sm font-bold font-mono tracking-tighter text-zinc-400">VS</div>
+                        {/* Footer: Status or Probability Bar */}
+                        <div className="mt-2 pt-2 border-t border-white/5">
+                          {isActive ? (
+                            <div className="flex items-center justify-center">
+                              <span className="text-[10px] text-emerald-400 font-mono animate-pulse">
+                                {statusText}
+                              </span>
+                            </div>
+                          ) : winProb ? (
+                            <div className="flex flex-col gap-1">
+                              <div className="flex w-full h-1.5 rounded-full overflow-hidden">
+                                <div style={{ width: `${winProb.home}%` }} className="bg-emerald-500" />
+                                <div style={{ width: `${winProb.draw}%` }} className="bg-zinc-500" />
+                                <div style={{ width: `${winProb.away}%` }} className="bg-red-500" />
+                              </div>
+                              <div className="flex justify-between text-[8px] text-zinc-500 font-mono px-1">
+                                <span>主 {winProb.home}%</span>
+                                <span>平 {winProb.draw}%</span>
+                                <span>客 {winProb.away}%</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center">
+                              <span className="text-[10px] text-zinc-500 font-mono">
+                                分析已完成
+                              </span>
+                            </div>
+                          )}
                         </div>
-
-                        <div className="flex flex-col items-center gap-2 w-16">
-                          <img src={record.match.awayTeam.logo} alt={record.match.awayTeam.name} className="w-8 h-8 object-contain drop-shadow-md" />
-                          <span className="text-[10px] font-medium text-center line-clamp-1">{record.match.awayTeam.name}</span>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-3 pt-2 border-t border-white/5 text-[10px] text-zinc-400 italic line-clamp-1">
-                        "{record.analysis.prediction}"
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-8 text-zinc-500 text-xs font-mono">

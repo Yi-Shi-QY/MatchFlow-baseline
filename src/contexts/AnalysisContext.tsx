@@ -1,0 +1,281 @@
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { Match } from '@/src/data/matches';
+import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState, streamRemotionCode } from '@/src/services/ai';
+import { saveHistory, saveResumeState, clearResumeState, getResumeState } from '@/src/services/history';
+import { AgentResult, parseAgentStream } from '@/src/services/agentParser';
+
+export interface ActiveAnalysis {
+  matchId: string;
+  match: Match;
+  dataToAnalyze: any;
+  includeAnimations: boolean;
+  thoughts: string;
+  parsedStream: AgentResult | null;
+  collapsedSegments: Record<string, boolean>;
+  generatedCodes: Record<string, string>;
+  isGeneratingCode: Record<string, boolean>;
+  isAnalyzing: boolean;
+  analysis: MatchAnalysis | null;
+  error: string | null;
+}
+
+interface AnalysisContextType {
+  activeAnalyses: Record<string, ActiveAnalysis>;
+  startAnalysis: (match: Match, dataToAnalyze: any, includeAnimations: boolean, isResume?: boolean) => void;
+  clearActiveAnalysis: (matchId: string) => void;
+  setCollapsedSegments: (matchId: string, segments: Record<string, boolean>) => void;
+  generateCodeForSegment: (matchId: string, seg: any) => void;
+}
+
+const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined);
+
+export function AnalysisProvider({ children }: { children: ReactNode }) {
+  const [activeAnalyses, setActiveAnalyses] = useState<Record<string, ActiveAnalysis>>({});
+
+  const updateAnalysis = useCallback((matchId: string, updates: Partial<ActiveAnalysis>) => {
+    setActiveAnalyses(prev => {
+      if (!prev[matchId]) return prev;
+      return {
+        ...prev,
+        [matchId]: {
+          ...prev[matchId],
+          ...updates
+        }
+      };
+    });
+  }, []);
+
+  const clearActiveAnalysis = useCallback((matchId: string) => {
+    setActiveAnalyses(prev => {
+      const next = { ...prev };
+      delete next[matchId];
+      return next;
+    });
+  }, []);
+
+  const setCollapsedSegments = useCallback((matchId: string, segments: Record<string, boolean>) => {
+    updateAnalysis(matchId, { collapsedSegments: segments });
+  }, [updateAnalysis]);
+
+  const generateCodeForSegment = useCallback(async (matchId: string, seg: any) => {
+    const analysis = activeAnalyses[matchId];
+    if (!analysis || analysis.isGeneratingCode[seg.id]) return;
+
+    updateAnalysis(matchId, { 
+      isGeneratingCode: { ...analysis.isGeneratingCode, [seg.id]: true } 
+    });
+    
+    try {
+      let fullCode = '';
+      const stream = streamRemotionCode(seg.animation);
+      
+      for await (const chunk of stream) {
+        fullCode += chunk;
+        setActiveAnalyses(prev => {
+          if (!prev[matchId]) return prev;
+          return {
+            ...prev,
+            [matchId]: {
+              ...prev[matchId],
+              generatedCodes: { ...prev[matchId].generatedCodes, [seg.id]: fullCode }
+            }
+          };
+        });
+      }
+    } catch (error) {
+      console.error(`Error generating code for segment ${seg.id}:`, error);
+    } finally {
+      setActiveAnalyses(prev => {
+        if (!prev[matchId]) return prev;
+        return {
+          ...prev,
+          [matchId]: {
+            ...prev[matchId],
+            isGeneratingCode: { ...prev[matchId].isGeneratingCode, [seg.id]: false }
+          }
+        };
+      });
+    }
+  }, [activeAnalyses, updateAnalysis]);
+
+  // Auto-generate code effect
+  useEffect(() => {
+    Object.values(activeAnalyses).forEach(analysis => {
+      if (analysis.parsedStream) {
+        analysis.parsedStream.segments.forEach(seg => {
+          if (seg.animation && !analysis.generatedCodes[seg.id] && !analysis.isGeneratingCode[seg.id]) {
+            generateCodeForSegment(analysis.matchId, seg);
+          }
+        });
+      }
+    });
+  }, [activeAnalyses, generateCodeForSegment]);
+
+  const startAnalysis = useCallback(async (match: Match, dataToAnalyze: any, includeAnimations: boolean, isResume: boolean = false) => {
+    const matchId = match.id;
+    
+    // Initialize state
+    let initialThoughts = '';
+    let initialParsedStream: AgentResult | null = null;
+    let initialCollapsed: Record<string, boolean> = {};
+    let resumeStateData: AnalysisResumeState | undefined = undefined;
+
+    if (isResume) {
+      const savedState = getResumeState(matchId);
+      if (savedState) {
+        initialThoughts = savedState.thoughts;
+        initialParsedStream = parseAgentStream(initialThoughts);
+        resumeStateData = savedState.state;
+        
+        initialParsedStream.segments.forEach(seg => {
+          if (seg.isThoughtComplete) {
+            initialCollapsed[seg.id] = true;
+          }
+        });
+      }
+    } else {
+      clearResumeState(); // Clear all or just this match? The function clears all. Let's fix that later if needed.
+    }
+
+    const newAnalysis: ActiveAnalysis = {
+      matchId,
+      match,
+      dataToAnalyze,
+      includeAnimations,
+      thoughts: initialThoughts,
+      parsedStream: initialParsedStream,
+      collapsedSegments: initialCollapsed,
+      generatedCodes: {},
+      isGeneratingCode: {},
+      isAnalyzing: true,
+      analysis: null,
+      error: null
+    };
+
+    setActiveAnalyses(prev => ({ ...prev, [matchId]: newAnalysis }));
+
+    try {
+      let currentThoughts = initialThoughts;
+      let currentParsedStream = initialParsedStream;
+      let currentCollapsed = initialCollapsed;
+      
+      const stream = streamAgentThoughts(
+        dataToAnalyze, 
+        includeAnimations,
+        resumeStateData,
+        (state) => {
+          saveResumeState(matchId, state, currentThoughts);
+        }
+      );
+      
+      for await (const chunk of stream) {
+        currentThoughts += chunk;
+        currentParsedStream = parseAgentStream(currentThoughts);
+        
+        // Auto-collapse completed thoughts
+        const newCollapsed = { ...currentCollapsed };
+        currentParsedStream.segments.forEach(seg => {
+          if (seg.isThoughtComplete && !newCollapsed[seg.id]) {
+            newCollapsed[seg.id] = true;
+          }
+        });
+        currentCollapsed = newCollapsed;
+
+        setActiveAnalyses(prev => {
+          if (!prev[matchId]) return prev;
+          return {
+            ...prev,
+            [matchId]: {
+              ...prev[matchId],
+              thoughts: currentThoughts,
+              parsedStream: currentParsedStream,
+              collapsedSegments: currentCollapsed
+            }
+          };
+        });
+      }
+
+      // Final parse after stream completes
+      const finalParsed = parseAgentStream(currentThoughts);
+      
+      setActiveAnalyses(prev => {
+        if (!prev[matchId]) return prev;
+        return {
+          ...prev,
+          [matchId]: {
+            ...prev[matchId],
+            parsedStream: finalParsed
+          }
+        };
+      });
+
+      if (finalParsed.summary) {
+        const finalAnalysis = finalParsed.summary as MatchAnalysis;
+        
+        // Update match object with edited names before saving
+        const finalMatch = { ...match };
+        if (!finalMatch.homeTeam.id) finalMatch.homeTeam.id = 'home';
+        if (!finalMatch.awayTeam.id) finalMatch.awayTeam.id = 'away';
+        if (dataToAnalyze.homeTeam?.name) finalMatch.homeTeam.name = dataToAnalyze.homeTeam.name;
+        if (dataToAnalyze.awayTeam?.name) finalMatch.awayTeam.name = dataToAnalyze.awayTeam.name;
+        if (dataToAnalyze.league) finalMatch.league = dataToAnalyze.league;
+        
+        setActiveAnalyses(prev => {
+          if (!prev[matchId]) return prev;
+          const currentAnalysisState = prev[matchId];
+          saveHistory(finalMatch, finalAnalysis, finalParsed, currentAnalysisState.generatedCodes);
+          return {
+            ...prev,
+            [matchId]: {
+              ...prev[matchId],
+              analysis: finalAnalysis,
+              isAnalyzing: false
+            }
+          };
+        });
+        
+        clearResumeState();
+      } else {
+        setActiveAnalyses(prev => {
+          if (!prev[matchId]) return prev;
+          return {
+            ...prev,
+            [matchId]: {
+              ...prev[matchId],
+              isAnalyzing: false
+            }
+          };
+        });
+      }
+
+    } catch (error: any) {
+      console.error("Analysis failed:", error);
+      setActiveAnalyses(prev => {
+        if (!prev[matchId]) return prev;
+        return {
+          ...prev,
+          [matchId]: {
+            ...prev[matchId],
+            error: error.message || "Analysis failed",
+            isAnalyzing: false,
+            thoughts: prev[matchId].thoughts + "\n\n[ERROR] Analysis failed. Please try again."
+          }
+        };
+      });
+    }
+  }, []);
+
+  return (
+    <AnalysisContext.Provider value={{ activeAnalyses, startAnalysis, clearActiveAnalysis, setCollapsedSegments, generateCodeForSegment }}>
+      {children}
+    </AnalysisContext.Provider>
+  );
+}
+
+export function useAnalysis() {
+  const context = useContext(AnalysisContext);
+  if (context === undefined) {
+    throw new Error('useAnalysis must be used within an AnalysisProvider');
+  }
+  return context;
+}

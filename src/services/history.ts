@@ -1,4 +1,4 @@
-import { MatchAnalysis } from './ai';
+import { MatchAnalysis, AnalysisResumeState } from './ai';
 import { Match } from '../data/matches';
 import { AgentResult } from './agentParser';
 
@@ -13,6 +13,48 @@ export interface HistoryRecord {
 }
 
 const HISTORY_KEY = 'matchflow_history';
+const RESUME_STATE_KEY = 'matchflow_resume_state';
+
+export interface SavedResumeState {
+  matchId: string;
+  state: AnalysisResumeState;
+  thoughts: string;
+  timestamp: number;
+}
+
+export function getResumeState(matchId: string): SavedResumeState | null {
+  try {
+    const data = localStorage.getItem(RESUME_STATE_KEY);
+    if (data) {
+      const parsed = JSON.parse(data) as SavedResumeState;
+      // Only return if it matches the current match and is less than 24 hours old
+      if (parsed.matchId === matchId && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load resume state', e);
+  }
+  return null;
+}
+
+export function saveResumeState(matchId: string, state: AnalysisResumeState, thoughts: string) {
+  try {
+    const record: SavedResumeState = {
+      matchId,
+      state,
+      thoughts,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(RESUME_STATE_KEY, JSON.stringify(record));
+  } catch (e) {
+    console.error('Failed to save resume state', e);
+  }
+}
+
+export function clearResumeState() {
+  localStorage.removeItem(RESUME_STATE_KEY);
+}
 
 export function getHistory(): HistoryRecord[] {
   try {

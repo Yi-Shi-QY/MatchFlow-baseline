@@ -479,19 +479,39 @@ export async function* streamSummaryAgent(matchData: any, previousAnalysis: stri
   yield* streamAIRequest(prompt, false);
 }
 
-export async function* streamAgentThoughts(matchData: any, includeAnimations: boolean = true) {
+export interface AnalysisResumeState {
+  plan: any[];
+  completedSegmentIndices: number[];
+  fullAnalysisText: string;
+}
+
+export async function* streamAgentThoughts(
+  matchData: any, 
+  includeAnimations: boolean = true,
+  resumeState?: AnalysisResumeState,
+  onStateUpdate?: (state: AnalysisResumeState) => void
+) {
   // 1. Planning Phase (Hidden)
-  let plan = [];
-  try {
-    plan = await generateAnalysisPlan(matchData);
-  } catch (e) {
-    plan = [{ title: "Analysis", focus: "General analysis", animationType: "none", agentType: "general" }];
+  let plan = resumeState?.plan || [];
+  let completedSegmentIndices = resumeState?.completedSegmentIndices || [];
+  let fullAnalysisText = resumeState?.fullAnalysisText || "";
+
+  if (!resumeState) {
+    try {
+      plan = await generateAnalysisPlan(matchData);
+    } catch (e) {
+      plan = [{ title: "Analysis", focus: "General analysis", animationType: "none", agentType: "general" }];
+    }
+    onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText });
   }
 
   // 2. Analysis Phase (Iterative)
-  let fullAnalysisText = "";
-  
-  for (const segment of plan) {
+  for (let i = 0; i < plan.length; i++) {
+    if (completedSegmentIndices.includes(i)) {
+      continue;
+    }
+
+    const segment = plan[i];
     if (!includeAnimations) {
       segment.animationType = 'none';
     }
@@ -516,6 +536,9 @@ export async function* streamAgentThoughts(matchData: any, includeAnimations: bo
 
     yield "\n";
     fullAnalysisText += "\n";
+    
+    completedSegmentIndices.push(i);
+    onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText });
   }
 
   // 3. Summary Phase

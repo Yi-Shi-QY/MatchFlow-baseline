@@ -3,8 +3,8 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { MOCK_MATCHES, Match } from '@/src/data/matches';
-import { analyzeMatch, streamAgentThoughts, streamRemotionCode, MatchAnalysis } from '@/src/services/ai';
-import { saveHistory, getHistory } from '@/src/services/history';
+import { analyzeMatch, streamAgentThoughts, streamRemotionCode, MatchAnalysis, AnalysisResumeState } from '@/src/services/ai';
+import { saveHistory, getHistory, saveResumeState, getResumeState, clearResumeState } from '@/src/services/history';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
 import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate, FileText, ChevronDown, ChevronUp, Video } from 'lucide-react';
@@ -12,12 +12,14 @@ import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
 import { parseAgentStream, AgentResult } from '@/src/services/agentParser';
 import { RemotionPlayer } from '@/src/components/RemotionPlayer';
+import { useAnalysis } from '@/src/contexts/AnalysisContext';
 
 export default function MatchDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const importedData = location.state?.importedData;
+  const { activeAnalyses, startAnalysis: contextStartAnalysis, setCollapsedSegments: contextSetCollapsedSegments, generateCodeForSegment: contextGenerateCode } = useAnalysis();
   
   const isCustom = id === 'custom';
   const customMatch = React.useMemo(() => {
@@ -26,45 +28,39 @@ export default function MatchDetail() {
         id: importedData.id || `custom_${Date.now()}`,
         league: importedData.league || '自定义赛事',
         date: importedData.date || new Date().toISOString().split('T')[0],
-        status: importedData.status || '未开始',
+        status: importedData.status || 'upcoming',
         homeTeam: { 
+          id: importedData.homeTeam?.id || 'home',
           name: importedData.homeTeam?.name || '主队', 
           logo: importedData.homeTeam?.logo || 'https://picsum.photos/seed/home/200/200', 
           form: importedData.homeTeam?.form || ['?', '?', '?', '?', '?'] 
         },
         awayTeam: { 
+          id: importedData.awayTeam?.id || 'away',
           name: importedData.awayTeam?.name || '客队', 
           logo: importedData.awayTeam?.logo || 'https://picsum.photos/seed/away/200/200', 
           form: importedData.awayTeam?.form || ['?', '?', '?', '?', '?'] 
         },
         stats: importedData.stats || { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } }
-      };
+      } as Match;
     }
     return {
       id: `custom_${Date.now()}`,
       league: '自定义赛事',
       date: new Date().toISOString().split('T')[0],
-      status: '未开始',
-      homeTeam: { name: '主队', logo: 'https://picsum.photos/seed/home/200/200', form: ['?', '?', '?', '?', '?'] },
-      awayTeam: { name: '客队', logo: 'https://picsum.photos/seed/away/200/200', form: ['?', '?', '?', '?', '?'] },
+      status: 'upcoming',
+      homeTeam: { id: 'home', name: '主队', logo: 'https://picsum.photos/seed/home/200/200', form: ['?', '?', '?', '?', '?'] },
+      awayTeam: { id: 'away', name: '客队', logo: 'https://picsum.photos/seed/away/200/200', form: ['?', '?', '?', '?', '?'] },
       stats: { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } }
-    };
+    } as Match;
   }, [importedData]);
   
   const historyRecord = React.useMemo(() => getHistory().find(h => h.matchId === id), [id]);
   const match = isCustom ? customMatch : (MOCK_MATCHES.find(m => m.id === id) || historyRecord?.match);
 
-  const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null);
-  const [analyzedMatch, setAnalyzedMatch] = useState<Match | null>(null);
-  const [thoughts, setThoughts] = useState<string>('');
-  const [parsedStream, setParsedStream] = useState<AgentResult | null>(null);
-  const [collapsedSegments, setCollapsedSegments] = useState<Record<string, boolean>>({});
-  const [generatedCodes, setGeneratedCodes] = useState<Record<string, string>>({});
-  const [isGeneratingCode, setIsGeneratingCode] = useState<Record<string, boolean>>({});
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showShare, setShowShare] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  
+  const activeAnalysis = match ? activeAnalyses[match.id] : null;
+
+  // Local state for UI
   const [step, setStep] = useState<'selection' | 'analyzing' | 'result'>('selection');
   const [includeAnimations, setIncludeAnimations] = useState(true);
   const [selectedSources, setSelectedSources] = useState({
@@ -75,6 +71,19 @@ export default function MatchDetail() {
   });
   const [editableData, setEditableData] = useState("");
   const [showJson, setShowJson] = useState(false);
+  const [savedResumeState, setSavedResumeState] = useState<any | null>(null);
+  const [showShare, setShowShare] = useState(false);
+
+  // Sync with active analysis
+  useEffect(() => {
+    if (activeAnalysis) {
+      if (activeAnalysis.isAnalyzing) {
+        setStep('analyzing');
+      } else if (activeAnalysis.analysis) {
+        setStep('result');
+      }
+    }
+  }, [activeAnalysis]);
 
   useEffect(() => {
     if (!match) return;
@@ -83,20 +92,16 @@ export default function MatchDetail() {
     const history = getHistory();
     const existingRecord = history.find(h => h.matchId === match.id);
 
-    if (existingRecord) {
-      setAnalysis(existingRecord.analysis);
-      setAnalyzedMatch(existingRecord.match);
-      if (existingRecord.parsedStream) {
-        setParsedStream(existingRecord.parsedStream);
-      }
-      if (existingRecord.generatedCodes) {
-        setGeneratedCodes(existingRecord.generatedCodes);
-      }
-      setThoughts('[SYSTEM] Loaded from local history cache.\n\nAnalysis complete.');
-      setIsPlaying(true);
+    if (existingRecord && !activeAnalysis) {
       setStep('result');
+    } else if (!activeAnalysis) {
+      // Check for resume state if no completed history exists
+      const resumeState = getResumeState(match.id);
+      if (resumeState) {
+        setSavedResumeState(resumeState);
+      }
     }
-  }, [match]);
+  }, [match, activeAnalysis]);
 
   useEffect(() => {
     if (!match || step !== 'selection') return;
@@ -140,44 +145,6 @@ export default function MatchDetail() {
     
     setEditableData(JSON.stringify(dataToSend, null, 2));
   }, [match, selectedSources, step]);
-
-  const generateCodeForSegment = async (seg: any) => {
-    if (isGeneratingCode[seg.id]) return;
-
-    setIsGeneratingCode(prev => ({ ...prev, [seg.id]: true }));
-    
-    try {
-      let fullCode = '';
-      const stream = streamRemotionCode(seg.animation);
-      
-      for await (const chunk of stream) {
-        fullCode += chunk;
-        setGeneratedCodes(prev => ({ ...prev, [seg.id]: fullCode }));
-      }
-    } catch (error) {
-      console.error(`Error generating code for segment ${seg.id}:`, error);
-    } finally {
-      setIsGeneratingCode(prev => ({ ...prev, [seg.id]: false }));
-    }
-  };
-
-  // Auto-generate Remotion code when animation data is available
-  useEffect(() => {
-    if (!parsedStream) return;
-
-    parsedStream.segments.forEach(seg => {
-      if (seg.animation && !generatedCodes[seg.id] && !isGeneratingCode[seg.id]) {
-        generateCodeForSegment(seg);
-      }
-    });
-  }, [parsedStream]);
-
-  // Auto-save history when generated codes are updated
-  useEffect(() => {
-    if (analyzedMatch && analysis && parsedStream && Object.keys(generatedCodes).length > 0) {
-      saveHistory(analyzedMatch, analysis, parsedStream, generatedCodes);
-    }
-  }, [generatedCodes, analyzedMatch, analysis, parsedStream]);
 
   const handleDataChange = (path: string[], value: any) => {
     try {
@@ -352,7 +319,8 @@ export default function MatchDetail() {
     );
   };
 
-  const startAnalysis = async () => {
+  const startAnalysis = async (isResume: boolean = false) => {
+    if (!match) return;
     let dataToAnalyze;
     try {
       dataToAnalyze = JSON.parse(editableData);
@@ -362,67 +330,61 @@ export default function MatchDetail() {
     }
 
     setStep('analyzing');
-    setIsAnalyzing(true);
-    setThoughts('');
-    setParsedStream(null);
-    setCollapsedSegments({});
-    setGeneratedCodes({});
-    setIsGeneratingCode({});
-    
-    try {
-      let currentThoughts = '';
-      const stream = streamAgentThoughts(dataToAnalyze, includeAnimations);
-      for await (const chunk of stream) {
-        currentThoughts += chunk;
-        setThoughts(currentThoughts);
-        
-        const parsed = parseAgentStream(currentThoughts);
-        setParsedStream(parsed);
-        
-        // Auto-collapse completed thoughts
-        parsed.segments.forEach(seg => {
-          if (seg.isThoughtComplete && !collapsedSegments[seg.id]) {
-            setCollapsedSegments(prev => ({ ...prev, [seg.id]: true }));
-          }
-        });
-      }
-
-      // Final parse after stream completes
-      const finalParsed = parseAgentStream(currentThoughts);
-      setParsedStream(finalParsed);
-
-      if (finalParsed.summary) {
-        setAnalysis(finalParsed.summary as MatchAnalysis);
-        
-        // Update match object with edited names before saving
-        const finalMatch = { ...match! } as Match;
-        
-        // Ensure IDs exist (for imported data compatibility)
-        if (!finalMatch.homeTeam.id) finalMatch.homeTeam.id = 'home';
-        if (!finalMatch.awayTeam.id) finalMatch.awayTeam.id = 'away';
-
-        if (dataToAnalyze.homeTeam?.name) finalMatch.homeTeam.name = dataToAnalyze.homeTeam.name;
-        if (dataToAnalyze.awayTeam?.name) finalMatch.awayTeam.name = dataToAnalyze.awayTeam.name;
-        if (dataToAnalyze.league) finalMatch.league = dataToAnalyze.league;
-        
-        setAnalyzedMatch(finalMatch);
-        
-        // Save to history
-        saveHistory(finalMatch, finalParsed.summary as MatchAnalysis, finalParsed, generatedCodes);
-      }
-
-      setIsPlaying(true);
-      setStep('result');
-    } catch (error) {
-      console.error("Analysis failed:", error);
-      setThoughts(prev => prev + "\n\n[ERROR] Analysis failed. Please try again.");
-      setStep('result');
-    } finally {
-      setIsAnalyzing(false);
-    }
+    contextStartAnalysis(match, dataToAnalyze, includeAnimations, isResume);
   };
 
   if (!match) return <div className="p-8 text-white text-center">Match not found</div>;
+
+  // Determine what to render based on activeAnalysis or history
+  let displayData = {
+    analysis: null as MatchAnalysis | null,
+    analyzedMatch: match,
+    thoughts: '',
+    parsedStream: null as AgentResult | null,
+    collapsedSegments: {} as Record<string, boolean>,
+    generatedCodes: {} as Record<string, string>,
+    isGeneratingCode: {} as Record<string, boolean>,
+    isAnalyzing: false,
+    error: null as string | null
+  };
+
+  if (activeAnalysis) {
+    displayData = {
+      analysis: activeAnalysis.analysis,
+      analyzedMatch: match,
+      thoughts: activeAnalysis.thoughts,
+      parsedStream: activeAnalysis.parsedStream,
+      collapsedSegments: activeAnalysis.collapsedSegments,
+      generatedCodes: activeAnalysis.generatedCodes,
+      isGeneratingCode: activeAnalysis.isGeneratingCode,
+      isAnalyzing: activeAnalysis.isAnalyzing,
+      error: activeAnalysis.error
+    };
+  } else if (historyRecord) {
+    displayData = {
+      analysis: historyRecord.analysis,
+      analyzedMatch: historyRecord.match,
+      thoughts: '[SYSTEM] Loaded from local history cache.\n\nAnalysis complete.',
+      parsedStream: historyRecord.parsedStream || null,
+      collapsedSegments: {},
+      generatedCodes: historyRecord.generatedCodes || {},
+      isGeneratingCode: {},
+      isAnalyzing: false,
+      error: null
+    };
+  }
+
+  const {
+    analysis,
+    analyzedMatch,
+    thoughts,
+    parsedStream,
+    collapsedSegments,
+    generatedCodes,
+    isGeneratingCode,
+    isAnalyzing,
+    error
+  } = displayData;
 
   const shareData = React.useMemo(() => {
     if (!editableData) return '';
@@ -600,12 +562,23 @@ export default function MatchDetail() {
             </label>
           </div>
 
-          <Button 
-            className="w-full mt-4 gap-2"
-            onClick={startAnalysis}
-          >
-            <BrainCircuit className="w-4 h-4" /> 开始分析
-          </Button>
+          <div className="flex flex-col gap-2 mt-4">
+            {savedResumeState && (
+              <Button 
+                className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={() => startAnalysis(true)}
+              >
+                <Activity className="w-4 h-4" /> 继续未完成的分析
+              </Button>
+            )}
+            <Button 
+              className="w-full gap-2"
+              variant={savedResumeState ? "outline" : "default"}
+              onClick={() => startAnalysis(false)}
+            >
+              <BrainCircuit className="w-4 h-4" /> {savedResumeState ? '重新开始分析' : '开始分析'}
+            </Button>
+          </div>
         </motion.div>
       )}
 
@@ -630,7 +603,7 @@ export default function MatchDetail() {
                 {/* Thoughts Header (Collapsible) */}
                 <div 
                   className="bg-zinc-900/80 p-3 flex justify-between items-center cursor-pointer hover:bg-zinc-800 transition-colors"
-                  onClick={() => setCollapsedSegments(prev => ({ ...prev, [seg.id]: !isCollapsed }))}
+                  onClick={() => contextSetCollapsedSegments(match.id, { ...collapsedSegments, [seg.id]: !isCollapsed })}
                 >
                   <div className="flex flex-col gap-1">
                     <span className={`text-xs font-mono flex items-center gap-2 ${seg.isThoughtComplete ? 'text-zinc-400' : 'text-emerald-500'}`}>
