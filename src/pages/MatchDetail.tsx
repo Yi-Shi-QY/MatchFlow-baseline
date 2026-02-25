@@ -101,26 +101,37 @@ export default function MatchDetail() {
   useEffect(() => {
     if (!match || step !== 'selection') return;
     
+    const m = match as Match;
     const dataToSend: any = {};
     
     if (selectedSources.basic) {
-      dataToSend.id = match.id;
-      dataToSend.league = match.league;
-      dataToSend.status = match.status;
-      dataToSend.date = match.date;
-      dataToSend.homeTeam = { name: match.homeTeam.name };
-      dataToSend.awayTeam = { name: match.awayTeam.name };
+      dataToSend.id = m.id;
+      dataToSend.league = m.league;
+      dataToSend.status = m.status;
+      dataToSend.date = m.date;
+      dataToSend.homeTeam = { 
+        id: m.homeTeam.id,
+        name: m.homeTeam.name,
+        logo: m.homeTeam.logo,
+        form: m.homeTeam.form
+      };
+      dataToSend.awayTeam = { 
+        id: m.awayTeam.id,
+        name: m.awayTeam.name,
+        logo: m.awayTeam.logo,
+        form: m.awayTeam.form
+      };
     }
     
     if (selectedSources.form) {
       if (!dataToSend.homeTeam) dataToSend.homeTeam = {};
       if (!dataToSend.awayTeam) dataToSend.awayTeam = {};
-      dataToSend.homeTeam.form = match.homeTeam.form;
-      dataToSend.awayTeam.form = match.awayTeam.form;
+      dataToSend.homeTeam.form = m.homeTeam.form;
+      dataToSend.awayTeam.form = m.awayTeam.form;
     }
     
-    if (selectedSources.stats && match.stats) {
-      dataToSend.stats = match.stats;
+    if (selectedSources.stats && m.stats) {
+      dataToSend.stats = m.stats;
     }
     
     if (selectedSources.custom) {
@@ -384,7 +395,12 @@ export default function MatchDetail() {
         setAnalysis(finalParsed.summary as MatchAnalysis);
         
         // Update match object with edited names before saving
-        const finalMatch = { ...match! };
+        const finalMatch = { ...match! } as Match;
+        
+        // Ensure IDs exist (for imported data compatibility)
+        if (!finalMatch.homeTeam.id) finalMatch.homeTeam.id = 'home';
+        if (!finalMatch.awayTeam.id) finalMatch.awayTeam.id = 'away';
+
         if (dataToAnalyze.homeTeam?.name) finalMatch.homeTeam.name = dataToAnalyze.homeTeam.name;
         if (dataToAnalyze.awayTeam?.name) finalMatch.awayTeam.name = dataToAnalyze.awayTeam.name;
         if (dataToAnalyze.league) finalMatch.league = dataToAnalyze.league;
