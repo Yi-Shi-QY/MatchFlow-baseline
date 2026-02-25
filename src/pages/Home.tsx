@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { MOCK_MATCHES } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Plus, Loader2 } from 'lucide-react';
-import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord } from '@/src/services/history';
+import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord, getResumeState, clearResumeState } from '@/src/services/history';
+import { getSavedMatches, deleteSavedMatch, SavedMatchRecord } from '@/src/services/savedMatches';
 import { Button } from '@/src/components/ui/Button';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
@@ -11,25 +12,58 @@ import { useAnalysis } from '@/src/contexts/AnalysisContext';
 export default function Home() {
   const navigate = useNavigate();
   const [history, setHistory] = useState<HistoryRecord[]>([]);
+  const [savedMatches, setSavedMatches] = useState<SavedMatchRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const { activeAnalyses } = useAnalysis();
+  const { activeAnalyses, clearActiveAnalysis } = useAnalysis();
 
   useEffect(() => {
-    setHistory(getHistory());
+    const loadData = async () => {
+      const historyData = await getHistory();
+      setHistory(historyData);
+      
+      const savedData = await getSavedMatches();
+      setSavedMatches(savedData);
+    };
+    loadData();
   }, []);
 
   const handleClearHistory = () => {
     clearHistory();
+    // Clear all completed analyses from context
+    Object.values(activeAnalyses).forEach(analysis => {
+      if (!analysis.isAnalyzing) {
+        clearActiveAnalysis(analysis.matchId);
+      }
+    });
+    // Also clear resume state
+    clearResumeState();
+    
     setHistory([]);
     setShowClearConfirm(false);
   };
 
-  const handleDeleteRecord = (e: React.MouseEvent, id: string) => {
+  const handleDeleteRecord = async (e: React.MouseEvent, id: string, matchId: string) => {
     e.stopPropagation();
     deleteHistoryRecord(id);
-    setHistory(getHistory());
+    clearActiveAnalysis(matchId); // Clear from context
+    
+    // Also clear resume state if it matches this match
+    const resumeState = getResumeState(matchId);
+    if (resumeState && resumeState.matchId === matchId) {
+      clearResumeState();
+    }
+
+    const data = await getHistory();
+    setHistory(data);
+  };
+
+  const handleDeleteSavedMatch = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await deleteSavedMatch(id);
+    const data = await getSavedMatches();
+    setSavedMatches(data);
   };
 
   // Combine history and active analyses
@@ -95,6 +129,67 @@ export default function Home() {
       </header>
 
       <main className="px-4 pt-6 max-w-md mx-auto space-y-8">
+        {/* Saved Matches Section */}
+        {savedMatches.length > 0 && (
+          <section className="space-y-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Settings className="w-5 h-5 text-zinc-400" /> 已保存的赛事
+            </h2>
+            
+            <div className="flex overflow-x-auto gap-3 pb-4 snap-x snap-mandatory hide-scrollbar px-1">
+              {savedMatches.map((record) => (
+                <Card 
+                  key={record.id} 
+                  className="snap-center shrink-0 w-48 cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900 hover:border-zinc-700 group relative overflow-hidden"
+                  onClick={() => navigate(`/match/${record.id}`)}
+                >
+                  <button 
+                    onClick={(e) => handleDeleteSavedMatch(e, record.id)}
+                    className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400 hover:bg-black"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono truncate max-w-[80px]">
+                        {record.match.league}
+                      </span>
+                      <span className="text-[9px] text-zinc-600 font-mono">
+                        {new Date(record.timestamp).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex flex-col items-center gap-1.5 w-12">
+                        <img src={record.match.homeTeam.logo} alt={record.match.homeTeam.name} className="w-8 h-8 object-contain drop-shadow-sm" />
+                        <span className="text-[9px] font-medium text-center line-clamp-1 w-full text-zinc-300">
+                          {record.match.homeTeam.name}
+                        </span>
+                      </div>
+                      
+                      <div className="text-[10px] font-bold font-mono text-zinc-600">VS</div>
+
+                      <div className="flex flex-col items-center gap-1.5 w-12">
+                        <img src={record.match.awayTeam.logo} alt={record.match.awayTeam.name} className="w-8 h-8 object-contain drop-shadow-sm" />
+                        <span className="text-[9px] font-medium text-center line-clamp-1 w-full text-zinc-300">
+                          {record.match.awayTeam.name}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-2 pt-2 border-t border-white/5 flex justify-center">
+                      <span className="text-[10px] text-emerald-500 font-mono">
+                        点击分析
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* History Section */}
         {allRecords.length > 0 && (
           <section className="space-y-4">
@@ -156,7 +251,7 @@ export default function Home() {
                       {/* Delete Button (only for non-active) */}
                       {!isActive && (
                         <button 
-                          onClick={(e) => handleDeleteRecord(e, record.id)}
+                          onClick={(e) => handleDeleteRecord(e, record.id, record.matchId)}
                           className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400 hover:bg-black"
                         >
                           <X className="w-3 h-3" />

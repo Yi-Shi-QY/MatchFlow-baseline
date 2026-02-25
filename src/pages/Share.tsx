@@ -6,6 +6,7 @@ import { Button } from '@/src/components/ui/Button';
 import { ArrowLeft, Activity, Download, BrainCircuit } from 'lucide-react';
 import { motion } from 'motion/react';
 import { saveHistory } from '@/src/services/history';
+import { saveMatch } from '@/src/services/savedMatches';
 
 export default function Share() {
   const [searchParams] = useSearchParams();
@@ -37,6 +38,8 @@ export default function Share() {
              league: decoded.d.league || 'Unknown League',
              homeTeam: decoded.d.homeTeam || { name: 'Home', logo: '' },
              awayTeam: decoded.d.awayTeam || { name: 'Away', logo: '' },
+             date: decoded.d.date || new Date().toISOString(),
+             status: decoded.d.status || 'upcoming',
              // Try to find logo if name matches mock
              ...MOCK_MATCHES.find(x => x.id === decoded.d.id)
            };
@@ -71,13 +74,21 @@ export default function Share() {
     }
   }, [searchParams]);
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (isLegacy && match && importedData?.fullAnalysis) {
-      saveHistory(match, importedData.fullAnalysis);
+      await saveHistory(match, importedData.fullAnalysis);
       navigate(`/match/${match.id}`);
     } else if (importedData) {
       // New format: navigate to match detail with imported data
-      navigate(`/match/${match.id || 'custom'}`, { state: { importedData } });
+      // Save it first
+      const m = match || { id: 'custom', league: 'Custom', homeTeam: { name: 'Home' }, awayTeam: { name: 'Away' } };
+      // Ensure it has an ID
+      if (!m.id || m.id === 'custom') {
+        m.id = `custom_${Date.now()}`;
+      }
+      
+      await saveMatch(m);
+      navigate(`/match/${m.id}`, { state: { importedData } });
     }
   };
 

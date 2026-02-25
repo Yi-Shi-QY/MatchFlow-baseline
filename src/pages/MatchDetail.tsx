@@ -4,7 +4,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { MOCK_MATCHES, Match } from '@/src/data/matches';
 import { analyzeMatch, streamAgentThoughts, streamRemotionCode, MatchAnalysis, AnalysisResumeState } from '@/src/services/ai';
-import { saveHistory, getHistory, saveResumeState, getResumeState, clearResumeState } from '@/src/services/history';
+import { saveHistory, getHistory, saveResumeState, getResumeState, clearResumeState, HistoryRecord } from '@/src/services/history';
+import { getSavedMatches, SavedMatchRecord } from '@/src/services/savedMatches';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
 import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate, FileText, ChevronDown, ChevronUp, Video } from 'lucide-react';
@@ -41,7 +42,8 @@ export default function MatchDetail() {
           logo: importedData.awayTeam?.logo || 'https://picsum.photos/seed/away/200/200', 
           form: importedData.awayTeam?.form || ['?', '?', '?', '?', '?'] 
         },
-        stats: importedData.stats || { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } }
+        stats: importedData.stats || { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } },
+        customInfo: importedData.customInfo
       } as Match;
     }
     return {
@@ -55,8 +57,25 @@ export default function MatchDetail() {
     } as Match;
   }, [importedData]);
   
-  const historyRecord = React.useMemo(() => getHistory().find(h => h.matchId === id), [id]);
-  const match = isCustom ? customMatch : (MOCK_MATCHES.find(m => m.id === id) || historyRecord?.match);
+  const [historyRecord, setHistoryRecord] = useState<HistoryRecord | undefined>(undefined);
+  const [savedMatchRecord, setSavedMatchRecord] = useState<SavedMatchRecord | undefined>(undefined);
+
+  useEffect(() => {
+    const loadData = async () => {
+      const history = await getHistory();
+      const record = history.find(h => h.matchId === id);
+      setHistoryRecord(record);
+
+      if (!record) {
+        const savedMatches = await getSavedMatches();
+        const saved = savedMatches.find(s => s.id === id);
+        setSavedMatchRecord(saved);
+      }
+    };
+    loadData();
+  }, [id]);
+
+  const match = isCustom ? customMatch : (MOCK_MATCHES.find(m => m.id === id) || historyRecord?.match || savedMatchRecord?.match);
 
   const activeAnalysis = match ? activeAnalyses[match.id] : null;
 
@@ -69,6 +88,17 @@ export default function MatchDetail() {
     stats: true,
     custom: false,
   });
+
+  useEffect(() => {
+    if (match) {
+      const m = match as any;
+      setSelectedSources(prev => ({
+        ...prev,
+        stats: !!m.stats,
+        custom: !!m.customInfo
+      }));
+    }
+  }, [match]);
   const [editableData, setEditableData] = useState("");
   const [showJson, setShowJson] = useState(false);
   const [savedResumeState, setSavedResumeState] = useState<any | null>(null);
@@ -88,20 +118,17 @@ export default function MatchDetail() {
   useEffect(() => {
     if (!match) return;
 
-    // Check history first
-    const history = getHistory();
-    const existingRecord = history.find(h => h.matchId === match.id);
-
-    if (existingRecord && !activeAnalysis) {
+    if (historyRecord && !activeAnalysis) {
       setStep('result');
     } else if (!activeAnalysis) {
       // Check for resume state if no completed history exists
-      const resumeState = getResumeState(match.id);
-      if (resumeState) {
-        setSavedResumeState(resumeState);
-      }
+      getResumeState(match.id).then(resumeState => {
+        if (resumeState) {
+          setSavedResumeState(resumeState);
+        }
+      });
     }
-  }, [match, activeAnalysis]);
+  }, [match, activeAnalysis, historyRecord]);
 
   useEffect(() => {
     if (!match || step !== 'selection') return;
@@ -140,7 +167,7 @@ export default function MatchDetail() {
     }
     
     if (selectedSources.custom) {
-      dataToSend.customInfo = "";
+      dataToSend.customInfo = (m as any).customInfo || "";
     }
     
     setEditableData(JSON.stringify(dataToSend, null, 2));

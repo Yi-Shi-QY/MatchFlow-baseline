@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode, use
 import { Match } from '@/src/data/matches';
 import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState, streamRemotionCode } from '@/src/services/ai';
 import { saveHistory, saveResumeState, clearResumeState, getResumeState } from '@/src/services/history';
+import { deleteSavedMatch } from '@/src/services/savedMatches';
 import { AgentResult, parseAgentStream } from '@/src/services/agentParser';
 
 export interface ActiveAnalysis {
@@ -121,7 +122,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     let resumeStateData: AnalysisResumeState | undefined = undefined;
 
     if (isResume) {
-      const savedState = getResumeState(matchId);
+      const savedState = await getResumeState(matchId);
       if (savedState) {
         initialThoughts = savedState.thoughts;
         initialParsedStream = parseAgentStream(initialThoughts);
@@ -134,7 +135,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         });
       }
     } else {
-      clearResumeState(); // Clear all or just this match? The function clears all. Let's fix that later if needed.
+      await clearResumeState();
     }
 
     const newAnalysis: ActiveAnalysis = {
@@ -223,7 +224,11 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         setActiveAnalyses(prev => {
           if (!prev[matchId]) return prev;
           const currentAnalysisState = prev[matchId];
-          saveHistory(finalMatch, finalAnalysis, finalParsed, currentAnalysisState.generatedCodes);
+          saveHistory(finalMatch, finalAnalysis, finalParsed, currentAnalysisState.generatedCodes).catch(console.error);
+          
+          // Also try to delete from saved matches if it exists (it's now history)
+          deleteSavedMatch(matchId).catch(() => {});
+
           return {
             ...prev,
             [matchId]: {
@@ -234,7 +239,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           };
         });
         
-        clearResumeState();
+        await clearResumeState();
       } else {
         setActiveAnalyses(prev => {
           if (!prev[matchId]) return prev;
