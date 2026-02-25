@@ -302,6 +302,10 @@ export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
     2. **Avoid Redundancy:** Group related stats.
     3. **Logical Flow:** Overview -> Form -> Tactics/Stats -> Key Factors -> Conclusion.
     4. **Segment Count:** 3 to 6 segments.
+    5. **Animation Strategy:**
+       - **Recent Form:** MUST use "stats" animation.
+       - **Tactical/Stats:** MUST use "tactical" or "comparison" animation.
+       - **Overview/Prediction:** Usually "none", unless comparing key players.
 
     **OUTPUT FORMAT:**
     Return a STRICT JSON array of objects. Do NOT use markdown code blocks.
@@ -371,7 +375,10 @@ function getAnalysisPrompt(agentType: string, segmentPlan: any, matchData: any, 
        - Use a formal, analytical tone suitable for a written report.
        - Use bullet points, bold text, and clear structure.
        - Focus on data-driven insights.
-    2. If Animation is needed, generate the <animation> block with REAL data.
+    2. **MANDATORY ANIMATION:**
+       - You MUST generate the <animation> block if "Animation Needed" is YES.
+       - Populate the JSON with REAL numbers from the Match Data.
+       - Do NOT use placeholder values like 0.
     3. Do NOT output any other segments. Focus ONLY on this one.
 
     **OUTPUT FORMAT:**
@@ -410,8 +417,8 @@ export async function* streamAnalysisAgent(matchData: any, segmentPlan: any) {
       "narration": "A short, engaging voiceover script for this animation.",
       "data": {
         "homeLabel": "${homeName}", "awayLabel": "${awayName}",
-        "homeValue": 0, "awayValue": 0,
-        "metric": "Label"
+        "homeValue": 10, "awayValue": 5,
+        "metric": "REPLACE_WITH_REAL_METRIC"
       }
     }
     </animation>`;
