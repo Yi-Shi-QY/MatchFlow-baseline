@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
-import { ArrowLeft, QrCode } from 'lucide-react';
+import { ArrowLeft, QrCode, AlertCircle } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 
 export default function Scan() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
 
   const handleScan = (result: string) => {
     if (result) {
@@ -28,6 +29,20 @@ export default function Scan() {
     }
   };
 
+  const handleError = (err: unknown) => {
+    console.error(err);
+    if (err instanceof Error) {
+      if (err.name === 'NotAllowedError' || err.message.includes('Permission denied')) {
+        setHasPermission(false);
+        setError('无法访问摄像头，请在系统设置中授予权限');
+      } else {
+        setError(err.message || '扫描出错');
+      }
+    } else if (typeof err === 'string') {
+      setError(err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col">
       <header className="sticky top-0 z-20 bg-black/80 backdrop-blur-md border-b border-white/10 px-4 py-4 flex items-center justify-between">
@@ -42,26 +57,51 @@ export default function Scan() {
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center p-4 max-w-md mx-auto w-full">
-        <div className="w-full aspect-square max-w-sm rounded-2xl overflow-hidden border-2 border-emerald-500/50 relative shadow-2xl shadow-emerald-500/10">
-          <Scanner
-            onScan={(result) => handleScan(result[0].rawValue)}
-            onError={(error) => console.error(error)}
-          />
-          
-          {/* Scanning overlay */}
-          <div className="absolute inset-0 pointer-events-none border-[40px] border-black/50" />
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="w-48 h-48 border-2 border-emerald-500 rounded-xl relative">
-              <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-emerald-400 -mt-0.5 -ml-0.5" />
-              <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-emerald-400 -mt-0.5 -mr-0.5" />
-              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-emerald-400 -mb-0.5 -ml-0.5" />
-              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-emerald-400 -mb-0.5 -mr-0.5" />
+        {hasPermission === false ? (
+          <div className="w-full aspect-square max-w-sm rounded-2xl border-2 border-red-500/50 flex flex-col items-center justify-center p-6 text-center bg-red-500/5">
+            <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+            <h3 className="text-lg font-bold text-white mb-2">无摄像头权限</h3>
+            <p className="text-sm text-zinc-400 mb-6">
+              请在浏览器或系统设置中允许访问摄像头，然后刷新页面重试。
+            </p>
+            <Button onClick={() => window.location.reload()} variant="outline" className="border-white/10">
+              刷新重试
+            </Button>
+          </div>
+        ) : (
+          <div className="w-full aspect-square max-w-sm rounded-2xl overflow-hidden border-2 border-emerald-500/50 relative shadow-2xl shadow-emerald-500/10 bg-zinc-900">
+            <Scanner
+              onScan={(result) => {
+                if (result && result.length > 0) {
+                  handleScan(result[0].rawValue);
+                }
+              }}
+              onError={handleError}
+              formats={['qr_code']}
+              constraints={{ facingMode: 'environment' }}
+              components={{
+                finder: false,
+              }}
+            />
+            
+            {/* Scanning overlay */}
+            <div className="absolute inset-0 pointer-events-none border-[40px] border-black/50" />
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              <div className="w-48 h-48 border-2 border-emerald-500 rounded-xl relative">
+                <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-emerald-400 -mt-0.5 -ml-0.5" />
+                <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-emerald-400 -mt-0.5 -mr-0.5" />
+                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-emerald-400 -mb-0.5 -ml-0.5" />
+                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-emerald-400 -mb-0.5 -mr-0.5" />
+                
+                {/* Scanning line animation */}
+                <div className="absolute top-0 left-0 w-full h-0.5 bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.5)] animate-[scan_2s_ease-in-out_infinite]" />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {error ? (
-          <div className="mt-8 text-red-400 text-sm font-mono bg-red-500/10 px-4 py-2 rounded-lg border border-red-500/20">
+          <div className="mt-8 text-red-400 text-sm font-mono bg-red-500/10 px-4 py-2 rounded-lg border border-red-500/20 max-w-sm w-full text-center">
             {error}
           </div>
         ) : (
@@ -70,6 +110,15 @@ export default function Scan() {
           </div>
         )}
       </main>
+      
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes scan {
+          0% { top: 0; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+      `}} />
     </div>
   );
 }

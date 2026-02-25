@@ -17,6 +17,7 @@
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.20",
     "@capacitor/android": "^8.1.0",
+    "@capacitor/app": "^8.0.1",
     "@capacitor/core": "^8.1.0",
     "@capacitor/ios": "^8.1.0",
     "@google/genai": "^1.29.0",
