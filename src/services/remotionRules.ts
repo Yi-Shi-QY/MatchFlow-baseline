@@ -7,10 +7,19 @@ Do NOT just display the narration text. The narration is for audio.
 Your goal is to **VISUALIZE** the data. Use charts, pitch maps, formation diagrams, or dynamic comparisons.
 Make it look like a professional broadcast graphic (Sky Sports, ESPN style).
 
-**DESIGN RULES (Vertical Mobile 1080x1920):**
-1. **Layout:** Use \`AbsoluteFill\`. Design for 9:16 aspect ratio.
-2. **Typography:** Use large, bold fonts (60px+ for headers, 40px+ for data). Minimal text, maximum data.
-3. **Colors:** Dark background (#09090b). Home team: Emerald (#10b981), Away team: Blue (#3b82f6), Accent: Amber (#f59e0b).
+**DESIGN RULES (Square 1080x1080):**
+1. **Layout:** Use \`AbsoluteFill\`. Design for **1:1 aspect ratio (1080x1080)**.
+   - Since the container is square, center your content vertically and horizontally.
+   - Leave 40px padding on all sides.
+2. **Typography:** Use large, bold fonts.
+   - Headers: 60px+ (Impactful)
+   - Data Values: 80px+ (Massive)
+   - Labels: 30px+ (Readable)
+3. **Colors:** Dark background (#09090b). 
+   - Home team: Emerald (#10b981)
+   - Away team: Blue (#3b82f6)
+   - Accent: Amber (#f59e0b)
+   - Text: White (#ffffff) or Zinc-400 (#a1a1aa) for secondary.
 4. **Animation:** Everything must enter with a transition (slide, fade, scale). Use \`spring\` for impact.
 5. **Components:**
    - **Bar Charts:** Animated bars comparing stats (Possession, Shots).
@@ -28,7 +37,7 @@ Make it look like a professional broadcast graphic (Sky Sports, ESPN style).
 Return ONLY valid TSX code. No markdown blocks.
 Export default function Scene({ data, title, narration }) { ... }
 
-**EXAMPLE (Stats Comparison):**
+**EXAMPLE (Stats Comparison - Square Layout):**
 import React from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, spring, interpolate } from 'remotion';
 
@@ -47,27 +56,28 @@ export default function Scene({ data, title }) {
   const barProgress = interpolate(frame, [10, 40], [0, 1], { extrapolateRight: 'clamp' });
 
   return (
-    <AbsoluteFill style={{ backgroundColor: '#09090b', color: '#fff', padding: '40px' }}>
+    <AbsoluteFill style={{ backgroundColor: '#09090b', color: '#fff', padding: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       {/* Title */}
       <h1 style={{ 
-        fontSize: '60px', 
+        fontSize: '50px', 
         textAlign: 'center', 
+        marginBottom: '60px',
         opacity: interpolate(frame, [0, 20], [0, 1]),
-        transform: \`translateY(\${interpolate(frame, [0, 20], [50, 0])}px)\`
+        transform: \`translateY(\${interpolate(frame, [0, 20], [20, 0])}px)\`
       }}>
         {title}
       </h1>
 
-      {/* Comparison Bar */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '60px' }}>
+      {/* Comparison Container */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
         
         {/* Home Team */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '40px', color: '#10b981', fontWeight: 'bold' }}>主队</span>
-            <span style={{ fontSize: '50px', fontWeight: 'bold' }}>{homeVal}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', alignItems: 'flex-end' }}>
+            <span style={{ fontSize: '36px', color: '#10b981', fontWeight: 'bold' }}>主队</span>
+            <span style={{ fontSize: '60px', fontWeight: 'bold', lineHeight: 1 }}>{homeVal}</span>
           </div>
-          <div style={{ height: '40px', background: '#333', borderRadius: '20px', overflow: 'hidden' }}>
+          <div style={{ height: '50px', background: '#27272a', borderRadius: '25px', overflow: 'hidden' }}>
             <div style={{ 
               width: \`\${homePct}%\`, 
               height: '100%', 
@@ -80,11 +90,11 @@ export default function Scene({ data, title }) {
 
         {/* Away Team */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '40px', color: '#3b82f6', fontWeight: 'bold' }}>客队</span>
-            <span style={{ fontSize: '50px', fontWeight: 'bold' }}>{awayVal}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', alignItems: 'flex-end' }}>
+            <span style={{ fontSize: '36px', color: '#3b82f6', fontWeight: 'bold' }}>客队</span>
+            <span style={{ fontSize: '60px', fontWeight: 'bold', lineHeight: 1 }}>{awayVal}</span>
           </div>
-          <div style={{ height: '40px', background: '#333', borderRadius: '20px', overflow: 'hidden' }}>
+          <div style={{ height: '50px', background: '#27272a', borderRadius: '25px', overflow: 'hidden' }}>
             <div style={{ 
               width: \`\${100 - homePct}%\`, 
               height: '100%', 

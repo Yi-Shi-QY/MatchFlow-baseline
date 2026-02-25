@@ -65,10 +65,10 @@ export function RemotionPlayer({ code, data, title, narration, isGenerating }: R
         durationInFrames={150} // Default duration, can be adjusted
         fps={30}
         compositionWidth={1080}
-        compositionHeight={1920}
+        compositionHeight={1080}
         style={{
           width: '100%',
-          aspectRatio: '9 / 16',
+          aspectRatio: '1 / 1',
           maxHeight: '600px',
           margin: '0 auto',
         }}
