@@ -129,6 +129,37 @@ export default function Settings() {
             )}
 
             <div className="pt-4 border-t border-white/10 space-y-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Activity className="w-4 h-4 text-emerald-500" /> 赛事数据源 (可选)
+              </h3>
+              
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Server URL</label>
+                <input 
+                  type="text"
+                  value={settings.matchDataServerUrl || ''}
+                  onChange={(e) => setLocalSettings({...settings, matchDataServerUrl: e.target.value})}
+                  placeholder="https://api.example.com"
+                  className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">API Key</label>
+                <input 
+                  type="password"
+                  value={settings.matchDataApiKey || ''}
+                  onChange={(e) => setLocalSettings({...settings, matchDataApiKey: e.target.value})}
+                  placeholder="Bearer Token"
+                  className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  如果不配置，应用将使用内置的模拟数据。
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-white/10 space-y-4">
               <div className="flex gap-3">
                 <Button 
                   onClick={handleTestConnection} 

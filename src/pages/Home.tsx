@@ -5,6 +5,8 @@ import { Card, CardContent } from '@/src/components/ui/Card';
 import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Plus, Loader2 } from 'lucide-react';
 import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord, getResumeState, clearResumeState } from '@/src/services/history';
 import { getSavedMatches, deleteSavedMatch, SavedMatchRecord } from '@/src/services/savedMatches';
+import { fetchMatches } from '@/src/services/matchData';
+import { Match } from '@/src/data/matches';
 import { Button } from '@/src/components/ui/Button';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
@@ -13,6 +15,8 @@ export default function Home() {
   const navigate = useNavigate();
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [savedMatches, setSavedMatches] = useState<SavedMatchRecord[]>([]);
+  const [liveMatches, setLiveMatches] = useState<Match[]>([]);
+  const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -25,6 +29,15 @@ export default function Home() {
       
       const savedData = await getSavedMatches();
       setSavedMatches(savedData);
+
+      setIsLoadingMatches(true);
+      const matches = await fetchMatches();
+      if (matches && matches.length > 0) {
+        setLiveMatches(matches);
+      } else {
+        setLiveMatches(MOCK_MATCHES);
+      }
+      setIsLoadingMatches(false);
     };
     loadData();
   }, []);
@@ -349,55 +362,65 @@ export default function Home() {
           </div>
           
           <div className="grid gap-4">
-            {MOCK_MATCHES.map((match) => (
-              <Card 
-                key={match.id} 
-                className="cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/80"
-                onClick={() => navigate(`/match/${match.id}`)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">{match.league}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
-                      match.status === 'live' ? 'bg-red-500/20 text-red-500 animate-pulse' : 
-                      match.status === 'finished' ? 'bg-zinc-800 text-zinc-400' : 
-                      'bg-emerald-500/20 text-emerald-500'
-                    }`}>
-                      {match.status === 'live' ? '直播中' : match.status === 'finished' ? '完场' : '未开始'}
-                    </span>
-                  </div>
+            {isLoadingMatches ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
+              </div>
+            ) : liveMatches.length > 0 ? (
+              liveMatches.map((match) => (
+                <Card 
+                  key={match.id} 
+                  className="cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/80"
+                  onClick={() => navigate(`/match/${match.id}`, { state: { importedData: match } })}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">{match.league}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+                        match.status === 'live' ? 'bg-red-500/20 text-red-500 animate-pulse' : 
+                        match.status === 'finished' ? 'bg-zinc-800 text-zinc-400' : 
+                        'bg-emerald-500/20 text-emerald-500'
+                      }`}>
+                        {match.status === 'live' ? '直播中' : match.status === 'finished' ? '完场' : '未开始'}
+                      </span>
+                    </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col items-center gap-2 w-20">
-                      <img src={match.homeTeam.logo} alt={match.homeTeam.name} className="w-10 h-10 object-contain drop-shadow-md" />
-                      <span className="text-xs font-medium text-center line-clamp-1">{match.homeTeam.name}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col items-center gap-2 w-20">
+                        <img src={match.homeTeam.logo} alt={match.homeTeam.name} className="w-10 h-10 object-contain drop-shadow-md" />
+                        <span className="text-xs font-medium text-center line-clamp-1">{match.homeTeam.name}</span>
+                      </div>
+                      
+                      <div className="flex flex-col items-center justify-center flex-1">
+                        {match.status === 'live' || match.status === 'finished' ? (
+                          <div className="text-2xl font-bold font-mono tracking-tighter">
+                            {match.score?.home} - {match.score?.away}
+                          </div>
+                        ) : (
+                          <div className="text-sm font-medium text-zinc-400 font-mono">
+                            {new Date(match.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col items-center gap-2 w-20">
+                        <img src={match.awayTeam.logo} alt={match.awayTeam.name} className="w-10 h-10 object-contain drop-shadow-md" />
+                        <span className="text-xs font-medium text-center line-clamp-1">{match.awayTeam.name}</span>
+                      </div>
                     </div>
                     
-                    <div className="flex flex-col items-center justify-center flex-1">
-                      {match.status === 'live' || match.status === 'finished' ? (
-                        <div className="text-2xl font-bold font-mono tracking-tighter">
-                          {match.score?.home} - {match.score?.away}
-                        </div>
-                      ) : (
-                        <div className="text-sm font-medium text-zinc-400 font-mono">
-                          {new Date(match.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      )}
+                    <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-zinc-500">
+                      <span className="text-[10px] font-mono">点击进行分析</span>
+                      <ChevronRight className="w-4 h-4" />
                     </div>
-
-                    <div className="flex flex-col items-center gap-2 w-20">
-                      <img src={match.awayTeam.logo} alt={match.awayTeam.name} className="w-10 h-10 object-contain drop-shadow-md" />
-                      <span className="text-xs font-medium text-center line-clamp-1">{match.awayTeam.name}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-zinc-500">
-                    <span className="text-[10px] font-mono">点击进行分析</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="text-center py-8 text-zinc-500 text-xs font-mono">
+                暂无赛事数据
+              </div>
+            )}
           </div>
         </section>
       </main>

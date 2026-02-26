@@ -2,6 +2,8 @@ export interface AppSettings {
   provider: 'gemini' | 'deepseek';
   model: string;
   deepseekApiKey: string;
+  matchDataServerUrl: string;
+  matchDataApiKey: string;
 }
 
 const SETTINGS_KEY = 'matchflow_settings';
@@ -10,6 +12,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'gemini',
   model: 'gemini-3-flash-preview',
   deepseekApiKey: '',
+  matchDataServerUrl: '',
+  matchDataApiKey: '',
 };
 
 export function getSettings(): AppSettings {
