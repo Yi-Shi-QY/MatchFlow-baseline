@@ -15,8 +15,11 @@ import { parseAgentStream, AgentResult } from '@/src/services/agentParser';
 import { RemotionPlayer } from '@/src/components/RemotionPlayer';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
 import { compressToEncodedURIComponent } from 'lz-string';
-import html2canvas from 'html2canvas';
+import { toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 export default function MatchDetail() {
   const { id } = useParams();
@@ -116,7 +119,7 @@ export default function MatchDetail() {
     setIsExporting(true);
 
     try {
-      // Temporarily expand all segments for PDF
+      // 1. Expand all segments
       const originalCollapsed = { ...activeAnalysis?.collapsedSegments };
       const allExpanded: Record<string, boolean> = {};
       if (activeAnalysis?.parsedStream) {
@@ -126,29 +129,29 @@ export default function MatchDetail() {
         contextSetCollapsedSegments(match.id, allExpanded);
       }
 
-      // Wait for DOM to update
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // 2. Wait for expansion animation and DOM update
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       const element = document.getElementById('analysis-content');
       if (!element) throw new Error('Content element not found');
 
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
+      // 3. Capture with html-to-image
+      const dataUrl = await toJpeg(element, {
+        quality: 0.95,
         backgroundColor: '#000000',
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight
+        pixelRatio: 2,
+        // Filter out video elements to avoid tainted canvas issues
+        filter: (node) => node.tagName !== 'VIDEO',
       });
 
-      const imgData = canvas.toDataURL('image/jpeg', 1.0);
-      
+      // 4. Generate PDF
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
       
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
+      const imgProps = pdf.getImageProperties(dataUrl);
+      const imgWidth = imgProps.width;
+      const imgHeight = imgProps.height;
       
       const ratio = pdfWidth / imgWidth;
       const scaledHeight = imgHeight * ratio;
@@ -156,25 +159,49 @@ export default function MatchDetail() {
       let heightLeft = scaledHeight;
       let position = 0;
       
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, scaledHeight);
+      // First page
+      pdf.addImage(dataUrl, 'JPEG', 0, position, pdfWidth, scaledHeight);
       heightLeft -= pdfHeight;
       
+      // Subsequent pages
       while (heightLeft > 0) {
         position = heightLeft - scaledHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, scaledHeight);
+        pdf.addImage(dataUrl, 'JPEG', 0, position, pdfWidth, scaledHeight);
         heightLeft -= pdfHeight;
       }
       
-      pdf.save(`${match.homeTeam.name}_vs_${match.awayTeam.name}_分析报告.pdf`);
+      // 5. Save or Share
+      const fileName = `${match.homeTeam.name}_vs_${match.awayTeam.name}_分析报告.pdf`;
 
-      // Restore collapsed state
+      if (Capacitor.isNativePlatform()) {
+        // Native: Save to cache and share
+        const pdfBase64 = pdf.output('datauristring').split(',')[1];
+        
+        const fileResult = await Filesystem.writeFile({
+          path: fileName,
+          data: pdfBase64,
+          directory: Directory.Cache
+        });
+
+        await Share.share({
+          title: '比赛分析报告',
+          text: `查看 ${match.homeTeam.name} vs ${match.awayTeam.name} 的分析报告`,
+          url: fileResult.uri,
+          dialogTitle: '分享分析报告'
+        });
+      } else {
+        // Web: Download directly
+        pdf.save(fileName);
+      }
+
+      // 5. Restore state
       if (activeAnalysis?.parsedStream) {
         contextSetCollapsedSegments(match.id, originalCollapsed);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to export PDF:', error);
-      alert('导出 PDF 失败，请重试');
+      alert(`导出 PDF 失败: ${error.message || '未知错误'}`);
     } finally {
       setIsExporting(false);
     }
