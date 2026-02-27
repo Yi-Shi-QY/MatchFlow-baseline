@@ -315,47 +315,85 @@ export default function MatchDetail() {
     }
   }, [match, activeAnalysis, historyRecord]);
 
+  const editableDataRef = React.useRef(editableData);
+  useEffect(() => {
+    editableDataRef.current = editableData;
+  }, [editableData]);
+
   useEffect(() => {
     if (!match || step !== 'selection') return;
     
+    let currentData: any = {};
+    try {
+      if (editableDataRef.current) {
+        currentData = JSON.parse(editableDataRef.current);
+      }
+    } catch (e) {
+      // If JSON is invalid and not empty, avoid overwriting user's work
+      if (editableDataRef.current && editableDataRef.current.trim() !== "") return;
+    }
+
     const m = match as Match;
-    const dataToSend: any = {};
+    const newData: any = { ...currentData };
     
     if (selectedSources.fundamental) {
-      dataToSend.id = m.id;
-      dataToSend.league = m.league;
-      dataToSend.status = m.status;
-      dataToSend.date = m.date;
-      dataToSend.homeTeam = { 
-        id: m.homeTeam.id,
-        name: m.homeTeam.name,
-        logo: m.homeTeam.logo,
-        form: m.homeTeam.form
-      };
-      dataToSend.awayTeam = { 
-        id: m.awayTeam.id,
-        name: m.awayTeam.name,
-        logo: m.awayTeam.logo,
-        form: m.awayTeam.form
-      };
+      if (newData.id === undefined) newData.id = m.id;
+      if (newData.league === undefined) newData.league = m.league;
+      if (newData.status === undefined) newData.status = m.status;
+      if (newData.date === undefined) newData.date = m.date;
       
-      if (m.stats) {
-        dataToSend.stats = m.stats;
+      if (!newData.homeTeam) newData.homeTeam = { ...m.homeTeam };
+      else {
+        if (newData.homeTeam.id === undefined) newData.homeTeam.id = m.homeTeam.id;
+        if (newData.homeTeam.name === undefined) newData.homeTeam.name = m.homeTeam.name;
+        if (newData.homeTeam.logo === undefined) newData.homeTeam.logo = m.homeTeam.logo;
+        if (newData.homeTeam.form === undefined) newData.homeTeam.form = m.homeTeam.form;
       }
+
+      if (!newData.awayTeam) newData.awayTeam = { ...m.awayTeam };
+      else {
+        if (newData.awayTeam.id === undefined) newData.awayTeam.id = m.awayTeam.id;
+        if (newData.awayTeam.name === undefined) newData.awayTeam.name = m.awayTeam.name;
+        if (newData.awayTeam.logo === undefined) newData.awayTeam.logo = m.awayTeam.logo;
+        if (newData.awayTeam.form === undefined) newData.awayTeam.form = m.awayTeam.form;
+      }
+      
+      if (m.stats && !newData.stats) {
+        newData.stats = m.stats;
+      }
+    } else {
+      delete newData.id;
+      delete newData.league;
+      delete newData.status;
+      delete newData.date;
+      delete newData.homeTeam;
+      delete newData.awayTeam;
+      delete newData.stats;
     }
     
     if (selectedSources.market) {
-      dataToSend.odds = m.odds || {
-        had: { h: 0, d: 0, a: 0 },
-        hhad: { h: 0, d: 0, a: 0, goalline: 0 }
-      };
+      if (!newData.odds) {
+        newData.odds = m.odds || {
+          had: { h: 0, d: 0, a: 0 },
+          hhad: { h: 0, d: 0, a: 0, goalline: 0 }
+        };
+      }
+    } else {
+      delete newData.odds;
     }
     
     if (selectedSources.custom) {
-      dataToSend.customInfo = (m as any).customInfo || "";
+      if (newData.customInfo === undefined) {
+        newData.customInfo = (m as any).customInfo || "";
+      }
+    } else {
+      delete newData.customInfo;
     }
     
-    setEditableData(JSON.stringify(dataToSend, null, 2));
+    const newJson = JSON.stringify(newData, null, 2);
+    if (newJson !== editableDataRef.current) {
+      setEditableData(newJson);
+    }
   }, [match, selectedSources, step]);
 
   const handleDataChange = (path: string[], value: any) => {
