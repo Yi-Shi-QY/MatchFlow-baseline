@@ -64,7 +64,7 @@ const authenticate = (req, res, next) => {
 
 // 1. Get Matches (Public/Protected depending on requirement, here protected)
 app.get('/matches', authenticate, async (req, res) => {
-  const { date, status } = req.query;
+  const { date, status, search, limit = 50, offset = 0 } = req.query;
 
   // Use DB if connected
   if (db.isConnected()) {
@@ -86,12 +86,23 @@ app.get('/matches', authenticate, async (req, res) => {
       }
       
       if (date) {
-        // Simple date check (Postgres date_trunc or similar)
         params.push(date);
         query += ` AND DATE(m.match_date) = $${params.length}`;
       }
 
+      if (search) {
+        params.push(`%${search}%`);
+        query += ` AND (ht.name ILIKE $${params.length} OR at.name ILIKE $${params.length} OR m.league_name ILIKE $${params.length})`;
+      }
+
       query += ` ORDER BY m.match_date ASC`;
+      
+      // Add pagination
+      params.push(parseInt(limit, 10));
+      query += ` LIMIT $${params.length}`;
+      
+      params.push(parseInt(offset, 10));
+      query += ` OFFSET $${params.length}`;
 
       const result = await db.query(query, params);
       
@@ -116,7 +127,7 @@ app.get('/matches', authenticate, async (req, res) => {
         }
       }));
       
-      return res.json({ data: formatted });
+      return res.json({ data: formatted, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: formatted.length } });
     } catch (err) {
       console.error('DB Error:', err);
       return res.status(500).json({ error: { message: 'Database query failed' } });
@@ -133,8 +144,190 @@ app.get('/matches', authenticate, async (req, res) => {
   if (date) {
     filtered = filtered.filter(m => m.date.startsWith(date));
   }
+  
+  if (search) {
+    const s = search.toLowerCase();
+    filtered = filtered.filter(m => 
+      m.homeTeam.name.toLowerCase().includes(s) || 
+      m.awayTeam.name.toLowerCase().includes(s) || 
+      m.league.toLowerCase().includes(s)
+    );
+  }
 
-  res.json({ data: filtered });
+  const paginated = filtered.slice(parseInt(offset, 10), parseInt(offset, 10) + parseInt(limit, 10));
+
+  res.json({ data: paginated, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: paginated.length, total: filtered.length } });
+});
+
+// 1.2 Get Live Matches
+app.get('/matches/live', authenticate, async (req, res) => {
+  if (db.isConnected()) {
+    try {
+      const query = `
+        SELECT m.*, 
+               row_to_json(ht.*) as homeTeam, 
+               row_to_json(at.*) as awayTeam 
+        FROM matches m
+        JOIN teams ht ON m.home_team_id = ht.id
+        JOIN teams at ON m.away_team_id = at.id
+        WHERE m.status = 'live'
+        ORDER BY m.match_date DESC
+      `;
+      const result = await db.query(query);
+      
+      const formatted = result.rows.map(row => ({
+        id: row.id,
+        league: row.league_name,
+        date: row.match_date,
+        status: row.status,
+        score: { home: row.home_score, away: row.away_score },
+        stats: row.match_stats,
+        homeTeam: {
+          id: row.homeTeam.id,
+          name: row.homeTeam.name,
+          logo: row.homeTeam.logo_url,
+          form: row.homeTeam.recent_form
+        },
+        awayTeam: {
+          id: row.awayTeam.id,
+          name: row.awayTeam.name,
+          logo: row.awayTeam.logo_url,
+          form: row.awayTeam.recent_form
+        }
+      }));
+      
+      return res.json({ data: formatted, count: formatted.length });
+    } catch (err) {
+      console.error('DB Error:', err);
+      return res.status(500).json({ error: { message: 'Database query failed' } });
+    }
+  }
+
+  // Fallback to Mock Data
+  const liveMatches = MOCK_MATCHES.filter(m => m.status === 'live');
+  res.json({ data: liveMatches, count: liveMatches.length });
+});
+
+// 1.5 Get Teams
+app.get('/teams', authenticate, async (req, res) => {
+  const { search, limit = 50, offset = 0 } = req.query;
+
+  if (db.isConnected()) {
+    try {
+      let query = `SELECT * FROM teams WHERE 1=1`;
+      const params = [];
+
+      if (search) {
+        params.push(`%${search}%`);
+        query += ` AND name ILIKE $${params.length}`;
+      }
+
+      query += ` ORDER BY name ASC`;
+      
+      params.push(parseInt(limit, 10));
+      query += ` LIMIT $${params.length}`;
+      
+      params.push(parseInt(offset, 10));
+      query += ` OFFSET $${params.length}`;
+
+      const result = await db.query(query, params);
+      return res.json({ data: result.rows, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: result.rows.length } });
+    } catch (err) {
+      console.error('DB Error:', err);
+      return res.status(500).json({ error: { message: 'Database query failed' } });
+    }
+  }
+
+  // Fallback to Mock Data
+  let teams = [];
+  const teamMap = new Map();
+  MOCK_MATCHES.forEach(m => {
+    if (!teamMap.has(m.homeTeam.id)) teamMap.set(m.homeTeam.id, m.homeTeam);
+    if (!teamMap.has(m.awayTeam.id)) teamMap.set(m.awayTeam.id, m.awayTeam);
+  });
+  teams = Array.from(teamMap.values());
+
+  if (search) {
+    const s = search.toLowerCase();
+    teams = teams.filter(t => t.name.toLowerCase().includes(s));
+  }
+
+  const paginated = teams.slice(parseInt(offset, 10), parseInt(offset, 10) + parseInt(limit, 10));
+  res.json({ data: paginated, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: paginated.length, total: teams.length } });
+});
+
+// 1.8 Get Leagues
+app.get('/leagues', authenticate, async (req, res) => {
+  if (db.isConnected()) {
+    try {
+      const query = `SELECT DISTINCT league_name FROM matches ORDER BY league_name ASC`;
+      const result = await db.query(query);
+      return res.json({ data: result.rows.map(r => r.league_name) });
+    } catch (err) {
+      console.error('DB Error:', err);
+      return res.status(500).json({ error: { message: 'Database query failed' } });
+    }
+  }
+
+  // Fallback to Mock Data
+  const leagues = [...new Set(MOCK_MATCHES.map(m => m.league))];
+  res.json({ data: leagues.sort() });
+});
+
+// 1.9 Get Matches for a Team
+app.get('/teams/:id/matches', authenticate, async (req, res) => {
+  const { id } = req.params;
+  const { limit = 10, offset = 0 } = req.query;
+
+  if (db.isConnected()) {
+    try {
+      const query = `
+        SELECT m.*, 
+               row_to_json(ht.*) as homeTeam, 
+               row_to_json(at.*) as awayTeam 
+        FROM matches m
+        JOIN teams ht ON m.home_team_id = ht.id
+        JOIN teams at ON m.away_team_id = at.id
+        WHERE m.home_team_id = $1 OR m.away_team_id = $1
+        ORDER BY m.match_date DESC
+        LIMIT $2 OFFSET $3
+      `;
+      const result = await db.query(query, [id, parseInt(limit, 10), parseInt(offset, 10)]);
+      
+      const formatted = result.rows.map(row => ({
+        id: row.id,
+        league: row.league_name,
+        date: row.match_date,
+        status: row.status,
+        score: { home: row.home_score, away: row.away_score },
+        stats: row.match_stats,
+        homeTeam: {
+          id: row.homeTeam.id,
+          name: row.homeTeam.name,
+          logo: row.homeTeam.logo_url,
+          form: row.homeTeam.recent_form
+        },
+        awayTeam: {
+          id: row.awayTeam.id,
+          name: row.awayTeam.name,
+          logo: row.awayTeam.logo_url,
+          form: row.awayTeam.recent_form
+        }
+      }));
+      
+      return res.json({ data: formatted, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: formatted.length } });
+    } catch (err) {
+      console.error('DB Error:', err);
+      return res.status(500).json({ error: { message: 'Database query failed' } });
+    }
+  }
+
+  // Fallback to Mock Data
+  const teamMatches = MOCK_MATCHES.filter(m => m.homeTeam.id === id || m.awayTeam.id === id)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  
+  const paginated = teamMatches.slice(parseInt(offset, 10), parseInt(offset, 10) + parseInt(limit, 10));
+  res.json({ data: paginated, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: paginated.length, total: teamMatches.length } });
 });
 
 // 2. Get Match Detail
@@ -328,6 +521,105 @@ app.post('/admin/matches', authenticate, async (req, res) => {
     console.error('Match Upsert Error:', err);
     res.status(500).json({ error: { message: 'Failed to upsert match', details: err.message } });
   }
+});
+
+// 6. Update Match Score/Status
+app.put('/admin/matches/:id/score', authenticate, async (req, res) => {
+  const { id } = req.params;
+  const { status, home_score, away_score, match_stats } = req.body;
+
+  if (db.isConnected()) {
+    try {
+      const query = `
+        UPDATE matches SET
+          status = COALESCE($1, status),
+          home_score = COALESCE($2, home_score),
+          away_score = COALESCE($3, away_score),
+          match_stats = COALESCE($4, match_stats)
+        WHERE id = $5
+        RETURNING *
+      `;
+      const params = [
+        status, 
+        home_score, 
+        away_score, 
+        match_stats ? JSON.stringify(match_stats) : null, 
+        id
+      ];
+      
+      const result = await db.query(query, params);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: { message: 'Match not found' } });
+      }
+      return res.json({ data: result.rows[0] });
+    } catch (err) {
+      console.error('Match Update Error:', err);
+      return res.status(500).json({ error: { message: 'Failed to update match' } });
+    }
+  }
+
+  // Fallback to Mock Data
+  const index = MOCK_MATCHES.findIndex(m => m.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: { message: 'Match not found' } });
+  }
+
+  if (status) MOCK_MATCHES[index].status = status;
+  if (home_score !== undefined || away_score !== undefined) {
+    MOCK_MATCHES[index].score = {
+      home: home_score !== undefined ? home_score : MOCK_MATCHES[index].score?.home || 0,
+      away: away_score !== undefined ? away_score : MOCK_MATCHES[index].score?.away || 0
+    };
+  }
+  if (match_stats) MOCK_MATCHES[index].stats = match_stats;
+
+  res.json({ data: MOCK_MATCHES[index] });
+});
+
+// 7. Delete Match
+app.delete('/admin/matches/:id', authenticate, async (req, res) => {
+  const { id } = req.params;
+
+  if (db.isConnected()) {
+    try {
+      const result = await db.query('DELETE FROM matches WHERE id = $1 RETURNING id', [id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: { message: 'Match not found' } });
+      }
+      return res.json({ message: 'Match deleted successfully' });
+    } catch (err) {
+      console.error('Match Delete Error:', err);
+      return res.status(500).json({ error: { message: 'Failed to delete match' } });
+    }
+  }
+
+  const index = MOCK_MATCHES.findIndex(m => m.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: { message: 'Match not found' } });
+  }
+
+  MOCK_MATCHES.splice(index, 1);
+  res.json({ message: 'Match deleted successfully' });
+});
+
+// 8. Delete Team
+app.delete('/admin/teams/:id', authenticate, async (req, res) => {
+  const { id } = req.params;
+
+  if (db.isConnected()) {
+    try {
+      const result = await db.query('DELETE FROM teams WHERE id = $1 RETURNING id', [id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: { message: 'Team not found' } });
+      }
+      return res.json({ message: 'Team deleted successfully' });
+    } catch (err) {
+      console.error('Team Delete Error:', err);
+      return res.status(500).json({ error: { message: 'Failed to delete team. It might be referenced by existing matches.' } });
+    }
+  }
+
+  return res.status(400).json({ error: { message: 'Cannot delete teams in mock mode' } });
 });
 
 // Health Check

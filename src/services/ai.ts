@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { getSettings } from "./settings";
 import { REMOTION_RULES } from "./remotionRules";
+import { availableSkills, executeSkill } from "../skills";
 
 let aiInstance: GoogleGenAI | null = null;
 
@@ -201,85 +202,240 @@ export async function testConnection(settings: any): Promise<boolean> {
   }
 }
 
-async function* streamAIRequest(prompt: string, includeReasoning: boolean = false) {
+function convertToOpenAITools(declarations: any[]) {
+  return declarations.map(decl => {
+    const parameters = JSON.parse(JSON.stringify(decl.parameters));
+    const lowercaseTypes = (obj: any) => {
+      if (obj && obj.type && typeof obj.type === 'string') {
+        obj.type = obj.type.toLowerCase();
+      }
+      if (obj && obj.properties) {
+        for (const key in obj.properties) {
+          lowercaseTypes(obj.properties[key]);
+        }
+      }
+      if (obj && obj.items) {
+        lowercaseTypes(obj.items);
+      }
+    };
+    lowercaseTypes(parameters);
+
+    return {
+      type: "function",
+      function: {
+        name: decl.name,
+        description: decl.description,
+        parameters: parameters
+      }
+    };
+  });
+}
+
+async function* streamAIRequest(prompt: string, includeReasoning: boolean = false, allowedSkills?: string[]) {
   const settings = getSettings();
+  const activeSkills = allowedSkills 
+    ? availableSkills.filter(s => allowedSkills.includes(s.name))
+    : [];
+
   if (settings.provider === "deepseek") {
     if (!settings.deepseekApiKey) {
       yield "[错误] 未配置 DeepSeek API Key。请在设置中配置。";
       return;
     }
 
-    try {
-      const response = await fetch(
-        "https://api.deepseek.com/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${settings.deepseekApiKey}`,
-          },
-          body: JSON.stringify({
-            model: settings.model || "deepseek-chat",
-            messages: [{ role: "user", content: prompt }],
-            stream: true,
-          }),
+    let messages: any[] = [{ role: "user", content: prompt }];
+    const openAITools = convertToOpenAITools(activeSkills);
+    let useTools = true;
+
+    while (true) {
+      try {
+        const requestBody: any = {
+          model: settings.model || "deepseek-chat",
+          messages: messages,
+          stream: true,
+        };
+
+        if (useTools && openAITools.length > 0) {
+          requestBody.tools = openAITools;
         }
-      );
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(
-          err.error?.message || `HTTP error! status: ${response.status}`
+        const response = await fetch(
+          "https://api.deepseek.com/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${settings.deepseekApiKey}`,
+            },
+            body: JSON.stringify(requestBody),
+          }
         );
-      }
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      if (!reader) throw new Error("No reader available");
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          if (response.status === 400 && err.error?.message?.toLowerCase().includes("tool")) {
+            yield `\n[系统提示] 当前模型 (${settings.model}) 原生不支持工具调用，将降级为普通对话。\n`;
+            useTools = false;
+            continue;
+          }
+          throw new Error(err.error?.message || `HTTP error! status: ${response.status}`);
+        }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        if (!reader) throw new Error("No reader available");
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n").filter((line) => line.trim() !== "");
+        let currentContent = "";
+        let currentReasoning = "";
+        let toolCalls: any[] = [];
 
-        for (const line of lines) {
-          if (line === "data: [DONE]") return;
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              let content = "";
-              if (includeReasoning && data.choices[0]?.delta?.reasoning_content) {
-                content = data.choices[0]?.delta?.reasoning_content;
-              } else if (data.choices[0]?.delta?.content) {
-                content = data.choices[0]?.delta?.content;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n").filter((line) => line.trim() !== "");
+
+          for (const line of lines) {
+            if (line === "data: [DONE]") continue;
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                const delta = data.choices[0]?.delta;
+
+                if (delta?.reasoning_content && includeReasoning) {
+                  currentReasoning += delta.reasoning_content;
+                  yield delta.reasoning_content;
+                } else if (delta?.content) {
+                  currentContent += delta.content;
+                  yield delta.content;
+                }
+
+                if (delta?.tool_calls) {
+                  for (const tc of delta.tool_calls) {
+                    if (!toolCalls[tc.index]) {
+                      toolCalls[tc.index] = {
+                        id: tc.id,
+                        type: "function",
+                        function: { name: tc.function?.name || "", arguments: "" }
+                      };
+                    }
+                    if (tc.function?.arguments) {
+                      toolCalls[tc.index].function.arguments += tc.function.arguments;
+                    }
+                  }
+                }
+              } catch (e) {
+                // Ignore parse errors for incomplete chunks
               }
-              if (content) {
-                yield content;
-              }
-            } catch (e) {
-              // Ignore parse errors for incomplete chunks
             }
           }
         }
+
+        const validToolCalls = toolCalls.filter(Boolean);
+        if (validToolCalls.length > 0) {
+          messages.push({
+            role: "assistant",
+            content: currentContent || null,
+            tool_calls: validToolCalls
+          });
+
+          for (const tc of validToolCalls) {
+            yield `\n[系统] 正在调用工具: ${tc.function.name}...\n`;
+            try {
+              const args = JSON.parse(tc.function.arguments);
+              const result = await executeSkill(tc.function.name, args);
+              yield `[系统] 工具调用结果: ${JSON.stringify(result)}\n`;
+              messages.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: JSON.stringify(result)
+              });
+            } catch (err: any) {
+              yield `\n[错误] 工具调用失败: ${err.message}\n`;
+              messages.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: JSON.stringify({ error: err.message })
+              });
+            }
+          }
+          // Loop continues to send tool results back
+        } else {
+          break; // No tool calls, we are done
+        }
+      } catch (e: any) {
+        yield `\n[错误] DeepSeek API 错误: ${
+          e.message === "Failed to fetch" ? "网络或跨域(CORS)错误" : e.message
+        }`;
+        break;
       }
-    } catch (e: any) {
-      yield `\n[错误] DeepSeek API 错误: ${
-        e.message === "Failed to fetch" ? "网络或跨域(CORS)错误" : e.message
-      }`;
     }
   } else {
     // Gemini
     const ai = getGeminiAI();
     try {
-      const response = await ai.models.generateContentStream({
+      const config: any = {};
+      if (activeSkills.length > 0) {
+        config.tools = [{ functionDeclarations: activeSkills }];
+      }
+
+      const chat = ai.chats.create({
         model: settings.model || "gemini-3-flash-preview",
-        contents: prompt,
+        config,
       });
 
+      let response = await chat.sendMessageStream({ message: prompt });
+
       for await (const chunk of response) {
-        yield (chunk as GenerateContentResponse).text;
+        const c = chunk as GenerateContentResponse;
+        if (c.text) {
+          yield c.text;
+        }
+
+        if (c.functionCalls && c.functionCalls.length > 0) {
+          for (const call of c.functionCalls) {
+            try {
+              yield `\n[系统] 正在调用工具: ${call.name}...\n`;
+              const result = await executeSkill(call.name, call.args);
+              yield `[系统] 工具调用结果: ${JSON.stringify(result)}\n`;
+              
+              // Send the result back to the model
+              const followUpResponse = await chat.sendMessageStream({
+                message: [{
+                  functionResponse: {
+                    name: call.name,
+                    response: { result },
+                  }
+                }] as any
+              });
+
+              for await (const followUpChunk of followUpResponse) {
+                const fc = followUpChunk as GenerateContentResponse;
+                if (fc.text) {
+                  yield fc.text;
+                }
+              }
+            } catch (err: any) {
+              yield `\n[错误] 工具调用失败: ${err.message}\n`;
+              // Send error back to model
+              const errorResponse = await chat.sendMessageStream({
+                message: [{
+                  functionResponse: {
+                    name: call.name,
+                    response: { error: err.message },
+                  }
+                }] as any
+              });
+              for await (const errChunk of errorResponse) {
+                const ec = errChunk as GenerateContentResponse;
+                if (ec.text) {
+                  yield ec.text;
+                }
+              }
+            }
+          }
+        }
       }
     } catch (e: any) {
       yield `\n[错误] Gemini API 错误: ${e.message}`;
@@ -287,39 +443,11 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
   }
 }
 
+import { getAgent } from "../agents";
+
 export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
-  const homeName = matchData?.homeTeam?.name || "Home Team";
-  const awayName = matchData?.awayTeam?.name || "Away Team";
-  
-  const prompt = `
-    You are a Senior Football Analyst Director. Your job is to PLAN the analysis structure for the match between ${homeName} and ${awayName}.
-    
-    **CRITICAL PLANNING RULES:**
-    1. **Analyze Data Richness:** Look at the provided Match Data.
-       - If only basic info -> Plan 3 segments (Overview, Form, Prediction).
-       - If stats available -> Add "Tactical Analysis" segments.
-       - If custom info available -> Add specific segments.
-    2. **Avoid Redundancy:** Group related stats.
-    3. **Logical Flow:** Overview -> Form -> Tactics/Stats -> Key Factors -> Conclusion.
-    4. **Segment Count:** 3 to 6 segments.
-    5. **Animation Strategy:**
-       - **Recent Form:** MUST use "stats" animation.
-       - **Tactical/Stats:** MUST use "tactical" or "comparison" animation.
-       - **Overview/Prediction:** Usually "none", unless comparing key players.
-
-    **OUTPUT FORMAT:**
-    Return a STRICT JSON array of objects. Do NOT use markdown code blocks.
-    Each object MUST include an "agentType" field: 'overview' | 'stats' | 'tactical' | 'prediction' | 'general'.
-    
-    Example:
-    [
-      { "title": "Match Overview", "focus": "Context and stakes", "animationType": "none", "agentType": "overview" },
-      { "title": "Recent Form", "focus": "Compare last 5 games", "animationType": "stats", "agentType": "stats" },
-      { "title": "Tactical Battle", "focus": "Possession and control", "animationType": "tactical", "agentType": "tactical" }
-    ]
-
-    Match Data: ${JSON.stringify(matchData)}
-  `;
+  const agent = getAgent('planner');
+  const prompt = agent.systemPrompt({ matchData });
 
   const settings = getSettings();
   let responseText = "";
@@ -362,49 +490,6 @@ export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
   }
 }
 
-function getAnalysisPrompt(agentType: string, segmentPlan: any, matchData: any, animationSchema: string): string {
-  const basePrompt = `
-    **SEGMENT DETAILS:**
-    - Title: "${segmentPlan.title}"
-    - Focus: "${segmentPlan.focus}"
-    - Animation Needed: ${segmentPlan.animationType !== 'none' ? 'YES (' + segmentPlan.animationType + ')' : 'NO'}
-
-    **INSTRUCTIONS:**
-    1. Write a **PROFESSIONAL ANALYSIS REPORT** for this segment. 
-       - Do NOT write a "narration script" or "voiceover". 
-       - Use a formal, analytical tone suitable for a written report.
-       - Use bullet points, bold text, and clear structure.
-       - Focus on data-driven insights.
-    2. **MANDATORY ANIMATION:**
-       - You MUST generate the <animation> block if "Animation Needed" is YES.
-       - Populate the JSON with REAL numbers from the Match Data.
-       - Do NOT use placeholder values like 0.
-    3. Do NOT output any other segments. Focus ONLY on this one.
-
-    **OUTPUT FORMAT:**
-    <title>${segmentPlan.title}</title>
-    <thought>
-    (Your professional report here. Use Markdown formatting.)
-    </thought>
-    ${segmentPlan.animationType !== 'none' ? animationSchema : ''}
-
-    Match Data: ${JSON.stringify(matchData)}
-  `;
-
-  switch (agentType) {
-    case 'overview':
-      return `You are a Lead Sports Journalist. Write a compelling introduction setting the stage, history, and stakes of the match.\n${basePrompt}`;
-    case 'stats':
-      return `You are a Data Scientist. Analyze the numbers deeply. Compare form, head-to-head records, and key metrics. Be precise.\n${basePrompt}`;
-    case 'tactical':
-      return `You are a Tactical Analyst (like Gary Neville). Break down the formations, key battles, and strategic approaches. Use technical terms.\n${basePrompt}`;
-    case 'prediction':
-      return `You are a Senior Pundit. Weigh all factors and provide a reasoned prediction. Discuss psychological factors.\n${basePrompt}`;
-    default:
-      return `You are a Senior Football Analyst.\n${basePrompt}`;
-  }
-}
-
 export async function* streamAnalysisAgent(matchData: any, segmentPlan: any) {
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
@@ -423,60 +508,24 @@ export async function* streamAnalysisAgent(matchData: any, segmentPlan: any) {
     }
     </animation>`;
 
-  const prompt = getAnalysisPrompt(segmentPlan.agentType || 'general', segmentPlan, matchData, animationSchema);
+  const agent = getAgent(segmentPlan.agentType || 'general');
+  const prompt = agent.systemPrompt({ matchData, segmentPlan, animationSchema });
 
-  yield* streamAIRequest(prompt, false);
+  yield* streamAIRequest(prompt, false, agent.skills);
 }
 
 export async function* streamTagAgent(analysisText: string) {
-  const prompt = `
-    Analyze the following football analysis text and extract 3-5 key "tags" or insights.
-    
-    **ANALYSIS TEXT:**
-    ${analysisText}
+  const agent = getAgent('tag');
+  const prompt = agent.systemPrompt({ analysisText });
 
-    **RULES:**
-    - Tags should be short (2-4 words).
-    - Classify each tag by team ('home', 'away') or 'neutral'.
-    - Assign a sentiment/type if applicable.
-
-    **OUTPUT FORMAT:**
-    Output ONLY a <tags> block containing a valid JSON array.
-    <tags>
-    [
-      { "label": "High Pressing", "team": "home", "color": "emerald" },
-      { "label": "Weak Defense", "team": "away", "color": "blue" },
-      { "label": "Title Decider", "team": "neutral", "color": "zinc" }
-    ]
-    </tags>
-  `;
-
-  yield* streamAIRequest(prompt, false);
+  yield* streamAIRequest(prompt, false, agent.skills);
 }
 
 export async function* streamSummaryAgent(matchData: any, previousAnalysis: string) {
-  const prompt = `
-    You are a Senior Football Analyst. Based on the detailed analysis segments provided below, generate a final match summary and prediction.
+  const agent = getAgent('summary');
+  const prompt = agent.systemPrompt({ matchData, previousAnalysis });
 
-    **PREVIOUS ANALYSIS:**
-    ${previousAnalysis}
-
-    **MATCH DATA:**
-    ${JSON.stringify(matchData)}
-
-    **OUTPUT FORMAT:**
-    Output ONLY the summary tag with valid JSON content.
-    <summary>
-    {
-      "prediction": "Final match prediction text (concise, decisive)",
-      "winProbability": { "home": 40, "draw": 30, "away": 30 },
-      "expectedGoals": { "home": 1.5, "away": 1.2 },
-      "keyFactors": ["factor 1", "factor 2", "factor 3"]
-    }
-    </summary>
-  `;
-
-  yield* streamAIRequest(prompt, false);
+  yield* streamAIRequest(prompt, false, agent.skills);
 }
 
 export interface AnalysisResumeState {

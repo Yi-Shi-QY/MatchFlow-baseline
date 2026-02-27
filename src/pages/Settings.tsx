@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, BookOpen, Code, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { getSettings, saveSettings, AppSettings } from '@/src/services/settings';
@@ -16,6 +16,8 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setLocalSettings(getSettings());
@@ -49,6 +51,37 @@ export default function Settings() {
       setTestStatus('error');
       setTestMessage(e.message || '连接失败。');
     }
+  };
+
+  const sampleJson = `{
+  "data": [
+    {
+      "id": "match_1",
+      "league": "Premier League",
+      "date": "2024-03-10T15:00:00Z",
+      "status": "upcoming",
+      "homeTeam": {
+        "name": "Arsenal",
+        "logo": "https://example.com/arsenal.png"
+      },
+      "awayTeam": {
+        "name": "Chelsea",
+        "logo": "https://example.com/chelsea.png"
+      },
+      "stats": {
+        "possession": { "home": 55, "away": 45 },
+        "shots": { "home": 12, "away": 8 },
+        "shotsOnTarget": { "home": 5, "away": 3 }
+      },
+      "customInfo": "Arsenal missing key midfielder due to injury."
+    }
+  ]
+}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(sampleJson);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -156,6 +189,61 @@ export default function Settings() {
                 <p className="text-[10px] text-zinc-500 mt-1">
                   如果不配置，应用将使用内置的模拟数据。
                 </p>
+              </div>
+
+              {/* Tutorial Section */}
+              <div className="mt-4 border border-zinc-800 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setShowTutorial(!showTutorial)}
+                  className="w-full flex items-center justify-between p-3 bg-zinc-900/50 hover:bg-zinc-800/50 transition-colors text-sm font-medium text-zinc-300"
+                >
+                  <span className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-emerald-500" />
+                    如何搭建自定义数据源？
+                  </span>
+                  {showTutorial ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+                
+                {showTutorial && (
+                  <div className="p-4 bg-zinc-950/50 border-t border-zinc-800 space-y-4 text-xs text-zinc-400 leading-relaxed">
+                    <p>
+                      您可以搭建自己的服务器来提供实时的赛事数据。应用会向您配置的 <code className="text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded">Server URL</code> 发送 <code className="text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded">GET /matches</code> 请求。
+                    </p>
+                    
+                    <div className="space-y-2">
+                      <h4 className="font-bold text-zinc-300 flex items-center gap-1">
+                        <Code className="w-3 h-3" /> 请求格式
+                      </h4>
+                      <ul className="list-disc pl-4 space-y-1">
+                        <li>Method: <code className="text-zinc-300">GET</code></li>
+                        <li>Path: <code className="text-zinc-300">/matches</code></li>
+                        <li>Headers: <code className="text-zinc-300">Authorization: Bearer [您的 API Key]</code></li>
+                      </ul>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-zinc-300 flex items-center gap-1">
+                          <Code className="w-3 h-3" /> 响应 JSON 格式示例
+                        </h4>
+                        <button 
+                          onClick={handleCopy}
+                          className="flex items-center gap-1 text-[10px] text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded transition-colors"
+                        >
+                          {copied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                          {copied ? '已复制' : '复制代码'}
+                        </button>
+                      </div>
+                      <pre className="bg-black border border-zinc-800 p-3 rounded-lg overflow-x-auto text-[10px] font-mono text-zinc-300">
+                        {sampleJson}
+                      </pre>
+                    </div>
+                    
+                    <p className="text-[10px] text-zinc-500 italic">
+                      提示：您可以将上述 JSON 格式提供给 ChatGPT 或 Claude，让它们帮您快速生成一个 Node.js 或 Python 的后端服务代码。
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
