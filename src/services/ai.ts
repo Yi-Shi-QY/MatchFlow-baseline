@@ -456,10 +456,10 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
 import { getAgent } from "../agents";
 
 export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
-  const agent = getAgent('planner');
-  const prompt = agent.systemPrompt({ matchData });
-
   const settings = getSettings();
+  const agent = getAgent('planner');
+  const prompt = agent.systemPrompt({ matchData, language: settings.language });
+
   let responseText = "";
 
   if (settings.provider === "deepseek") {
@@ -536,22 +536,25 @@ export async function* streamAnalysisAgent(matchData: any, segmentPlan: any) {
     </animation>`;
   }
 
+  const settings = getSettings();
   const agent = getAgent(segmentPlan.agentType || 'general');
-  const prompt = agent.systemPrompt({ matchData, segmentPlan, animationSchema });
+  const prompt = agent.systemPrompt({ matchData, segmentPlan, animationSchema, language: settings.language });
 
   yield* streamAIRequest(prompt, false, agent.skills);
 }
 
 export async function* streamTagAgent(analysisText: string) {
+  const settings = getSettings();
   const agent = getAgent('tag');
-  const prompt = agent.systemPrompt({ analysisText });
+  const prompt = agent.systemPrompt({ analysisText, language: settings.language });
 
   yield* streamAIRequest(prompt, false, agent.skills);
 }
 
 export async function* streamSummaryAgent(matchData: any, previousAnalysis: string) {
+  const settings = getSettings();
   const agent = getAgent('summary');
-  const prompt = agent.systemPrompt({ matchData, previousAnalysis });
+  const prompt = agent.systemPrompt({ matchData, previousAnalysis, language: settings.language });
 
   yield* streamAIRequest(prompt, false, agent.skills);
 }

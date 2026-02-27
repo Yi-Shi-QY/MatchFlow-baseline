@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { MOCK_MATCHES } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
@@ -12,6 +13,7 @@ import { decompressFromEncodedURIComponent } from 'lz-string';
 export default function Share() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [importedData, setImportedData] = useState<any>(null);
   const [match, setMatch] = useState<any>(null);
   const [isLegacy, setIsLegacy] = useState(false);
@@ -118,8 +120,8 @@ export default function Share() {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
         <Card className="max-w-xs w-full text-center p-6 border-red-500/20 bg-red-500/5">
-          <h2 className="text-lg font-bold text-red-400 mb-4">无效链接</h2>
-          <Button onClick={() => navigate('/')} size="sm">返回首页</Button>
+          <h2 className="text-lg font-bold text-red-400 mb-4">{t('share.invalid_link')}</h2>
+          <Button onClick={() => navigate('/')} size="sm">{t('share.return_home')}</Button>
         </Card>
       </div>
     );
@@ -152,7 +154,7 @@ export default function Share() {
               <div className="w-full space-y-4 bg-black/50 p-4 rounded-xl border border-white/5">
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-mono text-zinc-400">
-                    <span>主胜</span>
+                    <span>{t('share.home_win')}</span>
                     <span>{importedData.w.home}%</span>
                   </div>
                   <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -167,7 +169,7 @@ export default function Share() {
 
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-mono text-zinc-400">
-                    <span>客胜</span>
+                    <span>{t('share.away_win')}</span>
                     <span>{importedData.w.away}%</span>
                   </div>
                   <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -187,10 +189,10 @@ export default function Share() {
             ) : (
               <div className="w-full bg-zinc-900/50 p-4 rounded-xl border border-white/5 text-center">
                 <p className="text-sm text-zinc-300 mb-2">
-                  收到一个赛事分析配置
+                  {t('share.received_config')}
                 </p>
                 <p className="text-xs text-zinc-500">
-                  包含球队信息、近期状态及自定义数据
+                  {t('share.config_desc')}
                 </p>
               </div>
             )}
@@ -202,7 +204,7 @@ export default function Share() {
                 size="sm"
               >
                 {isLegacy ? <Download className="w-4 h-4" /> : <BrainCircuit className="w-4 h-4" />}
-                {isLegacy ? '导入并保存到我的记录' : '导入数据并开始分析'}
+                {isLegacy ? t('share.import_save') : t('share.import_analyze')}
               </Button>
               
               <Button 
@@ -211,7 +213,7 @@ export default function Share() {
                 onClick={() => navigate('/')}
                 size="sm"
               >
-                <ArrowLeft className="w-4 h-4" /> 返回首页
+                <ArrowLeft className="w-4 h-4" /> {t('share.return_home')}
               </Button>
             </div>
           </CardContent>

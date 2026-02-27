@@ -4,6 +4,7 @@ export interface AgentContext {
   animationSchema?: string;
   previousAnalysis?: string;
   analysisText?: string;
+  language?: 'en' | 'zh';
 }
 
 export interface AgentConfig {

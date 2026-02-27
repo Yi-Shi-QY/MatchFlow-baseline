@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { ArrowLeft, QrCode, AlertCircle } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
@@ -8,6 +9,7 @@ import { Capacitor } from '@capacitor/core';
 
 export default function Scan() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isScanning, setIsScanning] = useState(true);
@@ -22,7 +24,7 @@ export default function Scan() {
             const request = await Camera.requestPermissions();
             if (request.camera !== 'granted') {
               setHasPermission(false);
-              setError('无法访问摄像头，请在系统设置中授予权限');
+              setError(t('scan.camera_permission_error'));
               return;
             }
           }
@@ -39,7 +41,7 @@ export default function Scan() {
     };
 
     requestNativePermissions();
-  }, []);
+  }, [t]);
 
   const handleScan = (result: string) => {
     if (!isScanning) return;
@@ -70,7 +72,7 @@ export default function Scan() {
           navigate(`/share?d=${dParam}`);
         }, 800);
       } else {
-        setError('无效的赛事分析二维码');
+        setError(t('scan.invalid_qr'));
       }
     }
   };
@@ -80,9 +82,9 @@ export default function Scan() {
     if (err instanceof Error) {
       if (err.name === 'NotAllowedError' || err.message.includes('Permission denied')) {
         setHasPermission(false);
-        setError('无法访问摄像头，请在系统设置中授予权限');
+        setError(t('scan.camera_permission_error'));
       } else {
-        setError(err.message || '扫描出错');
+        setError(err.message || t('scan.scan_error'));
       }
     } else if (typeof err === 'string') {
       setError(err);
@@ -97,7 +99,7 @@ export default function Scan() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-            <QrCode className="w-4 h-4 text-emerald-500" /> 扫描赛事二维码
+            <QrCode className="w-4 h-4 text-emerald-500" /> {t('scan.title')}
           </h1>
         </div>
       </header>
@@ -106,17 +108,17 @@ export default function Scan() {
         {hasPermission === null ? (
           <div className="w-full aspect-square max-w-sm rounded-2xl border-2 border-emerald-500/50 flex flex-col items-center justify-center p-6 text-center bg-zinc-900">
             <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-sm text-zinc-400">正在请求摄像头权限...</p>
+            <p className="text-sm text-zinc-400">{t('scan.requesting_permission')}</p>
           </div>
         ) : hasPermission === false ? (
           <div className="w-full aspect-square max-w-sm rounded-2xl border-2 border-red-500/50 flex flex-col items-center justify-center p-6 text-center bg-red-500/5">
             <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2">无摄像头权限</h3>
+            <h3 className="text-lg font-bold text-white mb-2">{t('scan.no_permission_title')}</h3>
             <p className="text-sm text-zinc-400 mb-6">
-              请在系统设置中允许应用访问摄像头，然后刷新页面重试。
+              {t('scan.no_permission_desc')}
             </p>
             <Button onClick={() => window.location.reload()} variant="outline" className="border-white/10">
-              刷新重试
+              {t('scan.refresh_retry')}
             </Button>
           </div>
         ) : (
@@ -170,11 +172,11 @@ export default function Scan() {
           </div>
         ) : scanSuccess ? (
           <div className="mt-8 text-emerald-400 text-sm font-mono text-center animate-in fade-in slide-in-from-bottom-2">
-            扫描成功！正在跳转...
+            {t('scan.scan_success')}
           </div>
         ) : (
           <div className="mt-8 text-zinc-400 text-sm font-mono text-center">
-            将二维码放入框内即可扫描
+            {t('scan.scan_hint')}
           </div>
         )}
       </main>

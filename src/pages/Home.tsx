@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { MOCK_MATCHES } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
-import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Plus, Loader2 } from 'lucide-react';
+import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Plus, Loader2, RefreshCw } from 'lucide-react';
 import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord, getResumeState, clearResumeState } from '@/src/services/history';
 import { getSavedMatches, deleteSavedMatch, SavedMatchRecord } from '@/src/services/savedMatches';
 import { fetchMatches } from '@/src/services/matchData';
@@ -13,6 +14,7 @@ import { useAnalysis } from '@/src/contexts/AnalysisContext';
 
 export default function Home() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [savedMatches, setSavedMatches] = useState<SavedMatchRecord[]>([]);
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
@@ -23,6 +25,17 @@ export default function Home() {
   const { activeAnalyses, clearActiveAnalysis } = useAnalysis();
   const prevAnalysesRef = React.useRef<Record<string, boolean>>({});
 
+  const loadMatches = async () => {
+    setIsLoadingMatches(true);
+    const matches = await fetchMatches();
+    if (matches && matches.length > 0) {
+      setLiveMatches(matches);
+    } else {
+      setLiveMatches(MOCK_MATCHES);
+    }
+    setIsLoadingMatches(false);
+  };
+
   useEffect(() => {
     const loadData = async () => {
       const historyData = await getHistory();
@@ -31,14 +44,7 @@ export default function Home() {
       const savedData = await getSavedMatches();
       setSavedMatches(savedData);
 
-      setIsLoadingMatches(true);
-      const matches = await fetchMatches();
-      if (matches && matches.length > 0) {
-        setLiveMatches(matches);
-      } else {
-        setLiveMatches(MOCK_MATCHES);
-      }
-      setIsLoadingMatches(false);
+      await loadMatches();
     };
     loadData();
   }, []);
@@ -166,7 +172,7 @@ export default function Home() {
         {savedMatches.length > 0 && (
           <section className="space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Settings className="w-5 h-5 text-zinc-400" /> 已保存的赛事
+              <Settings className="w-5 h-5 text-zinc-400" /> {t('home.saved_matches')}
             </h2>
             
             <div className="flex overflow-x-auto gap-3 pb-4 snap-x snap-mandatory hide-scrollbar px-1">
@@ -213,7 +219,7 @@ export default function Home() {
                     
                     <div className="mt-2 pt-2 border-t border-white/5 flex justify-center">
                       <span className="text-[10px] text-emerald-500 font-mono">
-                        点击分析
+                        {t('home.click_analyze')}
                       </span>
                     </div>
                   </CardContent>
@@ -228,7 +234,7 @@ export default function Home() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <History className="w-5 h-5 text-zinc-400" /> 历史分析
+                <History className="w-5 h-5 text-zinc-400" /> {t('home.history_analysis')}
               </h2>
               <div className="flex items-center gap-2">
                 <button 
@@ -236,14 +242,14 @@ export default function Home() {
                   className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1 text-xs"
                 >
                   <ArrowUpDown className="w-3 h-3" />
-                  {sortOrder === 'newest' ? '最新' : '最早'}
+                  {sortOrder === 'newest' ? t('home.sort_newest') : t('home.sort_oldest')}
                 </button>
                 <button 
                   onClick={() => setShowClearConfirm(true)}
                   className="text-red-400 hover:text-red-300 transition-colors flex items-center gap-1 text-xs ml-2"
                 >
                   <Trash2 className="w-3 h-3" />
-                  清空
+                  {t('home.clear')}
                 </button>
               </div>
             </div>
@@ -252,7 +258,7 @@ export default function Home() {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
               <input 
                 type="text"
-                placeholder="搜索球队或联赛..."
+                placeholder={t('home.search_placeholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-zinc-900 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors"
@@ -266,12 +272,12 @@ export default function Home() {
                   const isActive = record.isActive;
                   const parsedStream = record.parsedStream;
                   
-                  let statusText = isActive ? "分析中..." : "已完成";
+                  let statusText = isActive ? t('home.analyzing') : t('home.completed');
                   if (isActive && parsedStream) {
                     const totalSegments = parsedStream.segments.length;
                     const completedSegments = parsedStream.segments.filter((s: any) => s.isThoughtComplete).length;
                     if (totalSegments > 0) {
-                      statusText = `分析中 (${completedSegments}/${totalSegments})`;
+                      statusText = `${t('home.analyzing')} (${completedSegments}/${totalSegments})`;
                     }
                   }
 
@@ -346,7 +352,7 @@ export default function Home() {
                           ) : (
                             <div className="flex items-center justify-center">
                               <span className="text-[10px] text-zinc-500 font-mono">
-                                分析已完成
+                                {t('home.completed')}
                               </span>
                             </div>
                           )}
@@ -358,7 +364,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="text-center py-8 text-zinc-500 text-xs font-mono">
-                未找到匹配 "{searchQuery}" 的记录
+                {t('home.no_records_found', { query: searchQuery })}
               </div>
             )}
           </section>
@@ -368,15 +374,16 @@ export default function Home() {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-zinc-400" /> 热门赛事
+              <Calendar className="w-5 h-5 text-zinc-400" /> {t('home.popular_matches')}
             </h2>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-emerald-500 font-medium hidden sm:inline-block">直播 & 即将开始</span>
+              <span className="text-xs text-emerald-500 font-medium hidden sm:inline-block">{t('home.live_upcoming')}</span>
               <button 
-                onClick={() => navigate('/match/custom')}
+                onClick={loadMatches}
                 className="flex items-center gap-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-2 py-1 rounded border border-white/10 transition-colors"
+                disabled={isLoadingMatches}
               >
-                <Plus className="w-3 h-3" /> 自定义赛事
+                <RefreshCw className={`w-3 h-3 ${isLoadingMatches ? 'animate-spin' : ''}`} /> {t('home.refresh_matches')}
               </button>
             </div>
           </div>
@@ -401,7 +408,7 @@ export default function Home() {
                         match.status === 'finished' ? 'bg-zinc-800 text-zinc-400' : 
                         'bg-emerald-500/20 text-emerald-500'
                       }`}>
-                        {match.status === 'live' ? '直播中' : match.status === 'finished' ? '完场' : '未开始'}
+                        {match.status === 'live' ? t('home.live') : match.status === 'finished' ? t('home.finished') : t('home.upcoming')}
                       </span>
                     </div>
 
@@ -430,7 +437,7 @@ export default function Home() {
                     </div>
                     
                     <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-zinc-500">
-                      <span className="text-[10px] font-mono">点击进行分析</span>
+                      <span className="text-[10px] font-mono">{t('home.click_to_analyze')}</span>
                       <ChevronRight className="w-4 h-4" />
                     </div>
                   </CardContent>
@@ -438,7 +445,7 @@ export default function Home() {
               ))
             ) : (
               <div className="text-center py-8 text-zinc-500 text-xs font-mono">
-                暂无赛事数据
+                {t('home.no_match_data')}
               </div>
             )}
           </div>
@@ -462,9 +469,9 @@ export default function Home() {
               className="bg-zinc-900 border border-white/10 rounded-2xl p-6 max-w-xs w-full shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
-              <h3 className="text-lg font-bold mb-2 text-white">清空历史记录？</h3>
+              <h3 className="text-lg font-bold mb-2 text-white">{t('home.confirm_clear_history')}</h3>
               <p className="text-sm text-zinc-400 mb-6">
-                您确定要删除所有赛事分析历史记录吗？此操作无法撤销。
+                {t('home.confirm_clear_history_desc')}
               </p>
               <div className="flex gap-3">
                 <Button 
@@ -472,14 +479,14 @@ export default function Home() {
                   className="flex-1"
                   onClick={() => setShowClearConfirm(false)}
                 >
-                  取消
+                  {t('home.cancel')}
                 </Button>
                 <Button 
                   variant="default"
                   className="flex-1 bg-red-500 hover:bg-red-600 text-white"
                   onClick={handleClearHistory}
                 >
-                  确认清空
+                  {t('home.confirm')}
                 </Button>
               </div>
             </motion.div>

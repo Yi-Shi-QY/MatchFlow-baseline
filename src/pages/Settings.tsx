@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
@@ -9,6 +10,7 @@ import { testConnection } from '@/src/services/ai';
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [settings, setLocalSettings] = useState<AppSettings>({
     provider: 'gemini',
     model: 'gemini-3-flash-preview',
@@ -16,6 +18,7 @@ export default function Settings() {
     geminiApiKey: '',
     matchDataServerUrl: '',
     matchDataApiKey: '',
+    language: 'en',
   });
   const [saved, setSaved] = useState(false);
   const [aiTestStatus, setAiTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
@@ -24,11 +27,20 @@ export default function Settings() {
   const [dataTestMessage, setDataTestMessage] = useState('');
 
   useEffect(() => {
-    setLocalSettings(getSettings());
-  }, []);
+    const loadedSettings = getSettings();
+    setLocalSettings(loadedSettings);
+    // Sync i18n language with settings
+    if (loadedSettings.language && loadedSettings.language !== i18n.language) {
+      i18n.changeLanguage(loadedSettings.language);
+    }
+  }, [i18n]);
 
   const handleSave = () => {
     saveSettings(settings);
+    // Apply language change immediately
+    if (settings.language !== i18n.language) {
+      i18n.changeLanguage(settings.language);
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -49,17 +61,17 @@ export default function Settings() {
     try {
       await testConnection(settings);
       setAiTestStatus('success');
-      setAiTestMessage('AI 模型连接成功！');
+      setAiTestMessage(t('settings.ai_connected'));
     } catch (e: any) {
       setAiTestStatus('error');
-      setAiTestMessage(e.message || 'AI 模型连接失败。');
+      setAiTestMessage(e.message || t('settings.ai_failed'));
     }
   };
 
   const handleTestDataConnection = async () => {
     if (!settings.matchDataServerUrl) {
       setDataTestStatus('error');
-      setDataTestMessage('请先输入 Server URL');
+      setDataTestMessage(t('settings.enter_server_url'));
       return;
     }
     
@@ -80,10 +92,10 @@ export default function Settings() {
       }
       
       setDataTestStatus('success');
-      setDataTestMessage('数据源连接成功！');
+      setDataTestMessage(t('settings.data_connected'));
     } catch (e: any) {
       setDataTestStatus('error');
-      setDataTestMessage(e.message || '数据源连接失败。');
+      setDataTestMessage(e.message || t('settings.data_failed'));
     }
   };
 
@@ -93,11 +105,11 @@ export default function Settings() {
   ];
 
   const modelOptions = settings.provider === 'gemini' ? [
-    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview (快速)' },
-    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview (智能)' }
+    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview (Fast)' },
+    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview (Smart)' }
   ] : [
     { value: 'deepseek-chat', label: 'DeepSeek Chat (V3)' },
-    { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner (R1 - 思考模型)' }
+    { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner (R1)' }
   ];
 
   return (
@@ -108,7 +120,7 @@ export default function Settings() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-            <SettingsIcon className="w-4 h-4 text-emerald-500" /> 设置
+            <SettingsIcon className="w-4 h-4 text-emerald-500" /> {t('settings.title')}
           </h1>
         </div>
       </header>
@@ -119,11 +131,30 @@ export default function Settings() {
             
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-emerald-500" /> AI 模型配置
+                <Globe className="w-4 h-4 text-emerald-500" /> {t('settings.language_settings')}
+              </h3>
+              
+              <div className="space-y-2">
+                <Select
+                  value={settings.language || 'en'}
+                  onChange={(value) => {
+                    setLocalSettings({...settings, language: value as 'en' | 'zh'});
+                  }}
+                  options={[
+                    { value: 'en', label: 'English' },
+                    { value: 'zh', label: '中文 (Chinese)' }
+                  ]}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-emerald-500" /> {t('settings.ai_config')}
               </h3>
               
               <div className="space-y-2 relative z-20">
-                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">AI 提供商</label>
+                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.ai_provider')}</label>
                 <Select
                   value={settings.provider}
                   onChange={handleProviderChange}
@@ -132,7 +163,7 @@ export default function Settings() {
               </div>
 
               <div className="space-y-2 relative z-10">
-                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">模型</label>
+                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.model')}</label>
                 <Select
                   value={settings.model}
                   onChange={(value) => {
@@ -143,14 +174,14 @@ export default function Settings() {
                 />
                 {settings.model === 'deepseek-reasoner' && (
                   <p className="text-[10px] text-emerald-500/80 mt-1">
-                    注意：Reasoner 模型将在 Agent 运行环境中输出思考过程。
+                    {t('settings.reasoner_warning')}
                   </p>
                 )}
               </div>
 
               {settings.provider === 'deepseek' && (
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">DeepSeek API Key</label>
+                  <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.deepseek_api_key')}</label>
                   <input 
                     type="password"
                     value={settings.deepseekApiKey}
@@ -161,15 +192,13 @@ export default function Settings() {
                     placeholder="sk-..."
                     className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
                   />
-                  <p className="text-[10px] text-zinc-500 mt-1">
-                    密钥仅保存在您的浏览器本地。您可以前往 <a href="https://platform.deepseek.com/" target="_blank" rel="noreferrer" className="text-emerald-500 hover:underline">DeepSeek 开放平台</a> 获取。
-                  </p>
+                  <p className="text-[10px] text-zinc-500 mt-1" dangerouslySetInnerHTML={{__html: t('settings.deepseek_key_hint')}} />
                 </div>
               )}
 
               {settings.provider === 'gemini' && (
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Gemini API Key (可选)</label>
+                  <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.gemini_api_key_optional')}</label>
                   <input 
                     type="password"
                     value={settings.geminiApiKey || ''}
@@ -180,9 +209,7 @@ export default function Settings() {
                     placeholder="AIzaSy..."
                     className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
                   />
-                  <p className="text-[10px] text-zinc-500 mt-1">
-                    如果不填写，将使用系统默认的 API Key。您可以前往 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-emerald-500 hover:underline">Google AI Studio</a> 获取。
-                  </p>
+                  <p className="text-[10px] text-zinc-500 mt-1" dangerouslySetInnerHTML={{__html: t('settings.gemini_key_hint')}} />
                 </div>
               )}
 
@@ -198,7 +225,7 @@ export default function Settings() {
                   ) : (
                     <Cpu className="w-4 h-4" />
                   )}
-                  测试 AI 模型连接
+                  {t('settings.test_ai_connection')}
                 </Button>
                 
                 {aiTestStatus !== 'idle' && (
@@ -210,7 +237,7 @@ export default function Settings() {
                     {aiTestStatus === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
                     {aiTestStatus === 'error' && <XCircle className="w-4 h-4 shrink-0" />}
                     {aiTestStatus === 'testing' && <Activity className="w-4 h-4 shrink-0 animate-pulse" />}
-                    <span className="break-all">{aiTestMessage || '正在测试连接...'}</span>
+                    <span className="break-all">{aiTestMessage || t('settings.testing')}</span>
                   </div>
                 )}
               </div>
@@ -218,11 +245,11 @@ export default function Settings() {
 
             <div className="pt-6 border-t border-white/10 space-y-4">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Database className="w-4 h-4 text-emerald-500" /> 赛事数据源 (可选)
+                <Database className="w-4 h-4 text-emerald-500" /> {t('settings.match_data_source')}
               </h3>
               
               <div className="space-y-2">
-                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Server URL</label>
+                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.server_url')}</label>
                 <input 
                   type="text"
                   value={settings.matchDataServerUrl || ''}
@@ -236,7 +263,7 @@ export default function Settings() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">API Key</label>
+                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.api_key_label')}</label>
                 <input 
                   type="password"
                   value={settings.matchDataApiKey || ''}
@@ -248,7 +275,7 @@ export default function Settings() {
                   className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
                 />
                 <p className="text-[10px] text-zinc-500 mt-1">
-                  如果不配置，应用将使用内置的模拟数据。
+                  {t('settings.match_data_hint')}
                 </p>
               </div>
 
@@ -264,7 +291,7 @@ export default function Settings() {
                   ) : (
                     <Database className="w-4 h-4" />
                   )}
-                  测试数据源连接
+                  {t('settings.test_data_connection')}
                 </Button>
                 
                 {dataTestStatus !== 'idle' && (
@@ -276,7 +303,7 @@ export default function Settings() {
                     {dataTestStatus === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
                     {dataTestStatus === 'error' && <XCircle className="w-4 h-4 shrink-0" />}
                     {dataTestStatus === 'testing' && <Activity className="w-4 h-4 shrink-0 animate-pulse" />}
-                    <span className="break-all">{dataTestMessage || '正在测试连接...'}</span>
+                    <span className="break-all">{dataTestMessage || t('settings.testing')}</span>
                   </div>
                 )}
               </div>
@@ -289,7 +316,7 @@ export default function Settings() {
                 variant={saved ? "outline" : "default"}
               >
                 <Save className="w-4 h-4" />
-                {saved ? "已保存！" : "保存所有设置"}
+                {saved ? t('settings.saved') : t('settings.save_all')}
               </Button>
             </div>
 

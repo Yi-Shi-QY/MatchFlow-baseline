@@ -1,31 +1,35 @@
 import { AgentContext } from './types';
+import { en, zh, AnalysisPromptTemplate } from './prompts';
 
-export function buildAnalysisPrompt(rolePrompt: string, { segmentPlan, matchData, animationSchema }: AgentContext) {
+export function getPromptTemplate(language?: 'en' | 'zh'): AnalysisPromptTemplate {
+  return language === 'zh' ? zh : en;
+}
+
+export function buildAnalysisPrompt(rolePrompt: string, context: AgentContext) {
+  const { segmentPlan, matchData, animationSchema, language } = context;
+  const template = getPromptTemplate(language);
+  
+  // Override role prompt if provided, otherwise use default from template
+  const role = rolePrompt || template.rolePrompt;
+
   return `
-    ${rolePrompt}
+    ${role}
 
-    **SEGMENT DETAILS:**
-    - Title: "${segmentPlan.title}"
-    - Focus: "${segmentPlan.focus}"
-    - Animation Needed: ${segmentPlan.animationType !== 'none' ? 'YES (' + segmentPlan.animationType + ')' : 'NO'}
+    **${language === 'zh' ? '片段详情' : 'SEGMENT DETAILS'}:**
+    - ${template.segmentDetails.title}: "${segmentPlan.title}"
+    - ${template.segmentDetails.focus}: "${segmentPlan.focus}"
+    - ${template.segmentDetails.animationNeeded}: ${segmentPlan.animationType !== 'none' ? 'YES (' + segmentPlan.animationType + ')' : 'NO'}
 
-    **INSTRUCTIONS:**
-    1. Write a **PROFESSIONAL ANALYSIS REPORT** for this segment. 
-       - Do NOT write a "narration script" or "voiceover". 
-       - Use a formal, analytical tone suitable for a written report.
-       - Use bullet points, bold text, and clear structure.
-       - Focus on data-driven insights.
-    2. **MANDATORY ANIMATION:**
-       - You MUST generate the <animation> block if "Animation Needed" is YES.
-       - Populate the JSON with REAL numbers from the Match Data.
-       - Do NOT use placeholder values like 0.
-    3. Do NOT output any other segments. Focus ONLY on this one.
+    **${language === 'zh' ? '指令' : 'INSTRUCTIONS'}:**
+    1. ${template.instructions.report}
+    2. ${template.instructions.animation}
+    3. ${template.instructions.focus}
 
-    **OUTPUT FORMAT:**
-    <title>${segmentPlan.title}</title>
-    <thought>
-    (Your professional report here. Use Markdown formatting.)
-    </thought>
+    **${language === 'zh' ? '输出格式' : 'OUTPUT FORMAT'}:**
+    <${template.outputFormat.title}>${segmentPlan.title}</${template.outputFormat.title}>
+    <${template.outputFormat.thought}>
+    (${language === 'zh' ? '你的专业报告。使用 Markdown 格式。' : 'Your professional report here. Use Markdown formatting.'})
+    </${template.outputFormat.thought}>
     ${segmentPlan.animationType !== 'none' ? animationSchema : ''}
 
     Match Data: ${JSON.stringify(matchData)}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { MOCK_MATCHES, Match } from '@/src/data/matches';
@@ -24,6 +25,7 @@ import { Share } from '@capacitor/share';
 export default function MatchDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const location = useLocation();
   const importedData = location.state?.importedData;
   const { activeAnalyses, startAnalysis: contextStartAnalysis, setCollapsedSegments: contextSetCollapsedSegments, generateCodeForSegment: contextGenerateCode } = useAnalysis();
@@ -376,7 +378,7 @@ export default function MatchDetail() {
     try {
       data = JSON.parse(editableData);
     } catch (e) {
-      return <div className="text-red-400 text-xs p-4">Invalid JSON data. Please fix in JSON view.</div>;
+      return <div className="text-red-400 text-xs p-4">{t('match.invalid_json')}</div>;
     }
 
     return (
@@ -384,10 +386,10 @@ export default function MatchDetail() {
         {selectedSources.fundamental && (
           <>
             <div className="space-y-3">
-              <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">基本信息</h3>
+              <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">{t('match.basic_info')}</h3>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-zinc-500 block mb-1">联赛</label>
+                  <label className="text-[10px] text-zinc-500 block mb-1">{t('match.league')}</label>
                   <input 
                     type="text" 
                     value={data.league || ''} 
@@ -396,7 +398,7 @@ export default function MatchDetail() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 block mb-1">状态</label>
+                  <label className="text-[10px] text-zinc-500 block mb-1">{t('match.status')}</label>
                   <input 
                     type="text" 
                     value={data.status || ''} 
@@ -405,7 +407,7 @@ export default function MatchDetail() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 block mb-1">主队</label>
+                  <label className="text-[10px] text-zinc-500 block mb-1">{t('match.home_team')}</label>
                   <input 
                     type="text" 
                     value={data.homeTeam?.name || ''} 
@@ -414,7 +416,7 @@ export default function MatchDetail() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 block mb-1">客队</label>
+                  <label className="text-[10px] text-zinc-500 block mb-1">{t('match.away_team')}</label>
                   <input 
                     type="text" 
                     value={data.awayTeam?.name || ''} 
@@ -426,10 +428,10 @@ export default function MatchDetail() {
             </div>
 
             <div className="space-y-3">
-              <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">近期状态</h3>
+              <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">{t('match.recent_form')}</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[10px] text-zinc-500 block mb-1">主队状态 (胜,平,负)</label>
+                  <label className="text-[10px] text-zinc-500 block mb-1">{t('match.home_form')}</label>
                   <input 
                     type="text" 
                     value={(data.homeTeam?.form || []).join(', ')} 
@@ -438,7 +440,7 @@ export default function MatchDetail() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 block mb-1">客队状态 (胜,平,负)</label>
+                  <label className="text-[10px] text-zinc-500 block mb-1">{t('match.away_form')}</label>
                   <input 
                     type="text" 
                     value={(data.awayTeam?.form || []).join(', ')} 
@@ -451,10 +453,10 @@ export default function MatchDetail() {
 
             {data.stats && (
               <div className="space-y-3">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">比赛数据</h3>
+                <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">{t('match.match_stats')}</h3>
                 
                 <div className="space-y-2">
-                  <label className="text-[10px] text-zinc-500 block">控球率 (%)</label>
+                  <label className="text-[10px] text-zinc-500 block">{t('match.possession')}</label>
                   <div className="flex gap-2 items-center">
                     <input 
                       type="number" 
@@ -473,7 +475,7 @@ export default function MatchDetail() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] text-zinc-500 block">射门次数</label>
+                  <label className="text-[10px] text-zinc-500 block">{t('match.shots')}</label>
                   <div className="flex gap-2 items-center">
                     <input 
                       type="number" 
@@ -492,7 +494,7 @@ export default function MatchDetail() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] text-zinc-500 block">射正次数</label>
+                  <label className="text-[10px] text-zinc-500 block">{t('match.shots_on_target')}</label>
                   <div className="flex gap-2 items-center">
                     <input 
                       type="number" 
@@ -516,27 +518,27 @@ export default function MatchDetail() {
 
         {selectedSources.market && data.odds && (
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">市场面数据 (赔率)</h3>
+            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">{t('match.market_odds')}</h3>
             <div className="grid grid-cols-1 gap-4">
               {/* HAD */}
               <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">胜平负 (HAD)</label>
+                <label className="text-[10px] text-zinc-500 block mb-1">{t('match.had')}</label>
                 <div className="flex gap-2">
-                  <input type="number" value={data.odds.had?.h || 0} onChange={(e) => handleDataChange(['odds', 'had', 'h'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="主胜" />
-                  <input type="number" value={data.odds.had?.d || 0} onChange={(e) => handleDataChange(['odds', 'had', 'd'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="平" />
-                  <input type="number" value={data.odds.had?.a || 0} onChange={(e) => handleDataChange(['odds', 'had', 'a'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="客胜" />
+                  <input type="number" value={data.odds.had?.h || 0} onChange={(e) => handleDataChange(['odds', 'had', 'h'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder={t('match.home_win')} />
+                  <input type="number" value={data.odds.had?.d || 0} onChange={(e) => handleDataChange(['odds', 'had', 'd'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder={t('match.draw')} />
+                  <input type="number" value={data.odds.had?.a || 0} onChange={(e) => handleDataChange(['odds', 'had', 'a'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder={t('match.away_win')} />
                 </div>
               </div>
               {/* HHAD */}
               <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">让球胜平负 (HHAD)</label>
+                <label className="text-[10px] text-zinc-500 block mb-1">{t('match.hhad')}</label>
                 <div className="flex gap-2 mb-1">
-                   <input type="number" value={data.odds.hhad?.goalline || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'goalline'], Number(e.target.value))} className="w-full bg-zinc-800 border border-white/10 rounded p-1.5 text-xs text-emerald-500 text-center font-bold" placeholder="让球数" />
+                   <input type="number" value={data.odds.hhad?.goalline || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'goalline'], Number(e.target.value))} className="w-full bg-zinc-800 border border-white/10 rounded p-1.5 text-xs text-emerald-500 text-center font-bold" placeholder={t('match.handicap')} />
                 </div>
                 <div className="flex gap-2">
-                  <input type="number" value={data.odds.hhad?.h || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'h'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="主胜" />
-                  <input type="number" value={data.odds.hhad?.d || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'd'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="平" />
-                  <input type="number" value={data.odds.hhad?.a || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'a'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="客胜" />
+                  <input type="number" value={data.odds.hhad?.h || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'h'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder={t('match.home_win')} />
+                  <input type="number" value={data.odds.hhad?.d || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'd'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder={t('match.draw')} />
+                  <input type="number" value={data.odds.hhad?.a || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'a'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder={t('match.away_win')} />
                 </div>
               </div>
             </div>
@@ -545,11 +547,11 @@ export default function MatchDetail() {
 
         {selectedSources.custom && (
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">自定义数据</h3>
+            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">{t('match.custom_data')}</h3>
             <textarea 
               value={data.customInfo || ''} 
               onChange={(e) => handleDataChange(['customInfo'], e.target.value)}
-              placeholder="输入伤停信息、天气、裁判、战意等其他因素..."
+              placeholder={t('match.custom_placeholder')}
               className="w-full bg-zinc-900 border border-white/10 rounded p-2 text-xs text-white focus:border-emerald-500 focus:outline-none min-h-[80px] resize-none"
             />
           </div>
@@ -708,7 +710,7 @@ export default function MatchDetail() {
           animate={{ opacity: 1, y: 0 }}
           className="flex-1 flex flex-col gap-4 p-4 max-w-md mx-auto w-full"
         >
-          <h2 className="text-lg font-bold text-white mb-2">选择分析数据源</h2>
+          <h2 className="text-lg font-bold text-white mb-2">{t('match.select_sources')}</h2>
           
           <div className="grid grid-cols-2 gap-3">
             <Card 
@@ -720,8 +722,8 @@ export default function MatchDetail() {
                   <LayoutTemplate className="w-5 h-5 text-zinc-400" />
                   {selectedSources.fundamental && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                 </div>
-                <span className="text-sm font-medium">基本面数据</span>
-                <span className="text-[10px] text-zinc-500">基本信息、近期状态、比赛数据</span>
+                <span className="text-sm font-medium">{t('match.fundamental_data')}</span>
+                <span className="text-[10px] text-zinc-500">{t('match.fundamental_desc')}</span>
               </CardContent>
             </Card>
             
@@ -734,8 +736,8 @@ export default function MatchDetail() {
                   <TrendingUp className="w-5 h-5 text-zinc-400" />
                   {selectedSources.market && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                 </div>
-                <span className="text-sm font-medium">市场面数据</span>
-                <span className="text-[10px] text-zinc-500">胜平负、让球赔率</span>
+                <span className="text-sm font-medium">{t('match.market_data')}</span>
+                <span className="text-[10px] text-zinc-500">{t('match.market_desc')}</span>
               </CardContent>
             </Card>
 
@@ -748,8 +750,8 @@ export default function MatchDetail() {
                   <FileText className="w-5 h-5 text-zinc-400" />
                   {selectedSources.custom && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                 </div>
-                <span className="text-sm font-medium">自定义数据</span>
-                <span className="text-[10px] text-zinc-500">伤停、天气、战意等</span>
+                <span className="text-sm font-medium">{t('match.custom_data')}</span>
+                <span className="text-[10px] text-zinc-500">{t('match.custom_desc')}</span>
               </CardContent>
             </Card>
           </div>
@@ -761,7 +763,7 @@ export default function MatchDetail() {
                 onClick={() => setIsPreviewExpanded(!isPreviewExpanded)}
               >
                 <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider cursor-pointer group-hover:text-zinc-300 transition-colors">
-                  Agent 提示词预览
+                  {t('match.agent_prompt_preview')}
                 </label>
                 {isPreviewExpanded ? (
                   <ChevronUp className="w-3 h-3 text-zinc-500 group-hover:text-zinc-300 transition-colors" />
@@ -776,7 +778,7 @@ export default function MatchDetail() {
                   className="text-[10px] text-emerald-500 hover:text-emerald-400 flex items-center gap-1 font-mono uppercase tracking-wider bg-emerald-500/10 px-2 py-1 rounded transition-colors"
                 >
                   {showJson ? <LayoutTemplate className="w-3 h-3" /> : <Code2 className="w-3 h-3" />}
-                  {showJson ? '表单视图' : 'JSON 视图'}
+                  {showJson ? t('match.form_view') : t('match.json_view')}
                 </button>
               )}
             </div>
@@ -802,7 +804,7 @@ export default function MatchDetail() {
                     </div>
                   )}
                   <p className="text-[10px] text-zinc-500">
-                    {showJson ? "您可以在发送给 Agent 之前手动编辑 JSON 数据。" : "在发送给 Agent 之前，请在下方编辑参数。"}
+                    {showJson ? t('match.edit_json_hint') : t('match.edit_form_hint')}
                   </p>
                 </motion.div>
               )}
@@ -824,7 +826,7 @@ export default function MatchDetail() {
               className="text-xs text-zinc-400 select-none cursor-pointer flex items-center gap-2"
               onClick={() => setIncludeAnimations(!includeAnimations)}
             >
-              <Video className="w-3 h-3" /> 生成演示动画 (可能会增加分析时间)
+              <Video className="w-3 h-3" /> {t('match.generate_animation')}
             </label>
           </div>
 
@@ -834,7 +836,7 @@ export default function MatchDetail() {
                 className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                 onClick={() => startAnalysis(true)}
               >
-                <Activity className="w-4 h-4" /> 继续未完成的分析
+                <Activity className="w-4 h-4" /> {t('match.continue_unfinished')}
               </Button>
             )}
             <Button 
@@ -842,7 +844,7 @@ export default function MatchDetail() {
               variant={savedResumeState ? "outline" : "default"}
               onClick={() => startAnalysis(false)}
             >
-              <BrainCircuit className="w-4 h-4" /> {savedResumeState ? '重新开始分析' : '开始分析'}
+              <BrainCircuit className="w-4 h-4" /> {savedResumeState ? t('match.restart_analysis') : t('match.start_analysis')}
             </Button>
           </div>
         </motion.div>
@@ -853,7 +855,7 @@ export default function MatchDetail() {
           
           {isAnalyzing && !parsedStream?.segments?.length && (
             <div className="flex items-center justify-center p-8 text-emerald-500 animate-pulse font-mono text-xs">
-              <Activity className="w-4 h-4 mr-2" /> [SYSTEM] 初始化分析引擎...
+              <Activity className="w-4 h-4 mr-2" /> {t('match.init_engine')}
             </div>
           )}
 
@@ -874,7 +876,7 @@ export default function MatchDetail() {
                   <div className="flex flex-col gap-1">
                     <span className={`text-xs font-mono flex items-center gap-2 ${seg.isThoughtComplete ? 'text-zinc-400' : 'text-emerald-500'}`}>
                       {seg.isThoughtComplete ? <CheckCircle2 className="w-3.5 h-3.5"/> : <Activity className="w-3.5 h-3.5 animate-pulse"/>}
-                      分析阶段 {i + 1}
+                      {t('match.analysis_phase')} {i + 1}
                       {seg.title && (
                         <span className="ml-2 text-zinc-500 font-bold border-l border-zinc-700 pl-2">
                           {seg.title}
@@ -939,7 +941,7 @@ export default function MatchDetail() {
                   <div className="border-t border-zinc-800 bg-black p-4">
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-2 text-blue-400 text-xs font-bold border-b border-white/10 pb-2">
-                        <Video className="w-4 h-4" /> {seg.animation.title || '数据可视化'}
+                        <Video className="w-4 h-4" /> {seg.animation.title || t('match.data_visualization')}
                       </div>
                       <div className="text-zinc-300 text-xs italic bg-zinc-900/50 p-3 rounded-lg border-l-2 border-blue-500">
                         "{seg.animation.narration}"
@@ -962,7 +964,7 @@ export default function MatchDetail() {
                       {generatedCodes[seg.id] && (
                         <details className="mt-2 group">
                           <summary className="text-[10px] text-emerald-500 cursor-pointer hover:text-emerald-400 font-mono flex items-center gap-1">
-                            <Code2 className="w-3 h-3" /> 查看生成的 Remotion 代码
+                            <Code2 className="w-3 h-3" /> {t('match.view_remotion_code')}
                           </summary>
                           <div className="bg-zinc-950 rounded-lg p-4 border border-white/5 font-mono text-[10px] text-zinc-400 overflow-x-auto mt-2">
                             <pre>{generatedCodes[seg.id]}</pre>
@@ -976,7 +978,7 @@ export default function MatchDetail() {
                           <div className="flex items-center gap-2">
                             <input
                               type="text"
-                              placeholder="输入指令重新生成动画 (如: 把颜色换成红色)"
+                              placeholder={t('match.regen_animation_placeholder')}
                               value={animationInstructions[seg.id] || ''}
                               onChange={(e) => setAnimationInstructions(prev => ({ ...prev, [seg.id]: e.target.value }))}
                               className="flex-1 bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
@@ -988,7 +990,7 @@ export default function MatchDetail() {
                               disabled={isGeneratingCode[seg.id]}
                               className="h-7 text-[10px] gap-1 border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
                             >
-                              <RefreshCw className="w-3 h-3" /> 重新生成
+                              <RefreshCw className="w-3 h-3" /> {t('match.regenerate')}
                             </Button>
                           </div>
                         </div>
@@ -1011,7 +1013,7 @@ export default function MatchDetail() {
                 <CardHeader className="border-b border-white/5 py-3 px-4 flex flex-row items-center justify-between bg-emerald-500/10">
                   <CardTitle className="flex items-center gap-2 text-emerald-400 text-sm">
                     <BrainCircuit className="w-4 h-4" /> 
-                    最终分析摘要
+                    {t('match.final_summary')}
                   </CardTitle>
                 </CardHeader>
                 
@@ -1048,7 +1050,7 @@ export default function MatchDetail() {
 
                       <div className="space-y-1">
                         <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                          <span className="truncate max-w-[80px]">平局</span>
+                          <span className="truncate max-w-[80px]">{t('match.draw')}</span>
                           <span>{analysis.winProbability.draw}%</span>
                         </div>
                         <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -1099,7 +1101,7 @@ export default function MatchDetail() {
           {!parsedStream?.segments?.length && thoughts && !isAnalyzing && !analysis && (
             <Card className="border-red-500/30 bg-zinc-950">
               <CardHeader className="border-b border-white/5 py-3 px-4">
-                <CardTitle className="text-red-400 text-sm">解析失败 (原始输出)</CardTitle>
+                <CardTitle className="text-red-400 text-sm">{t('match.parsing_failed')}</CardTitle>
               </CardHeader>
               <CardContent className="p-4 font-mono text-[10px] text-zinc-400 whitespace-pre-wrap">
                 {thoughts}
@@ -1126,15 +1128,15 @@ export default function MatchDetail() {
               className="bg-zinc-900 border border-white/10 rounded-2xl p-6 max-w-xs w-full shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
-              <h3 className="text-lg font-bold mb-4 text-center text-white">分享赛事配置</h3>
+              <h3 className="text-lg font-bold mb-4 text-center text-white">{t('match.share_config')}</h3>
               <div className="bg-white p-4 rounded-xl flex items-center justify-center mb-4">
                 <QRCodeSVG value={shareUrl} size={180} />
               </div>
               <p className="text-xs text-zinc-400 text-center mb-6 font-mono">
-                扫码导入赛事数据并开始分析
+                {t('match.scan_to_import')}
               </p>
               <Button className="w-full" onClick={() => setShowShare(false)}>
-                关闭
+                {t('match.close')}
               </Button>
             </motion.div>
           </motion.div>

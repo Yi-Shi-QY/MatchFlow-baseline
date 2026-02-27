@@ -5,6 +5,7 @@ export interface AppSettings {
   geminiApiKey: string;
   matchDataServerUrl: string;
   matchDataApiKey: string;
+  language: 'en' | 'zh';
 }
 
 const SETTINGS_KEY = 'matchflow_settings';
@@ -16,6 +17,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   geminiApiKey: '',
   matchDataServerUrl: '',
   matchDataApiKey: '',
+  language: 'en',
 };
 
 export function getSettings(): AppSettings {
