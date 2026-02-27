@@ -128,7 +128,7 @@ export default function Share() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col items-center justify-center p-4 pb-20">
+    <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col items-center justify-center p-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

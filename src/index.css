@@ -7,7 +7,7 @@
 }
 
 @layer base {
-  body {
+  html, body {
     @apply bg-black text-zinc-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-200;
   }
 }

@@ -143,9 +143,9 @@ export default function Home() {
     });
 
   return (
-    <div className="min-h-screen bg-black text-zinc-100 font-sans pb-20">
+    <div className="min-h-screen bg-black text-zinc-100 font-sans pb-[calc(5rem+env(safe-area-inset-bottom))]">
       {/* Mobile App Header */}
-      <header className="sticky top-0 z-10 bg-black/80 backdrop-blur-md border-b border-white/10 px-4 py-4">
+      <header className="sticky top-0 z-10 bg-black/80 backdrop-blur-md border-b border-white/10 px-4 pb-4 pt-[calc(1rem+env(safe-area-inset-top))]">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
             <Activity className="text-emerald-500 w-6 h-6" /> MatchFlow
