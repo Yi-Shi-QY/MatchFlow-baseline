@@ -37,6 +37,7 @@
 | `home_score` | INTEGER | 主队得分 |
 | `away_score` | INTEGER | 客队得分 |
 | `match_stats` | JSONB | 比赛详细数据 (控球率、射门等) |
+| `odds` | JSONB | 赔率数据 (HAD, HHAD) |
 
 ## 3. 部署步骤
 
