@@ -4,6 +4,9 @@ import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState, streamRemotion
 import { saveHistory, saveResumeState, clearResumeState, getResumeState } from '@/src/services/history';
 import { deleteSavedMatch } from '@/src/services/savedMatches';
 import { AgentResult, parseAgentStream } from '@/src/services/agentParser';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { Capacitor } from '@capacitor/core';
+import { getSettings } from '@/src/services/settings';
 
 export interface ActiveAnalysis {
   matchId: string;
@@ -32,6 +35,48 @@ const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined
 
 export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [activeAnalyses, setActiveAnalyses] = useState<Record<string, ActiveAnalysis>>({});
+
+  // Background Notification Effect
+  useEffect(() => {
+    const updateNotification = async () => {
+      if (!Capacitor.isNativePlatform()) return;
+      
+      const settings = getSettings();
+      if (!settings.enableBackgroundMode) return;
+
+      const analyzingMatches = Object.values(activeAnalyses).filter(a => a.isAnalyzing);
+      
+      if (analyzingMatches.length > 0) {
+        const matchNames = analyzingMatches.map(a => `${a.match.homeTeam.name} vs ${a.match.awayTeam.name}`).join(', ');
+        // Get the latest phase/step for the first match as a summary
+        const firstMatch = analyzingMatches[0];
+        const segments = firstMatch.parsedStream?.segments || [];
+        const lastSegment = segments[segments.length - 1];
+        const status = lastSegment ? (lastSegment.title || 'Processing...') : 'Starting...';
+        
+        await LocalNotifications.schedule({
+          notifications: [{
+            id: 1001,
+            title: `MatchFlow: Analyzing ${analyzingMatches.length} Match(es)`,
+            body: `${matchNames}\n${status}`,
+            ongoing: true,
+            autoCancel: false,
+            schedule: { at: new Date(Date.now() + 100) }
+          }]
+        });
+      } else {
+        // Cancel notification if no analysis is running
+        // We only cancel if we might have scheduled one (id 1001)
+        try {
+          await LocalNotifications.cancel({ notifications: [{ id: 1001 }] });
+        } catch (e) {
+          // Ignore error if notification doesn't exist
+        }
+      }
+    };
+
+    updateNotification();
+  }, [activeAnalyses]);
 
   const updateAnalysis = useCallback((matchId: string, updates: Partial<ActiveAnalysis>) => {
     setActiveAnalyses(prev => {

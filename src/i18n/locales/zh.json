@@ -130,6 +130,8 @@
     "server_url": "Server URL",
     "api_key_label": "API Key",
     "match_data_hint": "如果不配置，应用将使用内置的模拟数据。",
+    "background_mode": "后台模式",
+    "background_mode_desc": "应用在后台时继续分析，并在状态栏显示进度。",
     "test_data_connection": "测试数据源连接",
     "save_all": "保存所有设置",
     "ai_connected": "AI 模型连接成功！",

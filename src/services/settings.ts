@@ -6,6 +6,7 @@ export interface AppSettings {
   matchDataServerUrl: string;
   matchDataApiKey: string;
   language: 'en' | 'zh';
+  enableBackgroundMode: boolean;
 }
 
 const SETTINGS_KEY = 'matchflow_settings';
@@ -18,6 +19,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   matchDataServerUrl: '',
   matchDataApiKey: '',
   language: 'en',
+  enableBackgroundMode: false,
 };
 
 export function getSettings(): AppSettings {

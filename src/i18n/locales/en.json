@@ -130,6 +130,8 @@
     "server_url": "Server URL",
     "api_key_label": "API Key",
     "match_data_hint": "If not configured, the app will use built-in mock data.",
+    "background_mode": "Background Mode",
+    "background_mode_desc": "Continue analysis and show status in notification bar when app is in background.",
     "test_data_connection": "Test Data Connection",
     "save_all": "Save All Settings",
     "ai_connected": "AI Model Connected!",

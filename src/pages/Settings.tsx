@@ -146,6 +146,19 @@ export default function Settings() {
                   ]}
                 />
               </div>
+
+              <div className="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border border-white/5 mt-4">
+                <div className="space-y-0.5">
+                  <label className="text-xs font-medium text-zinc-200 block">{t('settings.background_mode')}</label>
+                  <p className="text-[10px] text-zinc-500">{t('settings.background_mode_desc')}</p>
+                </div>
+                <div 
+                  className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${settings.enableBackgroundMode ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+                  onClick={() => setLocalSettings({...settings, enableBackgroundMode: !settings.enableBackgroundMode})}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${settings.enableBackgroundMode ? 'translate-x-4' : 'translate-x-0'}`} />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-4">
