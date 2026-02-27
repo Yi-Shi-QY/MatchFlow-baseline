@@ -247,15 +247,32 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
     ? availableSkills.filter(s => allowedSkills.includes(s.name))
     : [];
 
+  const activeTools = activeSkills.flatMap(s => s.tools || []);
+
+  let systemPromptAdditions = "";
+  if (activeSkills.length > 0) {
+    systemPromptAdditions += "\n\n# Available Skills\nYou have access to the following skills. Follow their instructions carefully:\n\n";
+    for (const skill of activeSkills) {
+      systemPromptAdditions += `## Skill: ${skill.name}\n${skill.description}\n\n### Instructions\n${skill.instructions}\n\n`;
+    }
+  }
+
+  const finalPrompt = prompt + systemPromptAdditions;
+
   if (settings.provider === "deepseek") {
     if (!settings.deepseekApiKey) {
       yield "[错误] 未配置 DeepSeek API Key。请在设置中配置。";
       return;
     }
 
-    let messages: any[] = [{ role: "user", content: prompt }];
-    const openAITools = convertToOpenAITools(activeSkills);
-    let useTools = true;
+    let messages: any[] = [{ role: "user", content: finalPrompt }];
+    const openAITools = convertToOpenAITools(activeTools);
+    let useTools = settings.model !== 'deepseek-reasoner';
+
+    if (!useTools && openAITools.length > 0) {
+      const toolInstructions = `\n\n[SYSTEM WARNING: You are running in an environment that requires manual tool calling. You have access to the following tools:\n${JSON.stringify(openAITools, null, 2)}\n\nIf you need to use a tool, you MUST output exactly this format and stop generating:\n<tool_call>{"name": "tool_name", "arguments": {"arg1": "val"}}</tool_call>\n\nThe system will provide the result in the next message.]`;
+      messages[0].content += toolInstructions;
+    }
 
     while (true) {
       try {
@@ -284,8 +301,10 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
           if (response.status === 400 && err.error?.message?.toLowerCase().includes("tool")) {
-            yield `\n[系统提示] 当前模型 (${settings.model}) 原生不支持工具调用，将降级为普通对话。\n`;
+            yield `\n[系统提示] 当前模型 (${settings.model}) 原生不支持工具调用，切换为手动工具调用模式...\n`;
             useTools = false;
+            const toolInstructions = `\n\n[SYSTEM WARNING: You are running in an environment that requires manual tool calling. You have access to the following tools:\n${JSON.stringify(openAITools, null, 2)}\n\nIf you need to use a tool, you MUST output exactly this format and stop generating:\n<tool_call>{"name": "tool_name", "arguments": {"arg1": "val"}}</tool_call>\n\nThe system will provide the result in the next message.]`;
+            messages[0].content += toolInstructions;
             continue;
           }
           throw new Error(err.error?.message || `HTTP error! status: ${response.status}`);
@@ -371,6 +390,40 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
             }
           }
           // Loop continues to send tool results back
+        } else if (!useTools && currentContent.includes("<tool_call>")) {
+          const match = currentContent.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+          if (match) {
+            try {
+              const cleanJson = match[1].replace(/```json/g, '').replace(/```/g, '').trim();
+              const tc = JSON.parse(cleanJson);
+              yield `\n[系统] 正在调用工具 (R1模式): ${tc.name}...\n`;
+              const result = await executeSkill(tc.name, tc.arguments);
+              yield `[系统] 工具调用结果: ${JSON.stringify(result)}\n`;
+              
+              messages.push({
+                role: "assistant",
+                content: currentContent
+              });
+              messages.push({
+                role: "user",
+                content: `<tool_result>${JSON.stringify(result)}</tool_result>\n\nPlease continue your analysis based on this result.`
+              });
+              continue; // Make another API call with the result
+            } catch (err: any) {
+              yield `\n[错误] 工具调用失败: ${err.message}\n`;
+              messages.push({
+                role: "assistant",
+                content: currentContent
+              });
+              messages.push({
+                role: "user",
+                content: `<tool_result>{"error": "${err.message}"}</tool_result>\n\nPlease fix the error or continue without the tool.`
+              });
+              continue;
+            }
+          } else {
+            break;
+          }
         } else {
           break; // No tool calls, we are done
         }
@@ -386,8 +439,8 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
     const ai = getGeminiAI();
     try {
       const config: any = {};
-      if (activeSkills.length > 0) {
-        config.tools = [{ functionDeclarations: activeSkills }];
+      if (activeTools.length > 0) {
+        config.tools = [{ functionDeclarations: activeTools }];
       }
 
       const chat = ai.chats.create({
@@ -395,7 +448,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
         config,
       });
 
-      let response = await chat.sendMessageStream({ message: prompt });
+      let response = await chat.sendMessageStream({ message: finalPrompt });
 
       for await (const chunk of response) {
         const c = chunk as GenerateContentResponse;
@@ -458,49 +511,46 @@ import { getAgent } from "../agents";
 export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
   const settings = getSettings();
   const agent = getAgent('planner');
-  const prompt = agent.systemPrompt({ matchData, language: settings.language });
+  const prompt = agent.systemPrompt({ 
+    matchData, 
+    language: settings.language,
+    enableAutonomousPlanning: settings.enableAutonomousPlanning 
+  });
 
   let responseText = "";
-
-  if (settings.provider === "deepseek") {
-    if (!settings.deepseekApiKey) throw new Error("DeepSeek API Key missing");
-    const response = await fetch("https://api.deepseek.com/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.deepseekApiKey}`,
-      },
-      body: JSON.stringify({
-        model: settings.model || "deepseek-chat",
-        messages: [{ role: "user", content: prompt }],
-        stream: false
-      }),
-    });
-    const data = await response.json();
-    responseText = data.choices[0]?.message?.content || "[]";
-  } else {
-    const ai = getGeminiAI();
-    const response = await ai.models.generateContent({
-      model: settings.model || "gemini-3-flash-preview",
-      contents: prompt,
-      config: { responseMimeType: "application/json" }
-    });
-    responseText = response.text || "[]";
-  }
-
+  
   try {
-    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanJson);
+    const stream = streamAIRequest(prompt, false, agent.skills);
+    for await (const chunk of stream) {
+      responseText += chunk;
+    }
+
+    // Clean up system logs and markdown formatting
+    const cleanText = responseText
+      .replace(/\[系统\].*?\n/g, '')
+      .replace(/\[系统提示\].*?\n/g, '')
+      .replace(/\[错误\].*?\n/g, '')
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
+
+    // Find the first occurrence of a JSON array
+    const jsonMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+
+    return JSON.parse(cleanText);
   } catch (e) {
     console.error("Failed to parse plan JSON", e);
     return [
-      { title: "Match Overview", focus: "General context", animationType: "none", agentType: "overview" },
-      { title: "Key Analysis", focus: "Main talking points", animationType: "none", agentType: "general" }
+      { title: "Match Overview", focus: "General context", animationType: "none", agentType: "overview", contextMode: "independent" },
+      { title: "Key Analysis", focus: "Main talking points", animationType: "none", agentType: "general", contextMode: "build_upon" }
     ];
   }
 }
 
-export async function* streamAnalysisAgent(matchData: any, segmentPlan: any) {
+export async function* streamAnalysisAgent(matchData: any, segmentPlan: any, previousAnalysis: string = "") {
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
   
@@ -538,7 +588,7 @@ export async function* streamAnalysisAgent(matchData: any, segmentPlan: any) {
 
   const settings = getSettings();
   const agent = getAgent(segmentPlan.agentType || 'general');
-  const prompt = agent.systemPrompt({ matchData, segmentPlan, animationSchema, language: settings.language });
+  const prompt = agent.systemPrompt({ matchData, segmentPlan, animationSchema, language: settings.language, previousAnalysis });
 
   yield* streamAIRequest(prompt, false, agent.skills);
 }
@@ -559,10 +609,17 @@ export async function* streamSummaryAgent(matchData: any, previousAnalysis: stri
   yield* streamAIRequest(prompt, false, agent.skills);
 }
 
+export interface SegmentResult {
+  agentId: string;
+  title: string;
+  content: string;
+}
+
 export interface AnalysisResumeState {
   plan: any[];
   completedSegmentIndices: number[];
   fullAnalysisText: string;
+  segmentResults?: SegmentResult[];
 }
 
 export async function* streamAgentThoughts(
@@ -575,6 +632,7 @@ export async function* streamAgentThoughts(
   let plan = resumeState?.plan || [];
   let completedSegmentIndices = resumeState?.completedSegmentIndices || [];
   let fullAnalysisText = resumeState?.fullAnalysisText || "";
+  let segmentResults: SegmentResult[] = resumeState?.segmentResults || [];
 
   if (!resumeState) {
     try {
@@ -582,7 +640,7 @@ export async function* streamAgentThoughts(
     } catch (e) {
       plan = [{ title: "Analysis", focus: "General analysis", animationType: "none", agentType: "general" }];
     }
-    onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText });
+    onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText, segmentResults });
   }
 
   // 2. Analysis Phase (Iterative)
@@ -596,9 +654,25 @@ export async function* streamAgentThoughts(
       segment.animationType = 'none';
     }
 
+    const agentId = segment.agentType || 'general';
+    const agent = getAgent(agentId);
+    
+    let filteredContext = "";
+    const deps = agent.contextDependencies || 'all';
+    if (deps === 'none') {
+      filteredContext = "";
+    } else if (deps === 'all') {
+      filteredContext = segmentResults.map(r => `[From ${r.agentId} - ${r.title}]:\n${r.content}`).join('\n\n');
+    } else if (Array.isArray(deps)) {
+      const relevantResults = segmentResults.filter(r => deps.includes(r.agentId));
+      if (relevantResults.length > 0) {
+        filteredContext = relevantResults.map(r => `[From ${r.agentId} - ${r.title}]:\n${r.content}`).join('\n\n');
+      }
+    }
+
     // A. Run Analysis Agent
     let segmentText = "";
-    const segmentStream = streamAnalysisAgent(matchData, segment);
+    const segmentStream = streamAnalysisAgent(matchData, segment, filteredContext);
     for await (const chunk of segmentStream) {
       segmentText += chunk;
       fullAnalysisText += chunk;
@@ -617,8 +691,9 @@ export async function* streamAgentThoughts(
     yield "\n";
     fullAnalysisText += "\n";
     
+    segmentResults.push({ agentId, title: segment.title, content: segmentText });
     completedSegmentIndices.push(i);
-    onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText });
+    onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText, segmentResults });
   }
 
   // 3. Summary Phase

@@ -11,6 +11,7 @@ export const overviewAgent: AgentConfig = {
   name: 'Lead Sports Journalist',
   description: 'Writes compelling introductions setting the stage, history, and stakes of the match.',
   skills: [],
+  contextDependencies: 'none',
   systemPrompt: (context) => {
     const role = context.language === 'zh' ? rolePrompts.zh : rolePrompts.en;
     return buildAnalysisPrompt(role, context);

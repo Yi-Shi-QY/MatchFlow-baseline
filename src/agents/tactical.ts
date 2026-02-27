@@ -11,6 +11,7 @@ export const tacticalAgent: AgentConfig = {
   name: 'Tactical Analyst',
   description: 'Breaks down formations, key battles, and strategic approaches.',
   skills: [],
+  contextDependencies: ['overview', 'stats'],
   systemPrompt: (context) => {
     const role = context.language === 'zh' ? rolePrompts.zh : rolePrompts.en;
     return buildAnalysisPrompt(role, context);

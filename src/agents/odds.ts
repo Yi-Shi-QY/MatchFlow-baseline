@@ -17,6 +17,7 @@ export const oddsAgent: AgentConfig = {
   name: 'Odds Analyst',
   description: 'Analyzes betting odds and probabilities (Jingcai rules).',
   skills: ['calculator'],
+  contextDependencies: ['stats', 'tactical'],
   systemPrompt: (context) => {
     const role = context.language === 'zh' ? rolePrompts.zh : rolePrompts.en;
     return buildAnalysisPrompt(role, context);

@@ -11,6 +11,7 @@ export const statsAgent: AgentConfig = {
   name: 'Data Scientist',
   description: 'Analyzes numbers deeply, comparing form, head-to-head records, and key metrics.',
   skills: ['calculator'],
+  contextDependencies: ['overview'],
   systemPrompt: (context) => {
     const role = context.language === 'zh' ? rolePrompts.zh : rolePrompts.en;
     return buildAnalysisPrompt(role, context);

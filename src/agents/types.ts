@@ -5,6 +5,7 @@ export interface AgentContext {
   previousAnalysis?: string;
   analysisText?: string;
   language?: 'en' | 'zh';
+  enableAutonomousPlanning?: boolean;
 }
 
 export interface AgentConfig {
@@ -12,5 +13,6 @@ export interface AgentConfig {
   name: string;
   description: string;
   skills?: string[];
+  contextDependencies?: string[] | 'all' | 'none';
   systemPrompt: (context: AgentContext) => string;
 }

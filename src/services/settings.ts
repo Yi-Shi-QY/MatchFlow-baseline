@@ -7,6 +7,7 @@ export interface AppSettings {
   matchDataApiKey: string;
   language: 'en' | 'zh';
   enableBackgroundMode: boolean;
+  enableAutonomousPlanning: boolean;
 }
 
 const SETTINGS_KEY = 'matchflow_settings';
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   matchDataApiKey: '',
   language: 'en',
   enableBackgroundMode: false,
+  enableAutonomousPlanning: false,
 };
 
 export function getSettings(): AppSettings {
