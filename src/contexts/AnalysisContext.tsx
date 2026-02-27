@@ -221,6 +221,8 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         if (dataToAnalyze.homeTeam?.name) finalMatch.homeTeam.name = dataToAnalyze.homeTeam.name;
         if (dataToAnalyze.awayTeam?.name) finalMatch.awayTeam.name = dataToAnalyze.awayTeam.name;
         if (dataToAnalyze.league) finalMatch.league = dataToAnalyze.league;
+        if (dataToAnalyze.odds) finalMatch.odds = dataToAnalyze.odds;
+        if (dataToAnalyze.customInfo) (finalMatch as any).customInfo = dataToAnalyze.customInfo;
         
         setActiveAnalyses(prev => {
           if (!prev[matchId]) return prev;

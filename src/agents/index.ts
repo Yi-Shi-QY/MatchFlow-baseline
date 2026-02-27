@@ -6,6 +6,7 @@ import { generalAgent } from './general';
 import { plannerAgent } from './planner';
 import { tagAgent } from './tag';
 import { summaryAgent } from './summary';
+import { oddsAgent } from './odds';
 import { AgentConfig } from './types';
 
 export const agents: Record<string, AgentConfig> = {
@@ -16,7 +17,8 @@ export const agents: Record<string, AgentConfig> = {
   general: generalAgent,
   planner: plannerAgent,
   tag: tagAgent,
-  summary: summaryAgent
+  summary: summaryAgent,
+  odds: oddsAgent
 };
 
 export function getAgent(id: string): AgentConfig {

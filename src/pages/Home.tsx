@@ -83,7 +83,7 @@ export default function Home() {
     clearActiveAnalysis(matchId); // Clear from context
     
     // Also clear resume state if it matches this match
-    const resumeState = getResumeState(matchId);
+    const resumeState = await getResumeState(matchId);
     if (resumeState && resumeState.matchId === matchId) {
       clearResumeState();
     }

@@ -24,6 +24,10 @@ export interface Match {
     shots: { home: number; away: number };
     shotsOnTarget: { home: number; away: number };
   };
+  odds?: {
+    had?: { h: number; d: number; a: number }; // 胜平负
+    hhad?: { h: number; d: number; a: number; goalline: number }; // 让球胜平负
+  };
 }
 
 export const MOCK_MATCHES: Match[] = [
@@ -44,6 +48,10 @@ export const MOCK_MATCHES: Match[] = [
     },
     date: new Date(Date.now() + 86400000).toISOString(),
     status: 'upcoming',
+    odds: {
+      had: { h: 2.45, d: 3.20, a: 2.45 },
+      hhad: { h: 1.42, d: 4.20, a: 5.30, goalline: 1 }
+    }
   },
   {
     id: 'm2',
@@ -67,6 +75,10 @@ export const MOCK_MATCHES: Match[] = [
       possession: { home: 45, away: 55 },
       shots: { home: 8, away: 12 },
       shotsOnTarget: { home: 3, away: 5 },
+    },
+    odds: {
+      had: { h: 2.10, d: 3.40, a: 2.80 },
+      hhad: { h: 4.10, d: 3.90, a: 1.58, goalline: -1 }
     }
   },
   {
@@ -86,5 +98,9 @@ export const MOCK_MATCHES: Match[] = [
     },
     date: new Date(Date.now() + 172800000).toISOString(),
     status: 'upcoming',
+    odds: {
+      had: { h: 1.85, d: 3.10, a: 3.80 },
+      hhad: { h: 3.75, d: 3.40, a: 1.75, goalline: -1 }
+    }
   }
 ];

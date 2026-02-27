@@ -504,7 +504,24 @@ export async function* streamAnalysisAgent(matchData: any, segmentPlan: any) {
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
   
-  const animationSchema = `
+  let animationSchema = "";
+  
+  if (segmentPlan.animationType === 'odds') {
+    animationSchema = `
+    <animation>
+    {
+      "type": "odds",
+      "title": "${segmentPlan.title}",
+      "narration": "A short, engaging voiceover script for this animation.",
+      "data": {
+        "homeLabel": "${homeName}", "awayLabel": "${awayName}",
+        "had": { "h": 1.5, "d": 3.2, "a": 4.5 },
+        "hhad": { "h": 2.1, "d": 3.5, "a": 2.8, "goalline": -1 }
+      }
+    }
+    </animation>`;
+  } else {
+    animationSchema = `
     <animation>
     {
       "type": "${segmentPlan.animationType}",
@@ -517,6 +534,7 @@ export async function* streamAnalysisAgent(matchData: any, segmentPlan: any) {
       }
     }
     </animation>`;
+  }
 
   const agent = getAgent(segmentPlan.agentType || 'general');
   const prompt = agent.systemPrompt({ matchData, segmentPlan, animationSchema });

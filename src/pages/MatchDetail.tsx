@@ -86,9 +86,8 @@ export default function MatchDetail() {
   const [step, setStep] = useState<'selection' | 'analyzing' | 'result'>('selection');
   const [includeAnimations, setIncludeAnimations] = useState(true);
   const [selectedSources, setSelectedSources] = useState({
-    basic: true,
-    form: true,
-    stats: true,
+    fundamental: true,
+    market: false,
     custom: false,
   });
 
@@ -97,17 +96,20 @@ export default function MatchDetail() {
       const m = match as any;
       setSelectedSources(prev => ({
         ...prev,
-        stats: !!m.stats,
+        fundamental: true,
+        market: !!m.odds,
         custom: !!m.customInfo
       }));
     }
   }, [match]);
+
   const [editableData, setEditableData] = useState("");
   const [showJson, setShowJson] = useState(false);
   const [savedResumeState, setSavedResumeState] = useState<any | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [animationInstructions, setAnimationInstructions] = useState<Record<string, string>>({});
   const [isExporting, setIsExporting] = useState(false);
+  const [isPreviewExpanded, setIsPreviewExpanded] = useState(true);
 
   const handleExportPDF = async () => {
     if (!match || isExporting) return;
@@ -210,7 +212,7 @@ export default function MatchDetail() {
     const m = match as Match;
     const dataToSend: any = {};
     
-    if (selectedSources.basic) {
+    if (selectedSources.fundamental) {
       dataToSend.id = m.id;
       dataToSend.league = m.league;
       dataToSend.status = m.status;
@@ -227,17 +229,17 @@ export default function MatchDetail() {
         logo: m.awayTeam.logo,
         form: m.awayTeam.form
       };
+      
+      if (m.stats) {
+        dataToSend.stats = m.stats;
+      }
     }
     
-    if (selectedSources.form) {
-      if (!dataToSend.homeTeam) dataToSend.homeTeam = {};
-      if (!dataToSend.awayTeam) dataToSend.awayTeam = {};
-      dataToSend.homeTeam.form = m.homeTeam.form;
-      dataToSend.awayTeam.form = m.awayTeam.form;
-    }
-    
-    if (selectedSources.stats && m.stats) {
-      dataToSend.stats = m.stats;
+    if (selectedSources.market) {
+      dataToSend.odds = m.odds || {
+        had: { h: 0, d: 0, a: 0 },
+        hhad: { h: 0, d: 0, a: 0, goalline: 0 }
+      };
     }
     
     if (selectedSources.custom) {
@@ -272,134 +274,163 @@ export default function MatchDetail() {
 
     return (
       <div className="space-y-4 text-sm">
-        {selectedSources.basic && (
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">基本信息</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">联赛</label>
-                <input 
-                  type="text" 
-                  value={data.league || ''} 
-                  onChange={(e) => handleDataChange(['league'], e.target.value)}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">状态</label>
-                <input 
-                  type="text" 
-                  value={data.status || ''} 
-                  onChange={(e) => handleDataChange(['status'], e.target.value)}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">主队</label>
-                <input 
-                  type="text" 
-                  value={data.homeTeam?.name || ''} 
-                  onChange={(e) => handleDataChange(['homeTeam', 'name'], e.target.value)}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">客队</label>
-                <input 
-                  type="text" 
-                  value={data.awayTeam?.name || ''} 
-                  onChange={(e) => handleDataChange(['awayTeam', 'name'], e.target.value)}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                />
+        {selectedSources.fundamental && (
+          <>
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">基本信息</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-zinc-500 block mb-1">联赛</label>
+                  <input 
+                    type="text" 
+                    value={data.league || ''} 
+                    onChange={(e) => handleDataChange(['league'], e.target.value)}
+                    className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 block mb-1">状态</label>
+                  <input 
+                    type="text" 
+                    value={data.status || ''} 
+                    onChange={(e) => handleDataChange(['status'], e.target.value)}
+                    className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 block mb-1">主队</label>
+                  <input 
+                    type="text" 
+                    value={data.homeTeam?.name || ''} 
+                    onChange={(e) => handleDataChange(['homeTeam', 'name'], e.target.value)}
+                    className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 block mb-1">客队</label>
+                  <input 
+                    type="text" 
+                    value={data.awayTeam?.name || ''} 
+                    onChange={(e) => handleDataChange(['awayTeam', 'name'], e.target.value)}
+                    className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">近期状态</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-zinc-500 block mb-1">主队状态 (胜,平,负)</label>
+                  <input 
+                    type="text" 
+                    value={(data.homeTeam?.form || []).join(', ')} 
+                    onChange={(e) => handleDataChange(['homeTeam', 'form'], e.target.value.split(',').map(s => s.trim()))}
+                    className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 block mb-1">客队状态 (胜,平,负)</label>
+                  <input 
+                    type="text" 
+                    value={(data.awayTeam?.form || []).join(', ')} 
+                    onChange={(e) => handleDataChange(['awayTeam', 'form'], e.target.value.split(',').map(s => s.trim()))}
+                    className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {data.stats && (
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">比赛数据</h3>
+                
+                <div className="space-y-2">
+                  <label className="text-[10px] text-zinc-500 block">控球率 (%)</label>
+                  <div className="flex gap-2 items-center">
+                    <input 
+                      type="number" 
+                      value={data.stats.possession?.home || 0} 
+                      onChange={(e) => handleDataChange(['stats', 'possession', 'home'], Number(e.target.value))}
+                      className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
+                    />
+                    <span className="text-xs text-zinc-600">vs</span>
+                    <input 
+                      type="number" 
+                      value={data.stats.possession?.away || 0} 
+                      onChange={(e) => handleDataChange(['stats', 'possession', 'away'], Number(e.target.value))}
+                      className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] text-zinc-500 block">射门次数</label>
+                  <div className="flex gap-2 items-center">
+                    <input 
+                      type="number" 
+                      value={data.stats.shots?.home || 0} 
+                      onChange={(e) => handleDataChange(['stats', 'shots', 'home'], Number(e.target.value))}
+                      className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
+                    />
+                    <span className="text-xs text-zinc-600">vs</span>
+                    <input 
+                      type="number" 
+                      value={data.stats.shots?.away || 0} 
+                      onChange={(e) => handleDataChange(['stats', 'shots', 'away'], Number(e.target.value))}
+                      className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] text-zinc-500 block">射正次数</label>
+                  <div className="flex gap-2 items-center">
+                    <input 
+                      type="number" 
+                      value={data.stats.shotsOnTarget?.home || 0} 
+                      onChange={(e) => handleDataChange(['stats', 'shotsOnTarget', 'home'], Number(e.target.value))}
+                      className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
+                    />
+                    <span className="text-xs text-zinc-600">vs</span>
+                    <input 
+                      type="number" 
+                      value={data.stats.shotsOnTarget?.away || 0} 
+                      onChange={(e) => handleDataChange(['stats', 'shotsOnTarget', 'away'], Number(e.target.value))}
+                      className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
-        {selectedSources.form && (
+        {selectedSources.market && data.odds && (
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">近期状态</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">市场面数据 (赔率)</h3>
+            <div className="grid grid-cols-1 gap-4">
+              {/* HAD */}
               <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">主队状态 (胜,平,负)</label>
-                <input 
-                  type="text" 
-                  value={(data.homeTeam?.form || []).join(', ')} 
-                  onChange={(e) => handleDataChange(['homeTeam', 'form'], e.target.value.split(',').map(s => s.trim()))}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                />
+                <label className="text-[10px] text-zinc-500 block mb-1">胜平负 (HAD)</label>
+                <div className="flex gap-2">
+                  <input type="number" value={data.odds.had?.h || 0} onChange={(e) => handleDataChange(['odds', 'had', 'h'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="主胜" />
+                  <input type="number" value={data.odds.had?.d || 0} onChange={(e) => handleDataChange(['odds', 'had', 'd'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="平" />
+                  <input type="number" value={data.odds.had?.a || 0} onChange={(e) => handleDataChange(['odds', 'had', 'a'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="客胜" />
+                </div>
               </div>
+              {/* HHAD */}
               <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">客队状态 (胜,平,负)</label>
-                <input 
-                  type="text" 
-                  value={(data.awayTeam?.form || []).join(', ')} 
-                  onChange={(e) => handleDataChange(['awayTeam', 'form'], e.target.value.split(',').map(s => s.trim()))}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {selectedSources.stats && data.stats && (
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase border-b border-white/10 pb-1">比赛数据</h3>
-            
-            <div className="space-y-2">
-              <label className="text-[10px] text-zinc-500 block">控球率 (%)</label>
-              <div className="flex gap-2 items-center">
-                <input 
-                  type="number" 
-                  value={data.stats.possession?.home || 0} 
-                  onChange={(e) => handleDataChange(['stats', 'possession', 'home'], Number(e.target.value))}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
-                />
-                <span className="text-xs text-zinc-600">vs</span>
-                <input 
-                  type="number" 
-                  value={data.stats.possession?.away || 0} 
-                  onChange={(e) => handleDataChange(['stats', 'possession', 'away'], Number(e.target.value))}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] text-zinc-500 block">射门次数</label>
-              <div className="flex gap-2 items-center">
-                <input 
-                  type="number" 
-                  value={data.stats.shots?.home || 0} 
-                  onChange={(e) => handleDataChange(['stats', 'shots', 'home'], Number(e.target.value))}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
-                />
-                <span className="text-xs text-zinc-600">vs</span>
-                <input 
-                  type="number" 
-                  value={data.stats.shots?.away || 0} 
-                  onChange={(e) => handleDataChange(['stats', 'shots', 'away'], Number(e.target.value))}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] text-zinc-500 block">射正次数</label>
-              <div className="flex gap-2 items-center">
-                <input 
-                  type="number" 
-                  value={data.stats.shotsOnTarget?.home || 0} 
-                  onChange={(e) => handleDataChange(['stats', 'shotsOnTarget', 'home'], Number(e.target.value))}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
-                />
-                <span className="text-xs text-zinc-600">vs</span>
-                <input 
-                  type="number" 
-                  value={data.stats.shotsOnTarget?.away || 0} 
-                  onChange={(e) => handleDataChange(['stats', 'shotsOnTarget', 'away'], Number(e.target.value))}
-                  className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center focus:border-emerald-500 focus:outline-none"
-                />
+                <label className="text-[10px] text-zinc-500 block mb-1">让球胜平负 (HHAD)</label>
+                <div className="flex gap-2 mb-1">
+                   <input type="number" value={data.odds.hhad?.goalline || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'goalline'], Number(e.target.value))} className="w-full bg-zinc-800 border border-white/10 rounded p-1.5 text-xs text-emerald-500 text-center font-bold" placeholder="让球数" />
+                </div>
+                <div className="flex gap-2">
+                  <input type="number" value={data.odds.hhad?.h || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'h'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="主胜" />
+                  <input type="number" value={data.odds.hhad?.d || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'd'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="平" />
+                  <input type="number" value={data.odds.hhad?.a || 0} onChange={(e) => handleDataChange(['odds', 'hhad', 'a'], Number(e.target.value))} className="w-full bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white text-center" placeholder="客胜" />
+                </div>
               </div>
             </div>
           </div>
@@ -574,51 +605,35 @@ export default function MatchDetail() {
           
           <div className="grid grid-cols-2 gap-3">
             <Card 
-              className={`cursor-pointer transition-colors ${selectedSources.basic ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}
-              onClick={() => setSelectedSources(s => ({...s, basic: !s.basic}))}
+              className={`cursor-pointer transition-colors ${selectedSources.fundamental ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}
+              onClick={() => setSelectedSources(s => ({...s, fundamental: !s.fundamental}))}
             >
               <CardContent className="p-4 flex flex-col gap-2">
                 <div className="flex justify-between items-center">
-                  <Info className="w-5 h-5 text-zinc-400" />
-                  {selectedSources.basic && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                  <LayoutTemplate className="w-5 h-5 text-zinc-400" />
+                  {selectedSources.fundamental && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                 </div>
-                <span className="text-sm font-medium">基本信息</span>
-                <span className="text-[10px] text-zinc-500">球队、日期、联赛</span>
+                <span className="text-sm font-medium">基本面数据</span>
+                <span className="text-[10px] text-zinc-500">基本信息、近期状态、比赛数据</span>
               </CardContent>
             </Card>
             
             <Card 
-              className={`cursor-pointer transition-colors ${selectedSources.form ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}
-              onClick={() => setSelectedSources(s => ({...s, form: !s.form}))}
+              className={`cursor-pointer transition-colors ${selectedSources.market ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}
+              onClick={() => setSelectedSources(s => ({...s, market: !s.market}))}
             >
               <CardContent className="p-4 flex flex-col gap-2">
                 <div className="flex justify-between items-center">
                   <TrendingUp className="w-5 h-5 text-zinc-400" />
-                  {selectedSources.form && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                  {selectedSources.market && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                 </div>
-                <span className="text-sm font-medium">近期状态</span>
-                <span className="text-[10px] text-zinc-500">近5场比赛</span>
+                <span className="text-sm font-medium">市场面数据</span>
+                <span className="text-[10px] text-zinc-500">胜平负、让球赔率</span>
               </CardContent>
             </Card>
 
-            {match.stats && (
-              <Card 
-                className={`cursor-pointer transition-colors ${selectedSources.stats ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}
-                onClick={() => setSelectedSources(s => ({...s, stats: !s.stats}))}
-              >
-                <CardContent className="p-4 flex flex-col gap-2">
-                  <div className="flex justify-between items-center">
-                    <BarChart2 className="w-5 h-5 text-zinc-400" />
-                    {selectedSources.stats && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                  </div>
-                  <span className="text-sm font-medium">比赛数据</span>
-                  <span className="text-[10px] text-zinc-500">控球率、射门等</span>
-                </CardContent>
-              </Card>
-            )}
-
             <Card 
-              className={`cursor-pointer transition-colors ${!match.stats ? 'col-span-2' : ''} ${selectedSources.custom ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}
+              className={`cursor-pointer transition-colors col-span-2 ${selectedSources.custom ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}
               onClick={() => setSelectedSources(s => ({...s, custom: !s.custom}))}
             >
               <CardContent className="p-4 flex flex-col gap-2">
@@ -634,43 +649,74 @@ export default function MatchDetail() {
 
           <div className="mt-4 flex flex-col gap-2 flex-1">
             <div className="flex justify-between items-center">
-              <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
-                Agent 提示词预览
-              </label>
-              <button 
-                onClick={() => setShowJson(!showJson)}
-                className="text-[10px] text-emerald-500 hover:text-emerald-400 flex items-center gap-1 font-mono uppercase tracking-wider bg-emerald-500/10 px-2 py-1 rounded"
+              <div 
+                className="flex items-center gap-2 cursor-pointer group"
+                onClick={() => setIsPreviewExpanded(!isPreviewExpanded)}
               >
-                {showJson ? <LayoutTemplate className="w-3 h-3" /> : <Code2 className="w-3 h-3" />}
-                {showJson ? '表单视图' : 'JSON 视图'}
-              </button>
+                <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider cursor-pointer group-hover:text-zinc-300 transition-colors">
+                  Agent 提示词预览
+                </label>
+                {isPreviewExpanded ? (
+                  <ChevronUp className="w-3 h-3 text-zinc-500 group-hover:text-zinc-300 transition-colors" />
+                ) : (
+                  <ChevronDown className="w-3 h-3 text-zinc-500 group-hover:text-zinc-300 transition-colors" />
+                )}
+              </div>
+              
+              {isPreviewExpanded && (
+                <button 
+                  onClick={() => setShowJson(!showJson)}
+                  className="text-[10px] text-emerald-500 hover:text-emerald-400 flex items-center gap-1 font-mono uppercase tracking-wider bg-emerald-500/10 px-2 py-1 rounded transition-colors"
+                >
+                  {showJson ? <LayoutTemplate className="w-3 h-3" /> : <Code2 className="w-3 h-3" />}
+                  {showJson ? '表单视图' : 'JSON 视图'}
+                </button>
+              )}
             </div>
             
-            {showJson ? (
-              <textarea 
-                className="w-full flex-1 min-h-[200px] bg-zinc-950 border border-white/10 rounded-xl p-4 text-xs font-mono text-zinc-300 focus:outline-none focus:border-emerald-500 transition-colors resize-none"
-                value={editableData}
-                onChange={(e) => setEditableData(e.target.value)}
-              />
-            ) : (
-              <div className="w-full flex-1 min-h-[200px] bg-zinc-950/50 border border-white/10 rounded-xl p-4 overflow-y-auto">
-                {renderHumanReadableForm()}
-              </div>
-            )}
-            <p className="text-[10px] text-zinc-500">
-              {showJson ? "您可以在发送给 Agent 之前手动编辑 JSON 数据。" : "在发送给 Agent 之前，请在下方编辑参数。"}
-            </p>
+            <AnimatePresence>
+              {isPreviewExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col gap-2 overflow-hidden"
+                >
+                  {showJson ? (
+                    <textarea 
+                      className="w-full min-h-[200px] bg-zinc-950 border border-white/10 rounded-xl p-4 text-xs font-mono text-zinc-300 focus:outline-none focus:border-emerald-500 transition-colors resize-none"
+                      value={editableData}
+                      onChange={(e) => setEditableData(e.target.value)}
+                    />
+                  ) : (
+                    <div className="w-full min-h-[200px] bg-zinc-950/50 border border-white/10 rounded-xl p-4 overflow-y-auto max-h-[400px]">
+                      {renderHumanReadableForm()}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-zinc-500">
+                    {showJson ? "您可以在发送给 Agent 之前手动编辑 JSON 数据。" : "在发送给 Agent 之前，请在下方编辑参数。"}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div className="flex items-center gap-2 mt-4 px-1">
-            <input 
-              type="checkbox" 
-              id="includeAnimations" 
-              checked={includeAnimations}
-              onChange={(e) => setIncludeAnimations(e.target.checked)}
-              className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 accent-emerald-500"
-            />
-            <label htmlFor="includeAnimations" className="text-xs text-zinc-400 select-none cursor-pointer flex items-center gap-2">
+          <div className="flex items-center gap-3 mt-4 px-1">
+            <div 
+              className={`w-9 h-5 rounded-full flex items-center transition-colors p-1 cursor-pointer ${includeAnimations ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+              onClick={() => setIncludeAnimations(!includeAnimations)}
+            >
+              <motion.div 
+                className="bg-white w-3 h-3 rounded-full shadow-sm"
+                animate={{ x: includeAnimations ? 16 : 0 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            </div>
+            <label 
+              className="text-xs text-zinc-400 select-none cursor-pointer flex items-center gap-2"
+              onClick={() => setIncludeAnimations(!includeAnimations)}
+            >
               <Video className="w-3 h-3" /> 生成演示动画 (可能会增加分析时间)
             </label>
           </div>

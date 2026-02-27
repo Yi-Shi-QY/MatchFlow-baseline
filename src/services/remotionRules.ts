@@ -26,6 +26,7 @@ Make it look like a professional broadcast graphic (Sky Sports, ESPN style).
    - **Form Guide:** Row of W/D/L circles (Green/Gray/Red).
    - **Pitch View:** A simple CSS-based green rectangle with lines to show tactical positions.
    - **Win Probability:** A gauge or progress bar.
+   - **Odds Analysis:** Display Jingcai odds (HAD/HHAD) with animated numbers or comparison bars.
 
 **TECHNICAL RULES:**
 1. Imports: \`import React from 'react';\` and \`import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence } from 'remotion';\`
@@ -37,7 +38,7 @@ Make it look like a professional broadcast graphic (Sky Sports, ESPN style).
 Return ONLY valid TSX code. No markdown blocks.
 Export default function Scene({ data, title, narration }) { ... }
 
-**EXAMPLE (Stats Comparison - Square Layout):**
+**EXAMPLE (Odds Analysis):**
 import React from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, spring, interpolate } from 'remotion';
 
@@ -45,66 +46,37 @@ export default function Scene({ data, title }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   
-  // Data extraction with defaults
-  const homeVal = Number(data?.homeValue || 50);
-  const awayVal = Number(data?.awayValue || 50);
-  const total = homeVal + awayVal;
-  const homePct = (homeVal / total) * 100;
+  const had = data?.had || { h: 0, d: 0, a: 0 };
+  const hhad = data?.hhad || { h: 0, d: 0, a: 0, goalline: 0 };
 
-  // Animations
   const enter = spring({ frame, fps, config: { damping: 12 } });
-  const barProgress = interpolate(frame, [10, 40], [0, 1], { extrapolateRight: 'clamp' });
 
   return (
-    <AbsoluteFill style={{ backgroundColor: '#09090b', color: '#fff', padding: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-      {/* Title */}
-      <h1 style={{ 
-        fontSize: '50px', 
-        textAlign: 'center', 
-        marginBottom: '60px',
-        opacity: interpolate(frame, [0, 20], [0, 1]),
-        transform: \`translateY(\${interpolate(frame, [0, 20], [20, 0])}px)\`
-      }}>
+    <AbsoluteFill style={{ backgroundColor: '#09090b', color: '#fff', padding: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+      <h1 style={{ fontSize: '50px', marginBottom: '60px', opacity: interpolate(frame, [0, 20], [0, 1]) }}>
         {title}
       </h1>
 
-      {/* Comparison Container */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
-        
-        {/* Home Team */}
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', alignItems: 'flex-end' }}>
-            <span style={{ fontSize: '36px', color: '#10b981', fontWeight: 'bold' }}>主队</span>
-            <span style={{ fontSize: '60px', fontWeight: 'bold', lineHeight: 1 }}>{homeVal}</span>
-          </div>
-          <div style={{ height: '50px', background: '#27272a', borderRadius: '25px', overflow: 'hidden' }}>
-            <div style={{ 
-              width: \`\${homePct}%\`, 
-              height: '100%', 
-              background: '#10b981',
-              transform: \`scaleX(\${barProgress})\`,
-              transformOrigin: 'left'
-            }} />
+      <div style={{ display: 'flex', gap: '40px', width: '100%' }}>
+        {/* HAD Block */}
+        <div style={{ flex: 1, background: '#18181b', padding: '30px', borderRadius: '20px', transform: \`scale(\${enter})\` }}>
+          <h2 style={{ fontSize: '30px', color: '#a1a1aa', marginBottom: '20px' }}>胜平负 (HAD)</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '40px', fontWeight: 'bold' }}>
+            <div style={{ color: '#10b981' }}>主 {had.h}</div>
+            <div style={{ color: '#a1a1aa' }}>平 {had.d}</div>
+            <div style={{ color: '#3b82f6' }}>客 {had.a}</div>
           </div>
         </div>
 
-        {/* Away Team */}
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', alignItems: 'flex-end' }}>
-            <span style={{ fontSize: '36px', color: '#3b82f6', fontWeight: 'bold' }}>客队</span>
-            <span style={{ fontSize: '60px', fontWeight: 'bold', lineHeight: 1 }}>{awayVal}</span>
-          </div>
-          <div style={{ height: '50px', background: '#27272a', borderRadius: '25px', overflow: 'hidden' }}>
-            <div style={{ 
-              width: \`\${100 - homePct}%\`, 
-              height: '100%', 
-              background: '#3b82f6',
-              transform: \`scaleX(\${barProgress})\`,
-              transformOrigin: 'left'
-            }} />
+        {/* HHAD Block */}
+        <div style={{ flex: 1, background: '#18181b', padding: '30px', borderRadius: '20px', transform: \`scale(\${enter})\`, transitionDelay: '0.2s' }}>
+          <h2 style={{ fontSize: '30px', color: '#a1a1aa', marginBottom: '20px' }}>让球 ({hhad.goalline})</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '40px', fontWeight: 'bold' }}>
+            <div style={{ color: '#10b981' }}>主 {hhad.h}</div>
+            <div style={{ color: '#a1a1aa' }}>平 {hhad.d}</div>
+            <div style={{ color: '#3b82f6' }}>客 {hhad.a}</div>
           </div>
         </div>
-
       </div>
     </AbsoluteFill>
   );
