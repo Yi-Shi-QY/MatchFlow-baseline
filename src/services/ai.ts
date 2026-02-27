@@ -574,13 +574,15 @@ export async function* streamRegenerateSegment(matchData: any, segmentIndex: num
   yield* streamAIRequest(prompt, false);
 }
 
-export async function* streamRemotionCode(segmentData: any) {
+export async function* streamRemotionCode(segmentData: any, customInstruction?: string) {
   const prompt = `
     ${REMOTION_RULES}
 
     Create a Remotion component for the following scene data:
     ${JSON.stringify(segmentData, null, 2)}
     
+    ${customInstruction ? `\nUSER CUSTOM INSTRUCTION FOR THIS ANIMATION:\n${customInstruction}\nPlease follow this instruction carefully when generating the animation code.\n` : ''}
+
     Remember: Return ONLY valid TSX code. No markdown formatting.
   `;
 

@@ -7,6 +7,7 @@ import { ArrowLeft, Activity, Download, BrainCircuit } from 'lucide-react';
 import { motion } from 'motion/react';
 import { saveHistory } from '@/src/services/history';
 import { saveMatch } from '@/src/services/savedMatches';
+import { decompressFromEncodedURIComponent } from 'lz-string';
 
 export default function Share() {
   const [searchParams] = useSearchParams();
@@ -19,16 +20,37 @@ export default function Share() {
     const d = searchParams.get('d');
     if (d) {
       try {
-        const decodedStr = atob(d);
+        let decodedStr = '';
         let decoded;
+        
+        // Try lz-string decompression first
         try {
-          decoded = JSON.parse(decodeURIComponent(decodedStr));
+          decodedStr = decompressFromEncodedURIComponent(d) || '';
+          if (decodedStr) {
+            decoded = JSON.parse(decodedStr);
+          }
         } catch (e) {
-          decoded = JSON.parse(decodedStr); // fallback for old format
+          // Ignore lz-string error
         }
+
+        // Fallback to base64 decoding if lz-string fails or returns empty
+        if (!decoded) {
+          try {
+            decodedStr = atob(d);
+            try {
+              decoded = JSON.parse(decodeURIComponent(decodedStr));
+            } catch (e) {
+              decoded = JSON.parse(decodedStr); // fallback for old format
+            }
+          } catch (e) {
+            console.error("Failed to decode base64 share data", e);
+          }
+        }
+
+        if (!decoded) return;
         
         // Check version
-        if (decoded.v === 2 && decoded.d) {
+        if ((decoded.v === 2 || decoded.v === 3) && decoded.d) {
            // New format: just input data
            setImportedData(decoded.d);
            

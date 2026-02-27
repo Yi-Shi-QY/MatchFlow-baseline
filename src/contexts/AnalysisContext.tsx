@@ -25,7 +25,7 @@ interface AnalysisContextType {
   startAnalysis: (match: Match, dataToAnalyze: any, includeAnimations: boolean, isResume?: boolean) => void;
   clearActiveAnalysis: (matchId: string) => void;
   setCollapsedSegments: (matchId: string, segments: Record<string, boolean>) => void;
-  generateCodeForSegment: (matchId: string, seg: any) => void;
+  generateCodeForSegment: (matchId: string, seg: any, customInstruction?: string) => void;
 }
 
 const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined);
@@ -58,17 +58,18 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     updateAnalysis(matchId, { collapsedSegments: segments });
   }, [updateAnalysis]);
 
-  const generateCodeForSegment = useCallback(async (matchId: string, seg: any) => {
+  const generateCodeForSegment = useCallback(async (matchId: string, seg: any, customInstruction?: string) => {
     const analysis = activeAnalyses[matchId];
     if (!analysis || analysis.isGeneratingCode[seg.id]) return;
 
     updateAnalysis(matchId, { 
-      isGeneratingCode: { ...analysis.isGeneratingCode, [seg.id]: true } 
+      isGeneratingCode: { ...analysis.isGeneratingCode, [seg.id]: true },
+      generatedCodes: { ...analysis.generatedCodes, [seg.id]: '' }
     });
     
     try {
       let fullCode = '';
-      const stream = streamRemotionCode(seg.animation);
+      const stream = streamRemotionCode(seg.animation, customInstruction);
       
       for await (const chunk of stream) {
         fullCode += chunk;

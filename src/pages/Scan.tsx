@@ -11,6 +11,7 @@ export default function Scan() {
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isScanning, setIsScanning] = useState(true);
+  const [scanSuccess, setScanSuccess] = useState(false);
 
   useEffect(() => {
     const requestNativePermissions = async () => {
@@ -44,7 +45,6 @@ export default function Scan() {
     if (!isScanning) return;
     
     if (result) {
-      setIsScanning(false);
       let dParam = null;
       try {
         const url = new URL(result);
@@ -56,10 +56,21 @@ export default function Scan() {
       }
 
       if (dParam) {
-        navigate(`/share?d=${dParam}`);
+        setIsScanning(false);
+        setScanSuccess(true);
+        
+        // Freeze the camera frame
+        const videoEl = document.querySelector('video');
+        if (videoEl) {
+          videoEl.pause();
+        }
+
+        // Navigate after a short delay to show the frozen frame and success state
+        setTimeout(() => {
+          navigate(`/share?d=${dParam}`);
+        }, 800);
       } else {
         setError('无效的赛事分析二维码');
-        setIsScanning(true);
       }
     }
   };
@@ -125,16 +136,29 @@ export default function Scan() {
             />
             
             {/* Scanning overlay */}
-            <div className="absolute inset-0 pointer-events-none border-[40px] border-black/50" />
+            <div className={`absolute inset-0 pointer-events-none border-[40px] transition-colors duration-300 ${scanSuccess ? 'border-emerald-500/30' : 'border-black/50'}`} />
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <div className="w-48 h-48 border-2 border-emerald-500 rounded-xl relative">
-                <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-emerald-400 -mt-0.5 -ml-0.5" />
-                <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-emerald-400 -mt-0.5 -mr-0.5" />
-                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-emerald-400 -mb-0.5 -ml-0.5" />
-                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-emerald-400 -mb-0.5 -mr-0.5" />
+              <div className={`w-48 h-48 border-2 rounded-xl relative transition-colors duration-300 ${scanSuccess ? 'border-emerald-400 bg-emerald-500/20' : 'border-emerald-500'}`}>
+                <div className={`absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 -mt-0.5 -ml-0.5 transition-colors duration-300 ${scanSuccess ? 'border-white' : 'border-emerald-400'}`} />
+                <div className={`absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 -mt-0.5 -mr-0.5 transition-colors duration-300 ${scanSuccess ? 'border-white' : 'border-emerald-400'}`} />
+                <div className={`absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 -mb-0.5 -ml-0.5 transition-colors duration-300 ${scanSuccess ? 'border-white' : 'border-emerald-400'}`} />
+                <div className={`absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 -mb-0.5 -mr-0.5 transition-colors duration-300 ${scanSuccess ? 'border-white' : 'border-emerald-400'}`} />
                 
                 {/* Scanning line animation */}
-                <div className="absolute top-0 left-0 w-full h-0.5 bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.5)] animate-[scan_2s_ease-in-out_infinite]" />
+                {!scanSuccess && (
+                  <div className="absolute top-0 left-0 w-full h-0.5 bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.5)] animate-[scan_2s_ease-in-out_infinite]" />
+                )}
+
+                {/* Success Checkmark */}
+                {scanSuccess && (
+                  <div className="absolute inset-0 flex items-center justify-center animate-in zoom-in duration-300">
+                    <div className="bg-emerald-500 rounded-full p-3 shadow-[0_0_20px_rgba(16,185,129,0.5)]">
+                      <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -143,6 +167,10 @@ export default function Scan() {
         {error ? (
           <div className="mt-8 text-red-400 text-sm font-mono bg-red-500/10 px-4 py-2 rounded-lg border border-red-500/20 max-w-sm w-full text-center">
             {error}
+          </div>
+        ) : scanSuccess ? (
+          <div className="mt-8 text-emerald-400 text-sm font-mono text-center animate-in fade-in slide-in-from-bottom-2">
+            扫描成功！正在跳转...
           </div>
         ) : (
           <div className="mt-8 text-zinc-400 text-sm font-mono text-center">

@@ -8,12 +8,15 @@ import { saveHistory, getHistory, saveResumeState, getResumeState, clearResumeSt
 import { getSavedMatches, SavedMatchRecord } from '@/src/services/savedMatches';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
-import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate, FileText, ChevronDown, ChevronUp, Video } from 'lucide-react';
+import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate, FileText, ChevronDown, ChevronUp, Video, Download, Loader2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
 import { parseAgentStream, AgentResult } from '@/src/services/agentParser';
 import { RemotionPlayer } from '@/src/components/RemotionPlayer';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
+import { compressToEncodedURIComponent } from 'lz-string';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 export default function MatchDetail() {
   const { id } = useParams();
@@ -103,6 +106,77 @@ export default function MatchDetail() {
   const [showJson, setShowJson] = useState(false);
   const [savedResumeState, setSavedResumeState] = useState<any | null>(null);
   const [showShare, setShowShare] = useState(false);
+  const [animationInstructions, setAnimationInstructions] = useState<Record<string, string>>({});
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportPDF = async () => {
+    if (!match || isExporting) return;
+    setIsExporting(true);
+
+    try {
+      // Temporarily expand all segments for PDF
+      const originalCollapsed = { ...activeAnalysis?.collapsedSegments };
+      const allExpanded: Record<string, boolean> = {};
+      if (activeAnalysis?.parsedStream) {
+        activeAnalysis.parsedStream.segments.forEach(seg => {
+          allExpanded[seg.id] = false;
+        });
+        contextSetCollapsedSegments(match.id, allExpanded);
+      }
+
+      // Wait for DOM to update
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const element = document.getElementById('analysis-content');
+      if (!element) throw new Error('Content element not found');
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#000000',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      
+      const ratio = pdfWidth / imgWidth;
+      const scaledHeight = imgHeight * ratio;
+      
+      let heightLeft = scaledHeight;
+      let position = 0;
+      
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, scaledHeight);
+      heightLeft -= pdfHeight;
+      
+      while (heightLeft > 0) {
+        position = heightLeft - scaledHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, scaledHeight);
+        heightLeft -= pdfHeight;
+      }
+      
+      pdf.save(`${match.homeTeam.name}_vs_${match.awayTeam.name}_分析报告.pdf`);
+
+      // Restore collapsed state
+      if (activeAnalysis?.parsedStream) {
+        contextSetCollapsedSegments(match.id, originalCollapsed);
+      }
+    } catch (error) {
+      console.error('Failed to export PDF:', error);
+      alert('导出 PDF 失败，请重试');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Sync with active analysis
   useEffect(() => {
@@ -360,6 +434,22 @@ export default function MatchDetail() {
     contextStartAnalysis(match, dataToAnalyze, includeAnimations, isResume);
   };
 
+  const shareData = React.useMemo(() => {
+    if (!editableData) return '';
+    try {
+      const data = JSON.parse(editableData);
+      const jsonString = JSON.stringify({
+        v: 3, // Increment version to indicate lz-string compression
+        d: data
+      });
+      return compressToEncodedURIComponent(jsonString);
+    } catch (e) {
+      return '';
+    }
+  }, [editableData]);
+
+  const shareUrl = `${window.location.origin}/share?d=${shareData}`;
+
   if (!match) return <div className="p-8 text-white text-center">Match not found</div>;
 
   // Determine what to render based on activeAnalysis or history
@@ -413,21 +503,6 @@ export default function MatchDetail() {
     error
   } = displayData;
 
-  const shareData = React.useMemo(() => {
-    if (!editableData) return '';
-    try {
-      const data = JSON.parse(editableData);
-      return btoa(encodeURIComponent(JSON.stringify({
-        v: 2,
-        d: data
-      })));
-    } catch (e) {
-      return '';
-    }
-  }, [editableData]);
-
-  const shareUrl = `${window.location.origin}/share?d=${shareData}`;
-
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col pb-20">
       {/* Mobile App Header */}
@@ -457,14 +532,25 @@ export default function MatchDetail() {
         </div>
         <div className="flex items-center gap-2">
           {step === 'result' && (
-            <Button 
-              variant="outline" 
-              size="icon"
-              onClick={() => setStep('selection')}
-              className="h-8 w-8 rounded-full border-zinc-500/50 text-zinc-400 hover:bg-zinc-800 transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </Button>
+            <>
+              <Button 
+                variant="outline" 
+                size="icon"
+                onClick={handleExportPDF}
+                disabled={isExporting}
+                className="h-8 w-8 rounded-full border-blue-500/50 text-blue-400 hover:bg-blue-500/10 transition-colors"
+              >
+                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="icon"
+                onClick={() => setStep('selection')}
+                className="h-8 w-8 rounded-full border-zinc-500/50 text-zinc-400 hover:bg-zinc-800 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+            </>
           )}
           <Button 
             variant="outline" 
@@ -610,7 +696,7 @@ export default function MatchDetail() {
       )}
 
       {(step === 'analyzing' || step === 'result') && (
-        <main className="flex-1 flex flex-col gap-4 p-4 max-w-md mx-auto w-full">
+        <main id="analysis-content" className="flex-1 flex flex-col gap-4 p-4 max-w-md mx-auto w-full">
           
           {isAnalyzing && !parsedStream?.segments?.length && (
             <div className="flex items-center justify-center p-8 text-emerald-500 animate-pulse font-mono text-xs">
@@ -729,6 +815,30 @@ export default function MatchDetail() {
                             <pre>{generatedCodes[seg.id]}</pre>
                           </div>
                         </details>
+                      )}
+
+                      {/* Retry / Custom Instruction */}
+                      {!isGeneratingCode[seg.id] && (
+                        <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              placeholder="输入指令重新生成动画 (如: 把颜色换成红色)"
+                              value={animationInstructions[seg.id] || ''}
+                              onChange={(e) => setAnimationInstructions(prev => ({ ...prev, [seg.id]: e.target.value }))}
+                              className="flex-1 bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => contextGenerateCode(match.id, seg, animationInstructions[seg.id])}
+                              disabled={isGeneratingCode[seg.id]}
+                              className="h-7 text-[10px] gap-1 border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+                            >
+                              <RefreshCw className="w-3 h-3" /> 重新生成
+                            </Button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

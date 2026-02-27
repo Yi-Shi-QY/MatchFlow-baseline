@@ -21,6 +21,7 @@ export default function Home() {
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { activeAnalyses, clearActiveAnalysis } = useAnalysis();
+  const prevAnalysesRef = React.useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     const loadData = async () => {
@@ -41,6 +42,25 @@ export default function Home() {
     };
     loadData();
   }, []);
+
+  // Re-fetch history when an active analysis completes
+  useEffect(() => {
+    let newlyCompleted = false;
+    const currentAnalyzing: Record<string, boolean> = {};
+    
+    Object.values(activeAnalyses).forEach(a => {
+      currentAnalyzing[a.matchId] = a.isAnalyzing;
+      if (prevAnalysesRef.current[a.matchId] && !a.isAnalyzing && a.analysis) {
+        newlyCompleted = true;
+      }
+    });
+
+    prevAnalysesRef.current = currentAnalyzing;
+
+    if (newlyCompleted) {
+      getHistory().then(setHistory);
+    }
+  }, [activeAnalyses]);
 
   const handleClearHistory = () => {
     clearHistory();
