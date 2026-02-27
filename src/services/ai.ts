@@ -4,15 +4,21 @@ import { REMOTION_RULES } from "./remotionRules";
 import { availableSkills, executeSkill } from "../skills";
 
 let aiInstance: GoogleGenAI | null = null;
+let currentApiKey: string | null = null;
 
 export function getGeminiAI(): GoogleGenAI {
-  if (!aiInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not defined");
-    }
-    aiInstance = new GoogleGenAI({ apiKey });
+  const settings = getSettings();
+  const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not defined");
   }
+
+  if (!aiInstance || currentApiKey !== apiKey) {
+    aiInstance = new GoogleGenAI({ apiKey });
+    currentApiKey = apiKey;
+  }
+  
   return aiInstance;
 }
 
@@ -183,7 +189,11 @@ export async function testConnection(settings: any): Promise<boolean> {
       }
       return true;
     } else {
-      const ai = getGeminiAI();
+      const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("GEMINI_API_KEY is not defined");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       await ai.models.generateContent({
         model: settings.model || "gemini-3-flash-preview",
         contents: "Hello",

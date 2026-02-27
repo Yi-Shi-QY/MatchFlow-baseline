@@ -2,6 +2,7 @@ export interface AppSettings {
   provider: 'gemini' | 'deepseek';
   model: string;
   deepseekApiKey: string;
+  geminiApiKey: string;
   matchDataServerUrl: string;
   matchDataApiKey: string;
 }
@@ -12,6 +13,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'gemini',
   model: 'gemini-3-flash-preview',
   deepseekApiKey: '',
+  geminiApiKey: '',
   matchDataServerUrl: '',
   matchDataApiKey: '',
 };
