@@ -37,6 +37,14 @@ CREATE TABLE matches (
     --   "shotsOnTarget": { "home": 4, "away": 2 }
     -- }
     match_stats JSONB DEFAULT '{}'::jsonb,
+
+    -- Stores odds data
+    -- Structure example:
+    -- {
+    --   "had": { "h": 1.5, "d": 3.5, "a": 5.0 },
+    --   "hhad": { "h": 2.0, "d": 3.2, "a": 3.5, "goalline": -1 }
+    -- }
+    odds JSONB DEFAULT '{}'::jsonb,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

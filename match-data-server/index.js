@@ -21,7 +21,8 @@ const MOCK_MATCHES = [
     status: 'upcoming',
     homeTeam: { id: 'h1', name: 'Arsenal', logo: 'https://media.api-sports.io/football/teams/42.png', form: ['W', 'W', 'W', 'W', 'W'] },
     awayTeam: { id: 'a1', name: 'Chelsea', logo: 'https://media.api-sports.io/football/teams/49.png', form: ['L', 'D', 'W', 'L', 'D'] },
-    stats: { possession: { home: 55, away: 45 }, shots: { home: 12, away: 8 }, shotsOnTarget: { home: 5, away: 3 } }
+    stats: { possession: { home: 55, away: 45 }, shots: { home: 12, away: 8 }, shotsOnTarget: { home: 5, away: 3 } },
+    odds: { had: { h: 1.8, d: 3.5, a: 4.2 }, hhad: { h: 3.2, d: 3.4, a: 2.1, goalline: -1 } }
   },
   {
     id: 'm2',
@@ -31,7 +32,8 @@ const MOCK_MATCHES = [
     homeTeam: { id: 'h2', name: 'Real Madrid', logo: 'https://media.api-sports.io/football/teams/541.png', form: ['W', 'D', 'W', 'W', 'L'] },
     awayTeam: { id: 'a2', name: 'Barcelona', logo: 'https://media.api-sports.io/football/teams/529.png', form: ['W', 'W', 'W', 'W', 'W'] },
     score: { home: 1, away: 1 },
-    stats: { possession: { home: 48, away: 52 }, shots: { home: 15, away: 14 }, shotsOnTarget: { home: 6, away: 7 } }
+    stats: { possession: { home: 48, away: 52 }, shots: { home: 15, away: 14 }, shotsOnTarget: { home: 6, away: 7 } },
+    odds: { had: { h: 2.1, d: 3.3, a: 3.1 }, hhad: { h: 4.0, d: 3.8, a: 1.7, goalline: -1 } }
   },
   {
     id: 'm3',
@@ -41,7 +43,8 @@ const MOCK_MATCHES = [
     homeTeam: { id: 'h3', name: 'Juventus', logo: 'https://media.api-sports.io/football/teams/496.png', form: ['D', 'D', 'W', 'L', 'W'] },
     awayTeam: { id: 'a3', name: 'AC Milan', logo: 'https://media.api-sports.io/football/teams/489.png', form: ['W', 'L', 'W', 'W', 'D'] },
     score: { home: 2, away: 0 },
-    stats: { possession: { home: 40, away: 60 }, shots: { home: 8, away: 18 }, shotsOnTarget: { home: 4, away: 5 } }
+    stats: { possession: { home: 40, away: 60 }, shots: { home: 8, away: 18 }, shotsOnTarget: { home: 4, away: 5 } },
+    odds: { had: { h: 1.9, d: 3.2, a: 3.8 }, hhad: { h: 3.5, d: 3.3, a: 1.9, goalline: -1 } }
   }
 ];
 
@@ -113,6 +116,7 @@ app.get('/matches', authenticate, async (req, res) => {
         status: row.status,
         score: { home: row.home_score, away: row.away_score },
         stats: row.match_stats,
+        odds: row.odds,
         homeTeam: {
           id: row.homeTeam.id,
           name: row.homeTeam.name,
@@ -182,6 +186,7 @@ app.get('/matches/live', authenticate, async (req, res) => {
         status: row.status,
         score: { home: row.home_score, away: row.away_score },
         stats: row.match_stats,
+        odds: row.odds,
         homeTeam: {
           id: row.homeTeam.id,
           name: row.homeTeam.name,
@@ -301,6 +306,7 @@ app.get('/teams/:id/matches', authenticate, async (req, res) => {
         status: row.status,
         score: { home: row.home_score, away: row.away_score },
         stats: row.match_stats,
+        odds: row.odds,
         homeTeam: {
           id: row.homeTeam.id,
           name: row.homeTeam.name,
@@ -359,6 +365,7 @@ app.get('/matches/:id', authenticate, async (req, res) => {
         status: row.status,
         score: { home: row.home_score, away: row.away_score },
         stats: row.match_stats,
+        odds: row.odds,
         homeTeam: {
           id: row.homeTeam.id,
           name: row.homeTeam.name,
@@ -464,7 +471,7 @@ app.post('/admin/matches', authenticate, async (req, res) => {
   const { 
     id, league_name, match_date, status, 
     home_team_id, away_team_id, 
-    home_score, away_score, match_stats 
+    home_score, away_score, match_stats, odds
   } = req.body;
 
   if (!league_name || !match_date || !home_team_id || !away_team_id) {
@@ -479,39 +486,42 @@ app.post('/admin/matches', authenticate, async (req, res) => {
         INSERT INTO matches (
           id, league_name, match_date, status, 
           home_team_id, away_team_id, 
-          home_score, away_score, match_stats
+          home_score, away_score, match_stats, odds
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (id) DO UPDATE SET
           league_name = EXCLUDED.league_name,
           match_date = EXCLUDED.match_date,
           status = EXCLUDED.status,
           home_score = EXCLUDED.home_score,
           away_score = EXCLUDED.away_score,
-          match_stats = EXCLUDED.match_stats
+          match_stats = EXCLUDED.match_stats,
+          odds = EXCLUDED.odds
         RETURNING *
       `;
       params = [
         id, league_name, match_date, status || 'upcoming',
         home_team_id, away_team_id,
         home_score || 0, away_score || 0,
-        JSON.stringify(match_stats || {})
+        JSON.stringify(match_stats || {}),
+        JSON.stringify(odds || {})
       ];
     } else {
       query = `
         INSERT INTO matches (
           league_name, match_date, status, 
           home_team_id, away_team_id, 
-          home_score, away_score, match_stats
+          home_score, away_score, match_stats, odds
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
       `;
       params = [
         league_name, match_date, status || 'upcoming',
         home_team_id, away_team_id,
         home_score || 0, away_score || 0,
-        JSON.stringify(match_stats || {})
+        JSON.stringify(match_stats || {}),
+        JSON.stringify(odds || {})
       ];
     }
 
@@ -526,7 +536,7 @@ app.post('/admin/matches', authenticate, async (req, res) => {
 // 6. Update Match Score/Status
 app.put('/admin/matches/:id/score', authenticate, async (req, res) => {
   const { id } = req.params;
-  const { status, home_score, away_score, match_stats } = req.body;
+  const { status, home_score, away_score, match_stats, odds } = req.body;
 
   if (db.isConnected()) {
     try {
@@ -535,8 +545,9 @@ app.put('/admin/matches/:id/score', authenticate, async (req, res) => {
           status = COALESCE($1, status),
           home_score = COALESCE($2, home_score),
           away_score = COALESCE($3, away_score),
-          match_stats = COALESCE($4, match_stats)
-        WHERE id = $5
+          match_stats = COALESCE($4, match_stats),
+          odds = COALESCE($5, odds)
+        WHERE id = $6
         RETURNING *
       `;
       const params = [
@@ -544,6 +555,7 @@ app.put('/admin/matches/:id/score', authenticate, async (req, res) => {
         home_score, 
         away_score, 
         match_stats ? JSON.stringify(match_stats) : null, 
+        odds ? JSON.stringify(odds) : null,
         id
       ];
       
@@ -572,6 +584,7 @@ app.put('/admin/matches/:id/score', authenticate, async (req, res) => {
     };
   }
   if (match_stats) MOCK_MATCHES[index].stats = match_stats;
+  if (odds) MOCK_MATCHES[index].odds = odds;
 
   res.json({ data: MOCK_MATCHES[index] });
 });
