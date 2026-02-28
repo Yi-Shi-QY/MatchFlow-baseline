@@ -1,16 +1,15 @@
-import { calculatorSkill } from "./calculator";
-import { plannerSkill } from "./planner";
-import { AgentSkill } from "./types";
+import { calculatorDeclaration, executeCalculator } from "./calculator";
+import { selectPlanTemplateDeclaration, executeSelectPlanTemplate } from "./planner";
 
-export const availableSkills: AgentSkill[] = [calculatorSkill, plannerSkill];
+export const availableSkills = [calculatorDeclaration, selectPlanTemplateDeclaration];
 
-export async function executeSkill(toolName: string, args: any): Promise<any> {
-  for (const skill of availableSkills) {
-    if (skill.tools?.some(t => t.name === toolName)) {
-      if (skill.execute) {
-        return await skill.execute(toolName, args);
-      }
-    }
+export async function executeSkill(name: string, args: any): Promise<any> {
+  switch (name) {
+    case "calculator":
+      return await executeCalculator(args);
+    case "select_plan_template":
+      return await executeSelectPlanTemplate(args);
+    default:
+      throw new Error(`Unknown skill: ${name}`);
   }
-  throw new Error(`Unknown tool: ${toolName}`);
 }

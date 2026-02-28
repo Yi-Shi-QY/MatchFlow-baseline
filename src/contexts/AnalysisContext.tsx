@@ -170,9 +170,16 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     if (isResume) {
       const savedState = await getResumeState(matchId);
       if (savedState) {
-        initialThoughts = savedState.thoughts;
-        initialParsedStream = parseAgentStream(initialThoughts);
         resumeStateData = savedState.state;
+        
+        // Reconstruct initialThoughts from completed segments to discard any partial segment
+        if (resumeStateData && resumeStateData.segmentResults) {
+          initialThoughts = resumeStateData.segmentResults.map(r => r.content).join('');
+        } else {
+          initialThoughts = savedState.thoughts;
+        }
+
+        initialParsedStream = parseAgentStream(initialThoughts);
         
         initialParsedStream.segments.forEach(seg => {
           if (seg.isThoughtComplete) {

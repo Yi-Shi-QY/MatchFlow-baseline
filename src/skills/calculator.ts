@@ -1,7 +1,7 @@
 import { FunctionDeclaration, Type } from "@google/genai";
 import { AgentSkill } from "./types";
 
-const calculatorDeclaration: FunctionDeclaration = {
+export const calculatorDeclaration: FunctionDeclaration = {
   name: "calculator",
   description: "A simple calculator to perform basic arithmetic operations (add, subtract, multiply, divide). Use this when you need to calculate precise numbers, such as goal differences, expected goals totals, or win probabilities.",
   parameters: {
@@ -24,7 +24,7 @@ const calculatorDeclaration: FunctionDeclaration = {
   },
 };
 
-async function executeCalculator(args: { operation: string; a: number; b: number }): Promise<number> {
+export async function executeCalculator(args: { operation: string; a: number; b: number }): Promise<number> {
   const { operation, a, b } = args;
   switch (operation) {
     case "add":
@@ -61,6 +61,6 @@ Call the \`calculator\` tool with the following parameters:
     if (toolName === "calculator") {
       return await executeCalculator(args);
     }
-    throw new Error(\`Tool \${toolName} not found in calculator skill\`);
+    throw new Error(`Tool ${toolName} not found in calculator skill`);
   }
 };

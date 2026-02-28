@@ -1,6 +1,8 @@
 import React from 'react';
 import * as remotion from 'remotion';
 import { transform } from 'sucrase';
+import * as lucide from 'lucide-react';
+import { TEMPLATES } from '@/src/services/remotion/templates';
 
 export function evaluateRemotionCode(code: string): React.ComponentType<any> | null {
   try {
@@ -22,6 +24,12 @@ export function evaluateRemotionCode(code: string): React.ComponentType<any> | n
       }
       if (moduleName === 'remotion') {
         return { ...remotion, __esModule: true };
+      }
+      if (moduleName === 'lucide-react') {
+        return { ...lucide, __esModule: true };
+      }
+      if (moduleName === '@/src/services/remotion/templates') {
+        return { TEMPLATES, __esModule: true };
       }
       console.warn(`Module ${moduleName} not found in dynamic evaluation`);
       return {};

@@ -31,10 +31,7 @@ export const en: AnalysisPromptTemplate = {
        - Use a formal, analytical tone suitable for a written report.
        - Use bullet points, bold text, and clear structure.
        - Focus on data-driven insights.`,
-    animation: `**MANDATORY ANIMATION:**
-       - You MUST generate the <animation> block if "Animation Needed" is YES.
-       - Populate the JSON with REAL numbers from the Match Data.
-       - Do NOT use placeholder values like 0.`,
+    animation: ``,
     focus: "Do NOT output any other segments. Focus ONLY on this one."
   },
   outputFormat: {
@@ -57,10 +54,7 @@ export const zh: AnalysisPromptTemplate = {
        - 使用适合书面报告的正式、分析性语气。
        - 使用项目符号、粗体文本和清晰的结构。
        - 专注于数据驱动的见解。`,
-    animation: `**强制动画生成：**
-       - 如果“需要动画”为 YES，你必须生成 <animation> 块。
-       - 使用比赛数据中的真实数字填充 JSON。
-       - 不要使用像 0 这样的占位符。`,
+    animation: ``,
     focus: "不要输出任何其他片段。只关注这一个。"
   },
   outputFormat: {

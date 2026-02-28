@@ -1,11 +1,13 @@
 export interface AgentContext {
   matchData?: any;
   segmentPlan?: any;
-  animationSchema?: string;
   previousAnalysis?: string;
   analysisText?: string;
+  narrationText?: string;
   language?: 'en' | 'zh';
   enableAutonomousPlanning?: boolean;
+  includeAnimations?: boolean;
+  animationSchema?: string;
 }
 
 export interface AgentConfig {
