@@ -32,8 +32,8 @@ export const en: AnalysisPromptTemplate = {
        - Use bullet points, bold text, and clear structure.
        - Focus on data-driven insights.`,
     animation: `**MANDATORY ANIMATION:**
-       - You MUST generate the <animation> block if "Animation Needed" is YES.
-       - Populate the JSON with REAL numbers from the Match Data.
+       - If "Animation Needed" is YES, you MUST call the \`get_animation_template\` tool with the specified animation type, title, and team names.
+       - After getting the template from the tool, populate the JSON with REAL numbers from the Match Data and output the <animation> block.
        - Do NOT use placeholder values like 0.`,
     focus: "Do NOT output any other segments. Focus ONLY on this one."
   },
@@ -58,8 +58,8 @@ export const zh: AnalysisPromptTemplate = {
        - 使用项目符号、粗体文本和清晰的结构。
        - 专注于数据驱动的见解。`,
     animation: `**强制动画生成：**
-       - 如果“需要动画”为 YES，你必须生成 <animation> 块。
-       - 使用比赛数据中的真实数字填充 JSON。
+       - 如果“需要动画”为 YES，你必须调用 \`get_animation_template\` 工具，传入指定的动画类型、标题和球队名称。
+       - 从工具获取模板后，使用比赛数据中的真实数字填充 JSON，并输出 <animation> 块。
        - 不要使用像 0 这样的占位符。`,
     focus: "不要输出任何其他片段。只关注这一个。"
   },

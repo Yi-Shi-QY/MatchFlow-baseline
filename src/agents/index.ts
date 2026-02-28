@@ -3,7 +3,8 @@ import { statsAgent } from './stats';
 import { tacticalAgent } from './tactical';
 import { predictionAgent } from './prediction';
 import { generalAgent } from './general';
-import { plannerAgent } from './planner';
+import { plannerTemplateAgent } from './planner_template';
+import { plannerAutonomousAgent } from './planner_autonomous';
 import { tagAgent } from './tag';
 import { summaryAgent } from './summary';
 import { oddsAgent } from './odds';
@@ -15,7 +16,8 @@ export const agents: Record<string, AgentConfig> = {
   tactical: tacticalAgent,
   prediction: predictionAgent,
   general: generalAgent,
-  planner: plannerAgent,
+  planner_template: plannerTemplateAgent,
+  planner_autonomous: plannerAutonomousAgent,
   tag: tagAgent,
   summary: summaryAgent,
   odds: oddsAgent

@@ -6,7 +6,7 @@ export function getPromptTemplate(language?: 'en' | 'zh'): AnalysisPromptTemplat
 }
 
 export function buildAnalysisPrompt(rolePrompt: string, context: AgentContext) {
-  const { segmentPlan, matchData, animationSchema, language, previousAnalysis } = context;
+  const { segmentPlan, matchData, language, previousAnalysis } = context;
   const template = getPromptTemplate(language);
   
   // Override role prompt if provided, otherwise use default from template
@@ -57,7 +57,6 @@ export function buildAnalysisPrompt(rolePrompt: string, context: AgentContext) {
     <${template.outputFormat.thought}>
     (${language === 'zh' ? '你的专业报告。使用 Markdown 格式。' : 'Your professional report here. Use Markdown formatting.'})
     </${template.outputFormat.thought}>
-    ${segmentPlan.animationType !== 'none' ? animationSchema : ''}
 
     Match Data: ${JSON.stringify(matchData)}
   `;

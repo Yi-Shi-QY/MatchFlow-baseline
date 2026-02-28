@@ -241,23 +241,11 @@ function convertToOpenAITools(declarations: any[]) {
   });
 }
 
-async function* streamAIRequest(prompt: string, includeReasoning: boolean = false, allowedSkills?: string[]) {
+async function* streamAIRequest(prompt: string, includeReasoning: boolean = false, allowedSkills?: string[], stopAfterToolCall: boolean = false) {
   const settings = getSettings();
   const activeSkills = allowedSkills 
     ? availableSkills.filter(s => allowedSkills.includes(s.name))
     : [];
-
-  const activeTools = activeSkills.flatMap(s => s.tools || []);
-
-  let systemPromptAdditions = "";
-  if (activeSkills.length > 0) {
-    systemPromptAdditions += "\n\n# Available Skills\nYou have access to the following skills. Follow their instructions carefully:\n\n";
-    for (const skill of activeSkills) {
-      systemPromptAdditions += `## Skill: ${skill.name}\n${skill.description}\n\n### Instructions\n${skill.instructions}\n\n`;
-    }
-  }
-
-  const finalPrompt = prompt + systemPromptAdditions;
 
   if (settings.provider === "deepseek") {
     if (!settings.deepseekApiKey) {
@@ -265,8 +253,8 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
       return;
     }
 
-    let messages: any[] = [{ role: "user", content: finalPrompt }];
-    const openAITools = convertToOpenAITools(activeTools);
+    let messages: any[] = [{ role: "user", content: prompt }];
+    const openAITools = convertToOpenAITools(activeSkills);
     let useTools = settings.model !== 'deepseek-reasoner';
 
     if (!useTools && openAITools.length > 0) {
@@ -375,6 +363,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
               const args = JSON.parse(tc.function.arguments);
               const result = await executeSkill(tc.function.name, args);
               yield `[系统] 工具调用结果: ${JSON.stringify(result)}\n`;
+              if (stopAfterToolCall) return;
               messages.push({
                 role: "tool",
                 tool_call_id: tc.id,
@@ -382,6 +371,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
               });
             } catch (err: any) {
               yield `\n[错误] 工具调用失败: ${err.message}\n`;
+              if (stopAfterToolCall) return;
               messages.push({
                 role: "tool",
                 tool_call_id: tc.id,
@@ -399,6 +389,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
               yield `\n[系统] 正在调用工具 (R1模式): ${tc.name}...\n`;
               const result = await executeSkill(tc.name, tc.arguments);
               yield `[系统] 工具调用结果: ${JSON.stringify(result)}\n`;
+              if (stopAfterToolCall) return;
               
               messages.push({
                 role: "assistant",
@@ -411,6 +402,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
               continue; // Make another API call with the result
             } catch (err: any) {
               yield `\n[错误] 工具调用失败: ${err.message}\n`;
+              if (stopAfterToolCall) return;
               messages.push({
                 role: "assistant",
                 content: currentContent
@@ -439,8 +431,8 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
     const ai = getGeminiAI();
     try {
       const config: any = {};
-      if (activeTools.length > 0) {
-        config.tools = [{ functionDeclarations: activeTools }];
+      if (activeSkills.length > 0) {
+        config.tools = [{ functionDeclarations: activeSkills }];
       }
 
       const chat = ai.chats.create({
@@ -448,7 +440,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
         config,
       });
 
-      let response = await chat.sendMessageStream({ message: finalPrompt });
+      let response = await chat.sendMessageStream({ message: prompt });
 
       for await (const chunk of response) {
         const c = chunk as GenerateContentResponse;
@@ -462,6 +454,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
               yield `\n[系统] 正在调用工具: ${call.name}...\n`;
               const result = await executeSkill(call.name, call.args);
               yield `[系统] 工具调用结果: ${JSON.stringify(result)}\n`;
+              if (stopAfterToolCall) return;
               
               // Send the result back to the model
               const followUpResponse = await chat.sendMessageStream({
@@ -481,6 +474,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
               }
             } catch (err: any) {
               yield `\n[错误] 工具调用失败: ${err.message}\n`;
+              if (stopAfterToolCall) return;
               // Send error back to model
               const errorResponse = await chat.sendMessageStream({
                 message: [{
@@ -510,19 +504,38 @@ import { getAgent } from "../agents";
 
 export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
   const settings = getSettings();
-  const agent = getAgent('planner');
+  const agentId = settings.enableAutonomousPlanning ? 'planner_autonomous' : 'planner_template';
+  const agent = getAgent(agentId);
+  
   const prompt = agent.systemPrompt({ 
     matchData, 
-    language: settings.language,
-    enableAutonomousPlanning: settings.enableAutonomousPlanning 
+    language: settings.language
   });
 
   let responseText = "";
   
   try {
-    const stream = streamAIRequest(prompt, false, agent.skills);
+    // Only stop after tool call if we are using the template planner (which uses tools)
+    const stopAfterToolCall = agentId === 'planner_template';
+    const stream = streamAIRequest(prompt, false, agent.skills, stopAfterToolCall);
+    
     for await (const chunk of stream) {
       responseText += chunk;
+    }
+
+    // Check if there's a tool result before cleaning up (only for template planner)
+    if (stopAfterToolCall) {
+      const toolResultMatch = responseText.match(/\[系统\] 工具调用结果: (.*)\n?/);
+      if (toolResultMatch) {
+        try {
+          const parsedResult = JSON.parse(toolResultMatch[1].trim());
+          if (Array.isArray(parsedResult)) {
+            return parsedResult;
+          }
+        } catch (e) {
+          console.error("Failed to parse tool result", e);
+        }
+      }
     }
 
     // Clean up system logs and markdown formatting

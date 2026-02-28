@@ -1,7 +1,6 @@
 export interface AgentContext {
   matchData?: any;
   segmentPlan?: any;
-  animationSchema?: string;
   previousAnalysis?: string;
   analysisText?: string;
   language?: 'en' | 'zh';
