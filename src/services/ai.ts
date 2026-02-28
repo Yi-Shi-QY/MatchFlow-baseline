@@ -1,6 +1,8 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { getSettings } from "./settings";
 import { REMOTION_RULES } from "./remotionRules";
+import { NARRATION_RULES } from "./remotion/narrationRules";
+import { ANIMATION_RULES } from "./remotion/animationRules";
 import { availableSkills, executeSkill } from "../skills";
 
 let aiInstance: GoogleGenAI | null = null;
@@ -564,6 +566,15 @@ export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
 }
 
 export async function* streamAnalysisAgent(matchData: any, segmentPlan: any, previousAnalysis: string = "") {
+  const settings = getSettings();
+  const agent = getAgent(segmentPlan.agentType || 'general');
+  // No animation schema passed here anymore
+  const prompt = agent.systemPrompt({ matchData, segmentPlan, language: settings.language, previousAnalysis });
+
+  yield* streamAIRequest(prompt, false, agent.skills);
+}
+
+export async function* streamAnimationAgent(matchData: any, segmentPlan: any, analysisText: string) {
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
   
@@ -600,8 +611,14 @@ export async function* streamAnalysisAgent(matchData: any, segmentPlan: any, pre
   }
 
   const settings = getSettings();
-  const agent = getAgent(segmentPlan.agentType || 'general');
-  const prompt = agent.systemPrompt({ matchData, segmentPlan, animationSchema, language: settings.language, previousAnalysis });
+  const agent = getAgent('animation');
+  const prompt = agent.systemPrompt({ 
+    matchData, 
+    segmentPlan, 
+    analysisText, 
+    animationSchema, 
+    language: settings.language 
+  });
 
   yield* streamAIRequest(prompt, false, agent.skills);
 }
@@ -692,16 +709,36 @@ export async function* streamAgentThoughts(
       yield chunk;
     }
 
+    // A.1 Run Animation Agent (if needed)
+    if (includeAnimations && segment.animationType && segment.animationType !== 'none') {
+      // Extract clean text for the animation agent (remove XML tags if any, though analysis agent should output markdown inside tags)
+      // The prompt for analysis agent asks for <thought> tags, so we might want to extract content inside <thought> if present, 
+      // or just pass the whole thing. The animation agent is robust enough to handle the whole thing.
+      
+      const animationStream = streamAnimationAgent(matchData, segment, segmentText);
+      let animationOutput = "";
+      for await (const chunk of animationStream) {
+        animationOutput += chunk;
+        yield chunk;
+      }
+      
+      // Append animation output to the text tracking variables
+      segmentText += "\n" + animationOutput;
+      fullAnalysisText += "\n" + animationOutput;
+    }
+
     // B. Run Tag Generation Agent (After analysis is done for this segment)
     // We need to extract the pure text content from the segment output to feed the tag agent
     // Simple regex to strip tags for the prompt
     const cleanText = segmentText.replace(/<[^>]+>/g, ' ').trim();
     const tagStream = streamTagAgent(cleanText);
     for await (const chunk of tagStream) {
+      segmentText += chunk;
       yield chunk;
     }
 
     yield "\n";
+    segmentText += "\n";
     fullAnalysisText += "\n";
     
     segmentResults.push({ agentId, title: segment.title, content: segmentText });
@@ -743,18 +780,55 @@ export async function* streamRegenerateSegment(matchData: any, segmentIndex: num
 }
 
 export async function* streamRemotionCode(segmentData: any, customInstruction?: string) {
-  const prompt = `
-    ${REMOTION_RULES}
+  // 1. Yield Imports
+  yield `import React from 'react';\n`;
+  yield `import * as Lucide from 'lucide-react';\n`;
+  yield `import { TEMPLATES } from '@/src/services/remotion/templates';\n`;
+  yield `import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence } from 'remotion';\n\n`;
 
-    Create a Remotion component for the following scene data:
-    ${JSON.stringify(segmentData, null, 2)}
+  // 2. Generate Animation Component
+  const animationPrompt = `
+    ${ANIMATION_RULES}
     
-    ${customInstruction ? `\nUSER CUSTOM INSTRUCTION FOR THIS ANIMATION:\n${customInstruction}\nPlease follow this instruction carefully when generating the animation code.\n` : ''}
-
-    Remember: Return ONLY valid TSX code. No markdown formatting.
+    Create the DataVisualization component for the following data:
+    ${JSON.stringify(segmentData.data, null, 2)}
+    
+    ${customInstruction ? `\nUSER CUSTOM INSTRUCTION:\n${customInstruction}\n` : ''}
   `;
 
-  yield* streamAIRequest(prompt, false);
+  yield `// --- Animation Component ---\n`;
+  const animationStream = streamAIRequest(animationPrompt, false);
+  for await (const chunk of animationStream) {
+    yield chunk;
+  }
+  yield `\n\n`;
+
+  // 3. Generate Narration Component
+  const narrationPrompt = `
+    ${NARRATION_RULES}
+    
+    Create the NarrationOverlay component for the following content:
+    Title: "${segmentData.title}"
+    Narration: "${segmentData.narration}"
+  `;
+
+  yield `// --- Narration Component ---\n`;
+  const narrationStream = streamAIRequest(narrationPrompt, false);
+  for await (const chunk of narrationStream) {
+    yield chunk;
+  }
+  yield `\n\n`;
+
+  // 4. Yield Main Scene
+  yield `// --- Main Scene ---\n`;
+  yield `export default function Scene({ data, title, narration }) {\n`;
+  yield `  return (\n`;
+  yield `    <AbsoluteFill style={{ backgroundColor: '#09090b' }}>\n`;
+  yield `      <DataVisualization data={data} />\n`;
+  yield `      <NarrationOverlay title={title} narration={narration} />\n`;
+  yield `    </AbsoluteFill>\n`;
+  yield `  );\n`;
+  yield `}\n`;
 }
 
 export async function* streamFixRemotionCode(segmentData: any, wrongCode: string, errors: string[]) {

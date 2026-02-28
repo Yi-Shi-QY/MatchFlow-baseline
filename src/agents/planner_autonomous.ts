@@ -11,11 +11,12 @@ The user has requested a custom analysis structure that doesn't fit standard tem
 **RULES:**
 1. **Logical Flow:** Overview -> Form -> Tactics/Stats -> Odds Analysis -> Key Factors -> Conclusion.
 2. **Segment Count:** 3 to 6 segments.
-3. **Animation Strategy:**
-   - **Recent Form:** MUST use "stats" animation.
-   - **Tactical/Stats:** MUST use "tactical" or "comparison" animation.
-   - **Odds Analysis:** MUST use "odds" animation.
-   - **Overview/Prediction:** Usually "none".
+3. **Animation Strategy (Strict Mapping):**
+   - If the segment focuses on **Recent Form / Team Stats**, set \`animationType\` to "stats".
+   - If the segment focuses on **Tactics / Lineups / Matchups**, set \`animationType\` to "tactical".
+   - If the segment focuses on **Odds / Market / Betting**, set \`animationType\` to "odds".
+   - For **Overview** or **Prediction**, set \`animationType\` to "none".
+   - Do NOT invent new animation types. Only use: "stats", "tactical", "odds", "none".
 4. **Context Strategy (Controllable Redundancy):** Assign a "contextMode" ('build_upon', 'independent', or 'compare').
 
 **OUTPUT FORMAT:**
@@ -35,11 +36,12 @@ Match Data: ${matchData}
 **规则：**
 1. **逻辑流程：** 概览 -> 近期状态 -> 战术/数据 -> 赔率分析 -> 关键因素 -> 结论。
 2. **部分数量：** 3 到 6 个部分。
-3. **动画策略：**
-   - **近期状态：** 必须使用 "stats" 动画。
-   - **战术/数据：** 必须使用 "tactical" 或 "comparison" 动画。
-   - **赔率分析：** 必须使用 "odds" 动画。
-   - **概览/预测：** 通常为 "none"。
+3. **动画策略（严格映射）：**
+   - 如果部分关注 **近期状态 / 球队数据**，设置 \`animationType\` 为 "stats"。
+   - 如果部分关注 **战术 / 阵容 / 对位**，设置 \`animationType\` 为 "tactical"。
+   - 如果部分关注 **赔率 / 市场 / 投注**，设置 \`animationType\` 为 "odds"。
+   - 对于 **概览** 或 **预测**，设置 \`animationType\` 为 "none"。
+   - 不要发明新的动画类型。仅使用："stats", "tactical", "odds", "none"。
 4. **上下文策略（可控冗余）：** 分配一个 "contextMode" ('build_upon', 'independent', 或 'compare')。
 
 **输出格式：**

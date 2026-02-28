@@ -17,7 +17,7 @@ The AI workflow is divided into three main phases, orchestrated by `streamAgentT
 ### Phase 1: Planning (The Director)
 Before any analysis begins, a **Planner Agent** evaluates the available match data (basic info, stats, odds, custom info) and creates a structured "Analysis Plan".
 - **Planning Modes (Switched via Settings):**
-  - **Template Mode (Default - `planner_template.ts`):** It evaluates the data richness and uses the `select_plan_template` skill to fetch a predefined, optimized plan template (e.g., `basic`, `standard`, `odds_focused`, `comprehensive`). This ensures high reliability and consistency. It is optimized for speed by stopping generation immediately after the tool call.
+  - **Template Mode (Default - `planner_template.ts`):** It evaluates the data richness and uses the `select_plan_template` skill to fetch a predefined, optimized plan template (e.g., `basic`, `standard`, `odds_focused`, `comprehensive`). This ensures high reliability and consistency. For reasoning models (like R1), it is optimized for speed by stopping generation immediately after the tool call. For native tool-calling models (V3/Gemini), it allows the model to complete the turn for better stability.
   - **Autonomous Mode (`planner_autonomous.ts`):** If the user enables "Autonomous Planning" in settings, this agent manually generates a custom plan from scratch using LLM reasoning.
 - **Input:** Raw match data JSON.
 - **Output:** A JSON array of segments (e.g., Overview -> Form -> Tactics -> Odds -> Prediction).
