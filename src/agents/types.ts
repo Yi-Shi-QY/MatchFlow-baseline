@@ -5,6 +5,7 @@ export interface AgentContext {
   analysisText?: string;
   language?: 'en' | 'zh';
   enableAutonomousPlanning?: boolean;
+  animationSchema?: string;
 }
 
 export interface AgentConfig {
