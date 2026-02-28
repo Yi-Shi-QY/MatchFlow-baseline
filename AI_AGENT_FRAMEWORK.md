@@ -15,10 +15,10 @@ The framework is designed to be:
 The AI workflow is divided into three main phases, orchestrated by `streamAgentThoughts` in `src/services/ai.ts`:
 
 ### Phase 1: Planning (The Director)
-Before any analysis begins, the **Planner Agent** evaluates the available match data (basic info, stats, odds, custom info) and creates a structured "Analysis Plan".
-- **Planning Modes:** The Planner operates in two modes:
-  - **Template Mode (Default):** It evaluates the data richness and uses the `select_plan_template` skill to fetch a predefined, optimized plan template (e.g., `basic`, `standard`, `odds_focused`, `comprehensive`). This ensures high reliability and consistency.
-  - **Autonomous Mode:** If the user requests a highly custom analysis that doesn't fit standard templates, the Planner falls back to generating a custom plan from scratch using LLM reasoning.
+Before any analysis begins, a **Planner Agent** evaluates the available match data (basic info, stats, odds, custom info) and creates a structured "Analysis Plan".
+- **Planning Modes (Switched via Settings):**
+  - **Template Mode (Default - `planner_template.ts`):** It evaluates the data richness and uses the `select_plan_template` skill to fetch a predefined, optimized plan template (e.g., `basic`, `standard`, `odds_focused`, `comprehensive`). This ensures high reliability and consistency. It is optimized for speed by stopping generation immediately after the tool call.
+  - **Autonomous Mode (`planner_autonomous.ts`):** If the user enables "Autonomous Planning" in settings, this agent manually generates a custom plan from scratch using LLM reasoning.
 - **Input:** Raw match data JSON.
 - **Output:** A JSON array of segments (e.g., Overview -> Form -> Tactics -> Odds -> Prediction).
 - **Logic:** It decides *which* agents to call, *what* animations to generate, and *how* context should be passed (`contextMode`).
@@ -54,7 +54,8 @@ export interface AgentConfig {
 ```
 
 ### 3.1. Orchestration Agents
-*   **Planner Agent (`planner.ts`)**: "Senior Football Analyst Director". Analyzes data richness and outputs a JSON array defining the structure of the analysis (3-6 segments).
+*   **Template Planner Agent (`planner_template.ts`)**: "Template Planner". Selects a predefined analysis plan template using tools. Optimized for speed.
+*   **Autonomous Planner Agent (`planner_autonomous.ts`)**: "Autonomous Planner". Manually plans the analysis structure for custom requests.
 *   **Tag Agent (`tag.ts`)**: "Tag Extractor". Reads a completed analysis segment and extracts 3-5 short, color-coded tags (e.g., "Weak Defense").
 *   **Summary Agent (`summary.ts`)**: "Summary Analyst". Reads the full analysis and generates the final JSON summary (probabilities, xG, final prediction).
 
