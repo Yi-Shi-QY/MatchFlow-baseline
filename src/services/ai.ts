@@ -515,11 +515,8 @@ export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
   let responseText = "";
   
   try {
-    // Only stop after tool call if we are using the template planner AND it's a reasoning model (like R1)
-    // For native tool-calling models (V3/Gemini), stopping immediately can be buggy.
-    const isReasoner = settings.model?.includes('reasoner') || settings.model?.includes('r1');
-    const stopAfterToolCall = agentId === 'planner_template' && isReasoner;
-    
+    // Only stop after tool call if we are using the template planner (which uses tools)
+    const stopAfterToolCall = agentId === 'planner_template';
     const stream = streamAIRequest(prompt, false, agent.skills, stopAfterToolCall);
     
     for await (const chunk of stream) {
