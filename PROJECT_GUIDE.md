@@ -29,8 +29,7 @@
 │   └── ...
 ├── src/                     # 前端核心代码 (React)
 │   ├── agents/              # [核心] AI Agent 定义与逻辑
-│   │   ├── planner_template.ts   # 模板规划 Agent
-│   │   ├── planner_autonomous.ts # 自主规划 Agent
+│   │   ├── planner.ts       # 规划 Agent
 │   │   ├── odds.ts          # 赔率分析 Agent
 │   │   ├── ...              # 其他 Agent (stats, tactical, etc.)
 │   │   └── index.ts         # Agent 注册表
@@ -62,8 +61,7 @@ MatchFlow 的核心是一个流式的多 Agent 协作系统，位于 `src/servic
 
 1.  **Planner (规划)**:
     *   **输入**: 原始比赛数据 (Match Data)。
-    *   **职责**: 分析数据丰富度，决定分析的“剧本”（Segment List）。
-    *   **模式**: 支持“模板规划”和“自主规划”两种模式，通过设置开关切换。模板模式已优化为工具调用后立即返回，响应极快。
+    *   **职责**: 分析数据丰富度，决定分析的“剧本”（Segment List）。例如，如果有赔率数据，它会安排一个 "Odds Analysis" 环节。
     *   **输出**: JSON 格式的分析计划数组。
 
 2.  **Analyst (执行分析)**:
@@ -110,7 +108,7 @@ MatchFlow 的核心是一个流式的多 Agent 协作系统，位于 `src/servic
 3.  **AI 分析层**:
     *   **新建 Agent**: 创建 `src/agents/weather.ts`，定义 Prompt (如何分析天气对比赛的影响)。
     *   **注册 Agent**: 在 `src/agents/index.ts` 中注册。
-    *   **更新 Planner**: 修改 `src/agents/planner_template.ts` 或 `src/agents/planner_autonomous.ts`，增加规则：`If weather data exists -> Add "Weather Impact" segment`。
+    *   **更新 Planner**: 修改 `src/agents/planner.ts`，增加规则：`If weather data exists -> Add "Weather Impact" segment`。
 
 4.  **UI 层**:
     *   (可选) 在 `MatchDetail.tsx` 中展示天气图标。

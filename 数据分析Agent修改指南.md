@@ -28,8 +28,7 @@ graph TD
 
 ### 核心文件说明
 
-- **`src/agents/`**: [核心] 包含所有 Agent 的定义。每个 Agent 都有自己的文件（如 `odds.ts`, `stats.ts`）。
-- **`src/services/ai.ts`**: 包含 AI 请求的核心逻辑、流式处理以及多 Agent 的编排逻辑（如 `streamAgentThoughts`）。
+- **`src/services/ai.ts`**: 包含所有 Agent 的 Prompt 定义和调用逻辑。
 - **`src/services/agentParser.ts`**: 负责解析 Agent 返回的流式文本（XML 风格标签），将其转换为结构化对象。
 
 ---
@@ -42,40 +41,72 @@ graph TD
 
 ### 步骤 1: 修改规划逻辑 (Planning)
 
-**目标**: 让规划 Agent 识别到新数据，并决定生成一个对应的分析片段。
+**目标**: 让规划 Agent 识别到赔率数据，并决定生成一个 "Odds Analysis" 的分析片段。
 
-MatchFlow 2.0 采用了双规划 Agent 模式：
-- **模板规划 (`src/agents/planner_template.ts`)**: 使用工具选择预设模板。
-- **自主规划 (`src/agents/planner_autonomous.ts`)**: 手动生成 JSON 计划。
+打开 `src/services/ai.ts`，找到 `generateAnalysisPlan` 函数。
 
-如果你添加了新数据（如天气），你需要：
-1. **更新模板规划**: 修改 `src/skills/planner/templates/` 下的模板定义，或者在 `planner_template.ts` 的 Prompt 中引导 AI 选择包含新数据的模板。
-2. **更新自主规划**: 修改 `src/agents/planner_autonomous.ts` 的 Prompt，添加规则：`If weather data exists -> Add "Weather Impact" segment`。
+1.  **修改 Prompt**: 在 `prompt` 变量中，明确告诉 AI 如果发现赔率数据该怎么做。
+
+```typescript
+// src/services/ai.ts
+
+const prompt = `
+  // ... 原有内容 ...
+  
+  **CRITICAL PLANNING RULES:**
+  1. **Analyze Data Richness:**
+     - If only basic info -> Plan 3 segments.
+     - If stats available -> Add "Tactical Analysis".
+     - [新增] If "odds" data is available -> You MUST add a segment with agentType: 'odds'.
+  
+  // ... 原有内容 ...
+  
+  **OUTPUT FORMAT:**
+  // ...
+  agentType: 'overview' | 'stats' | 'tactical' | 'prediction' | 'general' | 'odds' // [新增] 'odds' 类型
+`;
+```
 
 ### 步骤 2: 定义新的 Agent 角色 (Analysis)
 
-**目标**: 为新类型的片段定义专门的 Agent，赋予它特定的人设。
+**目标**: 为 `odds` 类型的片段定义专门的 Prompt，赋予它 "博彩分析师" 的人设。
 
-1. **创建 Agent 文件**: 在 `src/agents/` 下创建新文件（如 `weather.ts`）。
-2. **定义 Agent 配置**:
+打开 `src/services/ai.ts`，找到 `getAnalysisPrompt` 函数。
+
+1.  **添加 Case 分支**: 在 `switch (agentType)` 中添加 `case 'odds'`。
+
 ```typescript
-// src/agents/weather.ts
-import { AgentConfig } from './types';
+// src/services/ai.ts
 
-export const weatherAgent: AgentConfig = {
-  id: 'weather',
-  name: 'Weather Analyst',
-  description: 'Analyzes weather impact on the match.',
-  systemPrompt: ({ matchData, language }) => {
-    // 返回针对天气的 Prompt
-    return language === 'zh' ? '你是一位气象专家...' : 'You are a weather expert...';
+function getAnalysisPrompt(agentType: string, segmentPlan: any, matchData: any, animationSchema: string): string {
+  // ... basePrompt 定义保持不变 ...
+
+  switch (agentType) {
+    case 'overview':
+      return `You are a Lead Sports Journalist...`;
+    
+    // [新增] 赔率分析师角色
+    case 'odds':
+      return `
+        You are a Professional Betting Analyst. 
+        Your goal is to interpret the market sentiment based on the provided odds.
+        
+        **Specific Instructions:**
+        - Analyze the 'odds' object in the Match Data.
+        - Compare Home/Draw/Away odds to determine the implied probability.
+        - Identify if there is a clear favorite or if the market is split.
+        - Do NOT encourage gambling; focus on what the numbers say about the match expectation.
+        
+        ${basePrompt}
+      `;
+
+    case 'stats':
+      // ...
   }
-};
+}
 ```
-3. **注册 Agent**: 在 `src/agents/index.ts` 中导出并添加到 `agents` 对象中。
 
 ### 步骤 3: 验证解析器 (Parser)
-// ... 保持不变 ...
 
 通常情况下，**不需要修改** `src/services/agentParser.ts`。
 

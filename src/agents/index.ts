@@ -3,12 +3,10 @@ import { statsAgent } from './stats';
 import { tacticalAgent } from './tactical';
 import { predictionAgent } from './prediction';
 import { generalAgent } from './general';
-import { plannerTemplateAgent } from './planner_template';
-import { plannerAutonomousAgent } from './planner_autonomous';
+import { plannerAgent } from './planner';
 import { tagAgent } from './tag';
 import { summaryAgent } from './summary';
 import { oddsAgent } from './odds';
-import { animationAgent } from './animation';
 import { AgentConfig } from './types';
 
 export const agents: Record<string, AgentConfig> = {
@@ -17,12 +15,10 @@ export const agents: Record<string, AgentConfig> = {
   tactical: tacticalAgent,
   prediction: predictionAgent,
   general: generalAgent,
-  planner_template: plannerTemplateAgent,
-  planner_autonomous: plannerAutonomousAgent,
+  planner: plannerAgent,
   tag: tagAgent,
   summary: summaryAgent,
-  odds: oddsAgent,
-  animation: animationAgent
+  odds: oddsAgent
 };
 
 export function getAgent(id: string): AgentConfig {

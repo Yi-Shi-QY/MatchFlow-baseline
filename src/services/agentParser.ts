@@ -1,5 +1,3 @@
-import { extractJson } from "../utils/json";
-
 export interface AgentTag {
   label: string;
   team: 'home' | 'away' | 'neutral';
@@ -52,7 +50,10 @@ export function parseAgentStream(text: string): AgentResult {
     if (tagsMatches[i]) {
       const tagsContent = tagsMatches[i][1].trim();
       if (tagsContent && tagsMatches[i][0].endsWith('</tags>')) {
-        tags = extractJson(tagsContent) || [];
+        try {
+          const cleanJson = tagsContent.replace(/```json/g, '').replace(/```/g, '').trim();
+          tags = JSON.parse(cleanJson);
+        } catch (e) {}
       }
     }
 
@@ -64,7 +65,12 @@ export function parseAgentStream(text: string): AgentResult {
       animContent = animationMatches[i][1].trim();
       animComplete = animationMatches[i][0].endsWith('</animation>');
       if (animComplete) {
-        animationObj = extractJson(animContent);
+        try {
+          const cleanJson = animContent.replace(/```json/g, '').replace(/```/g, '').trim();
+          animationObj = JSON.parse(cleanJson);
+        } catch (e) {
+          // JSON parse failed, might be incomplete or malformed
+        }
       }
     }
 
@@ -84,7 +90,10 @@ export function parseAgentStream(text: string): AgentResult {
     summaryJson = summaryMatch[1].trim();
     const summaryComplete = summaryMatch[0].endsWith('</summary>');
     if (summaryComplete) {
-      summary = extractJson(summaryJson);
+      try {
+        const cleanJson = summaryJson.replace(/```json/g, '').replace(/```/g, '').trim();
+        summary = JSON.parse(cleanJson);
+      } catch (e) {}
     }
     isComplete = summaryComplete;
   }
