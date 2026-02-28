@@ -44,8 +44,15 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       const settings = getSettings();
       if (!settings.enableBackgroundMode) return;
 
-      const permission = await LocalNotifications.checkPermissions();
-      if (permission.display !== 'granted') return;
+      let permission = await LocalNotifications.checkPermissions();
+      if (permission.display !== 'granted') {
+        // Only try to request if background mode was just enabled or if we are analyzing
+        const analyzingMatches = Object.values(activeAnalyses).filter(a => a.isAnalyzing);
+        if (analyzingMatches.length > 0) {
+          permission = await LocalNotifications.requestPermissions();
+        }
+        if (permission.display !== 'granted') return;
+      }
 
       // Ensure channel exists on Android
       if (Capacitor.getPlatform() === 'android') {
@@ -69,18 +76,22 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         const lastSegment = segments[segments.length - 1];
         const status = lastSegment ? (lastSegment.title || 'Processing...') : 'Starting...';
         
-        await LocalNotifications.schedule({
-          notifications: [{
-            id: 1001,
-            title: `MatchFlow: Analyzing ${analyzingMatches.length} Match(es)`,
-            body: `${matchNames}\n${status}`,
-            ongoing: true,
-            autoCancel: false,
-            channelId: 'analysis-status',
-            smallIcon: 'ic_stat_name', // Standard Capacitor icon name
-            schedule: { at: new Date(Date.now() + 100) }
-          }]
-        });
+        try {
+          await LocalNotifications.schedule({
+            notifications: [{
+              id: 1001,
+              title: `MatchFlow: Analyzing ${analyzingMatches.length} Match(es)`,
+              body: `${matchNames}\n${status}`,
+              ongoing: true,
+              autoCancel: false,
+              channelId: 'analysis-status',
+              // Removed smallIcon as it might not exist in native resources
+              schedule: { at: new Date(Date.now() + 100) }
+            }]
+          });
+        } catch (err) {
+          console.error('Failed to schedule notification', err);
+        }
       } else {
         // Cancel notification if no analysis is running
         try {

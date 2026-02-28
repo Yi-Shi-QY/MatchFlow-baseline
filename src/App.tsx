@@ -12,6 +12,9 @@ import Scan from './pages/Scan';
 import Settings from './pages/Settings';
 import { AnalysisProvider } from './contexts/AnalysisContext';
 import { App as CapacitorApp } from '@capacitor/app';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { Capacitor } from '@capacitor/core';
+import { getSettings } from './services/settings';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -53,6 +56,19 @@ function AppRoutes() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const checkAndRequestPermissions = async () => {
+      if (Capacitor.isNativePlatform()) {
+        const settings = getSettings();
+        if (settings.enableBackgroundMode) {
+          const permission = await LocalNotifications.checkPermissions();
+          if (permission.display !== 'granted') {
+            await LocalNotifications.requestPermissions();
+          }
+        }
+      }
+    };
+    checkAndRequestPermissions();
+
     // Handle hardware back button on Android
     const backButtonListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
       if (canGoBack) {

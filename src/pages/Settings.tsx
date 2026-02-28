@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell, Send } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
@@ -33,8 +33,17 @@ export default function Settings() {
   const [isBehaviorCollapsed, setIsBehaviorCollapsed] = useState(true);
   const [isAiConfigCollapsed, setIsAiConfigCollapsed] = useState(true);
   const [isDataSourceCollapsed, setIsDataSourceCollapsed] = useState(true);
+  const [notificationPermission, setNotificationPermission] = useState<string>('unknown');
 
   useEffect(() => {
+    const checkPermission = async () => {
+      if (Capacitor.isNativePlatform()) {
+        const status = await LocalNotifications.checkPermissions();
+        setNotificationPermission(status.display);
+      }
+    };
+    checkPermission();
+
     const loadedSettings = getSettings();
     setLocalSettings(loadedSettings);
     // Sync i18n language with settings
@@ -190,18 +199,75 @@ export default function Settings() {
                       onClick={async () => {
                         const newValue = !settings.enableBackgroundMode;
                         if (newValue && Capacitor.isNativePlatform()) {
-                          const permission = await LocalNotifications.requestPermissions();
-                          if (permission.display !== 'granted') {
-                            alert(settings.language === 'zh' ? '请授予通知权限以启用后台模式' : 'Please grant notification permission to enable background mode');
-                            return;
+                          try {
+                            const permission = await LocalNotifications.requestPermissions();
+                            console.log('Permission request result:', permission);
+                            if (permission.display !== 'granted') {
+                              alert(settings.language === 'zh' ? '请授予通知权限以启用后台模式' : 'Please grant notification permission to enable background mode');
+                              return;
+                            }
+                          } catch (err) {
+                            console.error('Failed to request permissions', err);
+                            alert(settings.language === 'zh' ? '请求权限失败，请在系统设置中手动开启' : 'Failed to request permission, please enable in system settings');
                           }
                         }
-                        setLocalSettings({...settings, enableBackgroundMode: newValue});
+                        const newSettings = {...settings, enableBackgroundMode: newValue};
+                        setLocalSettings(newSettings);
+                        saveSettings(newSettings); // Make it live
                       }}
                     >
                       <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${settings.enableBackgroundMode ? 'translate-x-4' : 'translate-x-0'}`} />
                     </div>
                   </div>
+
+                  {settings.enableBackgroundMode && (
+                    <div className="pt-2 space-y-2">
+                      <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/30 rounded-lg border border-white/5">
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                          {settings.language === 'zh' ? '通知权限状态' : 'Notification Permission'}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                          notificationPermission === 'granted' ? 'text-emerald-500 bg-emerald-500/10' : 
+                          notificationPermission === 'denied' ? 'text-red-500 bg-red-500/10' : 
+                          'text-zinc-500 bg-zinc-500/10'
+                        }`}>
+                          {notificationPermission === 'granted' ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                          {notificationPermission === 'granted' ? (settings.language === 'zh' ? '已授权' : 'Granted') : 
+                           notificationPermission === 'denied' ? (settings.language === 'zh' ? '已拒绝' : 'Denied') : 
+                           (settings.language === 'zh' ? '未请求' : 'Not Requested')}
+                        </span>
+                      </div>
+                      <Button 
+                        onClick={async () => {
+                          if (Capacitor.isNativePlatform()) {
+                            const permission = await LocalNotifications.checkPermissions();
+                            if (permission.display !== 'granted') {
+                              await LocalNotifications.requestPermissions();
+                            }
+                          }
+                          
+                          await LocalNotifications.schedule({
+                            notifications: [{
+                              id: 999,
+                              title: settings.language === 'zh' ? '测试通知' : 'Test Notification',
+                              body: settings.language === 'zh' ? '如果您看到这条通知，说明后台通知功能正常。' : 'If you see this, background notifications are working.',
+                              schedule: { at: new Date(Date.now() + 1000) }
+                            }]
+                          });
+                          
+                          if (!Capacitor.isNativePlatform()) {
+                            alert(settings.language === 'zh' ? '测试通知已发送（仅限原生平台显示）' : 'Test notification scheduled (native only)');
+                          }
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-2 border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white"
+                      >
+                        <Send className="w-3 h-3" />
+                        {settings.language === 'zh' ? '发送测试通知' : 'Send Test Notification'}
+                      </Button>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border border-white/5">
                     <div className="space-y-0.5 pr-4">
