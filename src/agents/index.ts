@@ -8,6 +8,8 @@ import { plannerAutonomousAgent } from './planner_autonomous';
 import { tagAgent } from './tag';
 import { summaryAgent } from './summary';
 import { oddsAgent } from './odds';
+import { narrationAgent } from './narration';
+import { animationAgent } from './animation';
 import { AgentConfig } from './types';
 
 export const agents: Record<string, AgentConfig> = {
@@ -20,7 +22,9 @@ export const agents: Record<string, AgentConfig> = {
   planner_autonomous: plannerAutonomousAgent,
   tag: tagAgent,
   summary: summaryAgent,
-  odds: oddsAgent
+  odds: oddsAgent,
+  narration: narrationAgent,
+  animation: animationAgent
 };
 
 export function getAgent(id: string): AgentConfig {

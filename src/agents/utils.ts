@@ -6,7 +6,7 @@ export function getPromptTemplate(language?: 'en' | 'zh'): AnalysisPromptTemplat
 }
 
 export function buildAnalysisPrompt(rolePrompt: string, context: AgentContext) {
-  const { segmentPlan, matchData, language, previousAnalysis } = context;
+  const { segmentPlan, matchData, language, previousAnalysis, animationSchema } = context;
   const template = getPromptTemplate(language);
   
   // Override role prompt if provided, otherwise use default from template
@@ -38,6 +38,13 @@ export function buildAnalysisPrompt(rolePrompt: string, context: AgentContext) {
     `;
   }
 
+  const animationInstruction = animationSchema ? `
+    **${language === 'zh' ? '动画 JSON 架构' : 'ANIMATION JSON SCHEMA'}:**
+    ${animationSchema}
+    
+    ${language === 'zh' ? '注意：在 <animation> 块中，你必须为 "narration" 字段编写一段简短、引人入胜的解说词（配音稿）。这与书面报告不同，它是为视频演示准备的。' : 'NOTE: In the <animation> block, you MUST write a short, engaging voiceover script for the "narration" field. This is separate from the written report and is intended for the video presentation.'}
+  ` : '';
+
   return `
     ${role}
     ${previousContextStr}
@@ -49,8 +56,7 @@ export function buildAnalysisPrompt(rolePrompt: string, context: AgentContext) {
 
     **${language === 'zh' ? '指令' : 'INSTRUCTIONS'}:**
     1. ${template.instructions.report}
-    2. ${template.instructions.animation}
-    3. ${template.instructions.focus}
+    2. ${template.instructions.focus}
 
     **${language === 'zh' ? '输出格式' : 'OUTPUT FORMAT'}:**
     <${template.outputFormat.title}>${segmentPlan.title}</${template.outputFormat.title}>

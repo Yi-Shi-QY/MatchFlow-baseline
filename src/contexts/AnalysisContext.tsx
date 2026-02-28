@@ -44,6 +44,21 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       const settings = getSettings();
       if (!settings.enableBackgroundMode) return;
 
+      const permission = await LocalNotifications.checkPermissions();
+      if (permission.display !== 'granted') return;
+
+      // Ensure channel exists on Android
+      if (Capacitor.getPlatform() === 'android') {
+        await LocalNotifications.createChannel({
+          id: 'analysis-status',
+          name: 'Analysis Status',
+          description: 'Shows the progress of ongoing match analysis',
+          importance: 3, // High importance
+          visibility: 1, // Public
+          vibration: false,
+        });
+      }
+
       const analyzingMatches = Object.values(activeAnalyses).filter(a => a.isAnalyzing);
       
       if (analyzingMatches.length > 0) {
@@ -61,12 +76,13 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
             body: `${matchNames}\n${status}`,
             ongoing: true,
             autoCancel: false,
+            channelId: 'analysis-status',
+            smallIcon: 'ic_stat_name', // Standard Capacitor icon name
             schedule: { at: new Date(Date.now() + 100) }
           }]
         });
       } else {
         // Cancel notification if no analysis is running
-        // We only cancel if we might have scheduled one (id 1001)
         try {
           await LocalNotifications.cancel({ notifications: [{ id: 1001 }] });
         } catch (e) {

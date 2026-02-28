@@ -10,7 +10,7 @@ export const overviewAgent: AgentConfig = {
   id: 'overview',
   name: 'Lead Sports Journalist',
   description: 'Writes compelling introductions setting the stage, history, and stakes of the match.',
-  skills: ['get_animation_template'],
+  skills: [],
   contextDependencies: 'none',
   systemPrompt: (context) => {
     const role = context.language === 'zh' ? rolePrompts.zh : rolePrompts.en;

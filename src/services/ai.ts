@@ -502,39 +502,41 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
 
 import { getAgent } from "../agents";
 
-export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
+export async function generateAnalysisPlan(matchData: any, includeAnimations: boolean = true): Promise<any[]> {
   const settings = getSettings();
   const agentId = settings.enableAutonomousPlanning ? 'planner_autonomous' : 'planner_template';
   const agent = getAgent(agentId);
   
   const prompt = agent.systemPrompt({ 
     matchData, 
-    language: settings.language
+    language: settings.language,
+    includeAnimations
   });
 
   let responseText = "";
   
   try {
-    // Only stop after tool call if we are using the template planner (which uses tools)
-    const stopAfterToolCall = agentId === 'planner_template';
+    // Only stop after tool call if we are using the template planner AND it's a reasoning model (like R1)
+    // For native tool-calling models (V3/Gemini), stopping immediately can be buggy.
+    const isReasoner = settings.model?.includes('reasoner') || settings.model?.includes('r1');
+    const stopAfterToolCall = agentId === 'planner_template' && isReasoner;
+    
     const stream = streamAIRequest(prompt, false, agent.skills, stopAfterToolCall);
     
     for await (const chunk of stream) {
       responseText += chunk;
     }
 
-    // Check if there's a tool result before cleaning up (only for template planner)
-    if (stopAfterToolCall) {
-      const toolResultMatch = responseText.match(/\[系统\] 工具调用结果: (.*)\n?/);
-      if (toolResultMatch) {
-        try {
-          const parsedResult = JSON.parse(toolResultMatch[1].trim());
-          if (Array.isArray(parsedResult)) {
-            return parsedResult;
-          }
-        } catch (e) {
-          console.error("Failed to parse tool result", e);
+    // Check if there's a tool result before cleaning up
+    const toolResultMatch = responseText.match(/\[系统\] 工具调用结果: (.*)\n?/);
+    if (toolResultMatch) {
+      try {
+        const parsedResult = JSON.parse(toolResultMatch[1].trim());
+        if (Array.isArray(parsedResult)) {
+          return parsedResult;
         }
+      } catch (e) {
+        console.error("Failed to parse tool result", e);
       }
     }
 
@@ -548,6 +550,19 @@ export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
       .trim();
 
     // Find the first occurrence of a JSON array
+    const firstBracket = cleanText.indexOf('[');
+    const lastBracket = cleanText.lastIndexOf(']');
+    
+    if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+      const potentialJson = cleanText.substring(firstBracket, lastBracket + 1);
+      try {
+        return JSON.parse(potentialJson);
+      } catch (e) {
+        console.warn("Regex-based JSON extraction failed, trying fallback", e);
+      }
+    }
+
+    // Fallback to original regex if simple bracket search fails
     const jsonMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
@@ -566,44 +581,86 @@ export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
 export async function* streamAnalysisAgent(matchData: any, segmentPlan: any, previousAnalysis: string = "") {
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
+  const settings = getSettings();
   
-  let animationSchema = "";
-  
-  if (segmentPlan.animationType === 'odds') {
-    animationSchema = `
-    <animation>
-    {
-      "type": "odds",
-      "title": "${segmentPlan.title}",
-      "narration": "A short, engaging voiceover script for this animation.",
-      "data": {
-        "homeLabel": "${homeName}", "awayLabel": "${awayName}",
-        "had": { "h": 1.5, "d": 3.2, "a": 4.5 },
-        "hhad": { "h": 2.1, "d": 3.5, "a": 2.8, "goalline": -1 }
-      }
-    }
-    </animation>`;
-  } else {
-    animationSchema = `
-    <animation>
-    {
-      "type": "${segmentPlan.animationType}",
-      "title": "${segmentPlan.title}",
-      "narration": "A short, engaging voiceover script for this animation.",
-      "data": {
-        "homeLabel": "${homeName}", "awayLabel": "${awayName}",
-        "homeValue": 10, "awayValue": 5,
-        "metric": "REPLACE_WITH_REAL_METRIC"
-      }
-    }
-    </animation>`;
+  // 1. Specialist Analysis (Report only)
+  const specialistAgent = getAgent(segmentPlan.agentType || 'general');
+  const specialistPrompt = specialistAgent.systemPrompt({ 
+    matchData, 
+    segmentPlan, 
+    language: settings.language, 
+    previousAnalysis 
+  });
+
+  let fullOutput = "";
+  for await (const chunk of streamAIRequest(specialistPrompt, false, specialistAgent.skills)) {
+    fullOutput += chunk;
+    yield chunk;
   }
 
-  const settings = getSettings();
-  const agent = getAgent(segmentPlan.agentType || 'general');
-  const prompt = agent.systemPrompt({ matchData, segmentPlan, animationSchema, language: settings.language, previousAnalysis });
+  // Extract thought for narration/animation agents
+  const thoughtMatch = fullOutput.match(/<thought>([\s\S]*?)<\/thought>/);
+  const analysisText = thoughtMatch ? thoughtMatch[1].trim() : fullOutput;
 
-  yield* streamAIRequest(prompt, false, agent.skills);
+  // 2. Animation & Narration (if needed)
+  if (segmentPlan.animationType !== 'none') {
+    // Narration Agent
+    const narrationAgent = getAgent('narration');
+    const narrationPrompt = narrationAgent.systemPrompt({ 
+      analysisText, 
+      language: settings.language 
+    });
+
+    let narrationOutput = "";
+    for await (const chunk of streamAIRequest(narrationPrompt, false)) {
+      narrationOutput += chunk;
+      yield chunk;
+    }
+
+    const narrationMatch = narrationOutput.match(/<narration>([\s\S]*?)<\/narration>/);
+    const narrationText = narrationMatch ? narrationMatch[1].trim() : narrationOutput;
+
+    // Animation Agent
+    let animationSchema = "";
+    if (segmentPlan.animationType === 'odds') {
+      animationSchema = `
+      {
+        "type": "odds",
+        "title": "${segmentPlan.title}",
+        "narration": "${narrationText}",
+        "data": {
+          "homeLabel": "${homeName}", "awayLabel": "${awayName}",
+          "had": { "h": 1.5, "d": 3.2, "a": 4.5 },
+          "hhad": { "h": 2.1, "d": 3.5, "a": 2.8, "goalline": -1 }
+        }
+      }`;
+    } else {
+      animationSchema = `
+      {
+        "type": "${segmentPlan.animationType}",
+        "title": "${segmentPlan.title}",
+        "narration": "${narrationText}",
+        "data": {
+          "homeLabel": "${homeName}", "awayLabel": "${awayName}",
+          "homeValue": 10, "awayValue": 5,
+          "metric": "REPLACE_WITH_REAL_METRIC"
+        }
+      }`;
+    }
+
+    const animationAgent = getAgent('animation');
+    const animationPrompt = animationAgent.systemPrompt({
+      analysisText,
+      narrationText,
+      animationSchema,
+      language: settings.language,
+      matchData
+    });
+
+    for await (const chunk of streamAIRequest(animationPrompt, false)) {
+      yield chunk;
+    }
+  }
 }
 
 export async function* streamTagAgent(analysisText: string) {
@@ -649,7 +706,7 @@ export async function* streamAgentThoughts(
 
   if (!resumeState) {
     try {
-      plan = await generateAnalysisPlan(matchData);
+      plan = await generateAnalysisPlan(matchData, includeAnimations);
     } catch (e) {
       plan = [{ title: "Analysis", focus: "General analysis", animationType: "none", agentType: "general" }];
     }
@@ -663,9 +720,10 @@ export async function* streamAgentThoughts(
     }
 
     const segment = plan[i];
-    if (!includeAnimations) {
-      segment.animationType = 'none';
-    }
+    // We no longer need to override animationType here, as the planner already decided based on includeAnimations
+    // if (!includeAnimations) {
+    //   segment.animationType = 'none';
+    // }
 
     const agentId = segment.agentType || 'general';
     const agent = getAgent(agentId);

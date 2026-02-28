@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
 import { getSettings, saveSettings, AppSettings } from '@/src/services/settings';
 import { testConnection } from '@/src/services/ai';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { Capacitor } from '@capacitor/core';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -28,9 +30,9 @@ export default function Settings() {
   const [dataTestStatus, setDataTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [dataTestMessage, setDataTestMessage] = useState('');
 
-  const [isBehaviorCollapsed, setIsBehaviorCollapsed] = useState(false);
-  const [isAiConfigCollapsed, setIsAiConfigCollapsed] = useState(false);
-  const [isDataSourceCollapsed, setIsDataSourceCollapsed] = useState(false);
+  const [isBehaviorCollapsed, setIsBehaviorCollapsed] = useState(true);
+  const [isAiConfigCollapsed, setIsAiConfigCollapsed] = useState(true);
+  const [isDataSourceCollapsed, setIsDataSourceCollapsed] = useState(true);
 
   useEffect(() => {
     const loadedSettings = getSettings();
@@ -129,6 +131,15 @@ export default function Settings() {
             <SettingsIcon className="w-4 h-4 text-emerald-500" /> {t('settings.title')}
           </h1>
         </div>
+        <Button 
+          onClick={handleSave} 
+          size="sm"
+          className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3"
+          variant={saved ? "outline" : "default"}
+        >
+          <Save className="w-3.5 h-3.5" />
+          {saved ? t('settings.saved') : t('settings.save_all')}
+        </Button>
       </header>
 
       <main className="flex-1 p-4 max-w-md mx-auto w-full space-y-6">
@@ -176,7 +187,17 @@ export default function Settings() {
                     </div>
                     <div 
                       className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors shrink-0 ${settings.enableBackgroundMode ? 'bg-emerald-500' : 'bg-zinc-700'}`}
-                      onClick={() => setLocalSettings({...settings, enableBackgroundMode: !settings.enableBackgroundMode})}
+                      onClick={async () => {
+                        const newValue = !settings.enableBackgroundMode;
+                        if (newValue && Capacitor.isNativePlatform()) {
+                          const permission = await LocalNotifications.requestPermissions();
+                          if (permission.display !== 'granted') {
+                            alert(settings.language === 'zh' ? '请授予通知权限以启用后台模式' : 'Please grant notification permission to enable background mode');
+                            return;
+                          }
+                        }
+                        setLocalSettings({...settings, enableBackgroundMode: newValue});
+                      }}
                     >
                       <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${settings.enableBackgroundMode ? 'translate-x-4' : 'translate-x-0'}`} />
                     </div>
@@ -393,16 +414,7 @@ export default function Settings() {
               )}
             </div>
 
-            <div className="pt-6 border-t border-white/10">
-              <Button 
-                onClick={handleSave} 
-                className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                variant={saved ? "outline" : "default"}
-              >
-                <Save className="w-4 h-4" />
-                {saved ? t('settings.saved') : t('settings.save_all')}
-              </Button>
-            </div>
+
 
           </CardContent>
         </Card>

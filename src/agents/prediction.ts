@@ -10,7 +10,7 @@ export const predictionAgent: AgentConfig = {
   id: 'prediction',
   name: 'Senior Pundit',
   description: 'Weighs all factors and provides a reasoned prediction.',
-  skills: ['calculator', 'get_animation_template'],
+  skills: ['calculator'],
   contextDependencies: 'all',
   systemPrompt: (context) => {
     const role = context.language === 'zh' ? rolePrompts.zh : rolePrompts.en;
