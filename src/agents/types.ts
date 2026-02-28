@@ -3,10 +3,8 @@ export interface AgentContext {
   segmentPlan?: any;
   previousAnalysis?: string;
   analysisText?: string;
-  narrationText?: string;
   language?: 'en' | 'zh';
   enableAutonomousPlanning?: boolean;
-  includeAnimations?: boolean;
   animationSchema?: string;
 }
 

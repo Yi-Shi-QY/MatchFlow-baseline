@@ -44,28 +44,6 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       const settings = getSettings();
       if (!settings.enableBackgroundMode) return;
 
-      let permission = await LocalNotifications.checkPermissions();
-      if (permission.display !== 'granted') {
-        // Only try to request if background mode was just enabled or if we are analyzing
-        const analyzingMatches = Object.values(activeAnalyses).filter(a => a.isAnalyzing);
-        if (analyzingMatches.length > 0) {
-          permission = await LocalNotifications.requestPermissions();
-        }
-        if (permission.display !== 'granted') return;
-      }
-
-      // Ensure channel exists on Android
-      if (Capacitor.getPlatform() === 'android') {
-        await LocalNotifications.createChannel({
-          id: 'analysis-status',
-          name: 'Analysis Status',
-          description: 'Shows the progress of ongoing match analysis',
-          importance: 3, // High importance
-          visibility: 1, // Public
-          vibration: false,
-        });
-      }
-
       const analyzingMatches = Object.values(activeAnalyses).filter(a => a.isAnalyzing);
       
       if (analyzingMatches.length > 0) {
@@ -76,24 +54,19 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         const lastSegment = segments[segments.length - 1];
         const status = lastSegment ? (lastSegment.title || 'Processing...') : 'Starting...';
         
-        try {
-          await LocalNotifications.schedule({
-            notifications: [{
-              id: 1001,
-              title: `MatchFlow: Analyzing ${analyzingMatches.length} Match(es)`,
-              body: `${matchNames}\n${status}`,
-              ongoing: true,
-              autoCancel: false,
-              channelId: 'analysis-status',
-              // Removed smallIcon as it might not exist in native resources
-              schedule: { at: new Date(Date.now() + 100) }
-            }]
-          });
-        } catch (err) {
-          console.error('Failed to schedule notification', err);
-        }
+        await LocalNotifications.schedule({
+          notifications: [{
+            id: 1001,
+            title: `MatchFlow: Analyzing ${analyzingMatches.length} Match(es)`,
+            body: `${matchNames}\n${status}`,
+            ongoing: true,
+            autoCancel: false,
+            schedule: { at: new Date(Date.now() + 100) }
+          }]
+        });
       } else {
         // Cancel notification if no analysis is running
+        // We only cancel if we might have scheduled one (id 1001)
         try {
           await LocalNotifications.cancel({ notifications: [{ id: 1001 }] });
         } catch (e) {

@@ -27,26 +27,16 @@ export const selectPlanTemplateDeclaration: FunctionDeclaration = {
       language: {
         type: Type.STRING,
         description: "The language for the segment titles and focus descriptions: 'en' or 'zh'.",
-      },
-      includeAnimations: {
-        type: Type.BOOLEAN,
-        description: "Whether to include animations in the plan. If true, appropriate segments will have animationType set. If false, all will be 'none'.",
       }
     },
-    required: ["templateType", "language", "includeAnimations"],
+    required: ["templateType", "language"],
   },
 };
 
-export async function executeSelectPlanTemplate(args: { templateType: string; language: string; includeAnimations: boolean }): Promise<any[]> {
-  const { templateType, language, includeAnimations } = args;
+export async function executeSelectPlanTemplate(args: { templateType: string; language: string }): Promise<any[]> {
+  const { templateType, language } = args;
   const isZh = language === 'zh';
 
   const template = templates.find(t => t.id === templateType) || standardTemplate;
-  const segments = template.getSegments(isZh);
-
-  if (!includeAnimations) {
-    return segments.map(s => ({ ...s, animationType: 'none' }));
-  }
-
-  return segments;
+  return template.getSegments(isZh);
 }

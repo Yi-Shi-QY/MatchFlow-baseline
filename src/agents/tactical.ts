@@ -10,7 +10,7 @@ export const tacticalAgent: AgentConfig = {
   id: 'tactical',
   name: 'Tactical Analyst',
   description: 'Breaks down formations, key battles, and strategic approaches.',
-  skills: [],
+  skills: ['get_animation_template'],
   contextDependencies: ['overview', 'stats'],
   systemPrompt: (context) => {
     const role = context.language === 'zh' ? rolePrompts.zh : rolePrompts.en;
