@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const db = require('./db');
 const { PORT, API_KEY } = require('./src/config');
 const { createAuthenticateMiddleware } = require('./src/middlewares/authenticate');
@@ -8,6 +7,21 @@ const { registerMatchRoutes } = require('./src/routes/matchRoutes');
 const { registerAnalysisConfigRoutes } = require('./src/routes/analysisConfigRoutes');
 const { registerHubRoutes } = require('./src/routes/hubRoutes');
 const { registerAdminRoutes } = require('./src/routes/adminRoutes');
+
+let cors;
+try {
+  cors = require('cors');
+} catch (error) {
+  cors = () => (req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    return next();
+  };
+}
 
 const app = express();
 const authenticate = createAuthenticateMiddleware(API_KEY);
@@ -35,4 +49,3 @@ app.listen(PORT, () => {
     `Database URL: ${process.env.DATABASE_URL ? 'Configured' : 'Not Configured (Using Mock Data)'}`,
   );
 });
-
