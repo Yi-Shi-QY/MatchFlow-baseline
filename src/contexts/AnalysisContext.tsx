@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
 import { Match } from '@/src/data/matches';
 import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState } from '@/src/services/ai';
 import { saveHistory, saveResumeState, clearResumeState, getResumeState } from '@/src/services/history';
@@ -19,6 +19,8 @@ export interface ActiveAnalysis {
   isAnalyzing: boolean;
   analysis: MatchAnalysis | null;
   error: string | null;
+  planTotalSegments: number;
+  planCompletedSegments: number;
 }
 
 interface AnalysisContextType {
@@ -34,6 +36,8 @@ const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined
 
 export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [activeAnalyses, setActiveAnalyses] = useState<Record<string, ActiveAnalysis>>({});
+  const lastNotificationKeyRef = useRef<string>('');
+  const lastNotificationAtRef = useRef<number>(0);
 
   // Background Notification Effect
   useEffect(() => {
@@ -46,21 +50,67 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       const analyzingMatches = Object.values(activeAnalyses).filter(a => a.isAnalyzing);
       
       if (analyzingMatches.length > 0) {
-        const matchNames = analyzingMatches.map(a => `${a.match.homeTeam.name} vs ${a.match.awayTeam.name}`).join(', ');
-        // Get the latest phase/step for the first match as a summary
+        const additionalCount = Math.max(0, analyzingMatches.length - 1);
         const firstMatch = analyzingMatches[0];
         const segments = firstMatch.parsedStream?.segments || [];
         const lastSegment = segments[segments.length - 1];
-        const status = lastSegment ? (lastSegment.title || 'Processing...') : 'Starting...';
+        const language = settings.language === 'zh' ? 'zh' : 'en';
+        const completedFromSegments = segments.filter(seg => seg.isThoughtComplete).length;
+        const totalSegments =
+          firstMatch.planTotalSegments > 0
+            ? firstMatch.planTotalSegments
+            : Math.max(segments.length, completedFromSegments, 1);
+        const completedSegments = Math.min(
+          totalSegments,
+          Math.max(firstMatch.planCompletedSegments, completedFromSegments),
+        );
+        const progressPercent =
+          totalSegments > 0
+            ? Math.min(99, Math.floor((completedSegments / totalSegments) * 100))
+            : 0;
+        const status = lastSegment
+          ? (lastSegment.title || (language === 'zh' ? '处理中...' : 'Processing...'))
+          : (language === 'zh' ? '启动中...' : 'Starting...');
+
+        const title =
+          language === 'zh'
+            ? `MatchFlow 后台分析中 (${analyzingMatches.length} 场)`
+            : `MatchFlow Analysis Running (${analyzingMatches.length})`;
+        const bodyLines = [
+          `${firstMatch.match.homeTeam.name} vs ${firstMatch.match.awayTeam.name}`,
+          language === 'zh'
+            ? `进度：${completedSegments}/${totalSegments} (${progressPercent}%)`
+            : `Progress: ${completedSegments}/${totalSegments} (${progressPercent}%)`,
+          language === 'zh' ? `当前：${status}` : `Current: ${status}`,
+          additionalCount > 0
+            ? (language === 'zh' ? `另有 ${additionalCount} 场分析进行中` : `+${additionalCount} more matches in progress`)
+            : '',
+        ].filter(Boolean);
+        const body = bodyLines.join('\n');
+
+        const notificationKey = `${firstMatch.matchId}|${completedSegments}|${totalSegments}|${status}|${additionalCount}|${language}`;
+        const now = Date.now();
+        if (
+          notificationKey === lastNotificationKeyRef.current &&
+          now - lastNotificationAtRef.current < 1200
+        ) {
+          return;
+        }
+        lastNotificationKeyRef.current = notificationKey;
+        lastNotificationAtRef.current = now;
         
         await LocalNotifications.schedule({
           notifications: [{
             id: 1001,
-            title: `MatchFlow: Analyzing ${analyzingMatches.length} Match(es)`,
-            body: `${matchNames}\n${status}`,
+            title,
+            body,
             ongoing: true,
             autoCancel: false,
-            schedule: { at: new Date(Date.now() + 100) }
+            schedule: { at: new Date(Date.now() + 100) },
+            extra: {
+              matchId: firstMatch.matchId,
+              route: `/match/${firstMatch.matchId}`,
+            } as any,
           }]
         });
       } else {
@@ -68,6 +118,8 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         // We only cancel if we might have scheduled one (id 1001)
         try {
           await LocalNotifications.cancel({ notifications: [{ id: 1001 }] });
+          lastNotificationKeyRef.current = '';
+          lastNotificationAtRef.current = 0;
         } catch (e) {
           // Ignore error if notification doesn't exist
         }
@@ -145,7 +197,11 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       collapsedSegments: initialCollapsed,
       isAnalyzing: true,
       analysis: null,
-      error: null
+      error: null,
+      planTotalSegments: Array.isArray(resumeStateData?.plan) ? resumeStateData!.plan.length : 0,
+      planCompletedSegments: Array.isArray(resumeStateData?.completedSegmentIndices)
+        ? resumeStateData!.completedSegmentIndices.length
+        : 0,
     };
 
     setActiveAnalyses(prev => ({ ...prev, [matchId]: newAnalysis }));
@@ -175,6 +231,23 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         includeAnimations,
         resumeStateData,
         (state) => {
+          const planTotalSegments = Array.isArray(state.plan) ? state.plan.length : 0;
+          const planCompletedSegments = Array.isArray(state.completedSegmentIndices)
+            ? state.completedSegmentIndices.length
+            : 0;
+
+          setActiveAnalyses(prev => {
+            if (!prev[matchId]) return prev;
+            return {
+              ...prev,
+              [matchId]: {
+                ...prev[matchId],
+                planTotalSegments,
+                planCompletedSegments,
+              }
+            };
+          });
+
           latestResumeState = state;
           persistResumeSnapshot(true);
         }

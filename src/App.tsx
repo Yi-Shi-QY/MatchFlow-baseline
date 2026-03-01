@@ -78,8 +78,27 @@ function AppRoutes() {
       }
     });
 
+    const notificationTapListener = LocalNotifications.addListener(
+      'localNotificationActionPerformed',
+      (event: any) => {
+        const matchId = event?.notification?.extra?.matchId;
+        const route = event?.notification?.extra?.route;
+
+        if (typeof matchId === 'string' && matchId.trim().length > 0) {
+          navigate(`/match/${matchId}`);
+          return;
+        }
+        if (typeof route === 'string' && route.startsWith('/')) {
+          navigate(route);
+          return;
+        }
+        navigate('/');
+      }
+    );
+
     return () => {
       backButtonListener.then(listener => listener.remove());
+      notificationTapListener.then(listener => listener.remove());
     };
   }, [navigate]);
 
