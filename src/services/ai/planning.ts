@@ -1,21 +1,16 @@
+import type { HubEndpointHint } from "../extensions/types";
 import type { AppSettings } from "../settings";
 
 export type TemplateType = "basic" | "standard" | "odds_focused" | "comprehensive";
 
 export interface PlanningRouteDecision {
   mode: "template" | "autonomous";
-  templateType?: TemplateType;
+  templateType?: string;
   allowedAgentTypes: string[] | null;
   reason: string;
-}
-
-function isTemplateType(value: any): value is TemplateType {
-  return (
-    value === "basic" ||
-    value === "standard" ||
-    value === "odds_focused" ||
-    value === "comprehensive"
-  );
+  requiredAgentIds?: string[];
+  requiredSkillIds?: string[];
+  hub?: HubEndpointHint;
 }
 
 function hasNonEmptyObject(value: any): boolean {
@@ -72,34 +67,75 @@ function deriveSourceSignals(matchData: any) {
   };
 }
 
+function parsePlanningRequirements(planningContext: any) {
+  const requiredAgentIds = Array.isArray(planningContext?.requiredAgents)
+    ? planningContext.requiredAgents.filter((id: any) => typeof id === "string")
+    : [];
+  const requiredSkillIds = Array.isArray(planningContext?.requiredSkills)
+    ? planningContext.requiredSkills.filter((id: any) => typeof id === "string")
+    : [];
+  const hub: HubEndpointHint | undefined =
+    planningContext?.hub && typeof planningContext.hub === "object"
+      ? {
+          baseUrl:
+            typeof planningContext.hub.baseUrl === "string"
+              ? planningContext.hub.baseUrl
+              : undefined,
+          apiKey:
+            typeof planningContext.hub.apiKey === "string"
+              ? planningContext.hub.apiKey
+              : undefined,
+          autoInstall:
+            typeof planningContext.hub.autoInstall === "boolean"
+              ? planningContext.hub.autoInstall
+              : undefined,
+        }
+      : undefined;
+
+  return { requiredAgentIds, requiredSkillIds, hub };
+}
+
 export function resolvePlanningRoute(
   matchData: any,
   settings: Pick<AppSettings, "enableAutonomousPlanning">,
 ): PlanningRouteDecision {
+  const planningContext = matchData?.sourceContext?.planning || {};
+  const requirements = parsePlanningRequirements(planningContext);
+
   if (settings.enableAutonomousPlanning) {
     return {
       mode: "autonomous",
       allowedAgentTypes: null,
       reason: "settings.enableAutonomousPlanning=true",
+      ...requirements,
     };
   }
 
-  const forcedMode = matchData?.sourceContext?.planning?.mode;
+  const forcedMode = planningContext?.mode;
   if (forcedMode === "autonomous") {
     return {
       mode: "autonomous",
       allowedAgentTypes: null,
       reason: "sourceContext.planning.mode=autonomous",
+      ...requirements,
     };
   }
 
-  const forcedTemplate = matchData?.sourceContext?.planning?.templateType;
-  if (isTemplateType(forcedTemplate)) {
+  const forcedTemplateId =
+    typeof planningContext?.templateId === "string" && planningContext.templateId.trim().length > 0
+      ? planningContext.templateId.trim()
+      : typeof planningContext?.templateType === "string" &&
+          planningContext.templateType.trim().length > 0
+        ? planningContext.templateType.trim()
+        : null;
+
+  if (forcedTemplateId) {
     return {
       mode: "template",
-      templateType: forcedTemplate,
+      templateType: forcedTemplateId,
       allowedAgentTypes: null,
-      reason: `sourceContext.planning.templateType=${forcedTemplate}`,
+      reason: `sourceContext.planning.template=${forcedTemplateId}`,
+      ...requirements,
     };
   }
 
@@ -110,6 +146,7 @@ export function resolvePlanningRoute(
       mode: "autonomous",
       allowedAgentTypes: null,
       reason: "custom-only input",
+      ...requirements,
     };
   }
 
@@ -119,6 +156,7 @@ export function resolvePlanningRoute(
       templateType: "odds_focused",
       allowedAgentTypes: ["overview", "odds", "prediction", "general"],
       reason: "market-only input",
+      ...requirements,
     };
   }
 
@@ -128,6 +166,7 @@ export function resolvePlanningRoute(
       templateType: "comprehensive",
       allowedAgentTypes: null,
       reason: signals.status === "live" ? "live match with stats+odds" : "stats+odds",
+      ...requirements,
     };
   }
 
@@ -137,6 +176,7 @@ export function resolvePlanningRoute(
       templateType: "odds_focused",
       allowedAgentTypes: ["overview", "odds", "prediction", "general"],
       reason: "odds without stats",
+      ...requirements,
     };
   }
 
@@ -146,6 +186,7 @@ export function resolvePlanningRoute(
       templateType: "standard",
       allowedAgentTypes: null,
       reason: signals.status === "live" ? "live match with stats" : "stats only",
+      ...requirements,
     };
   }
 
@@ -154,6 +195,7 @@ export function resolvePlanningRoute(
     templateType: "basic",
     allowedAgentTypes: ["overview", "prediction", "general"],
     reason: "minimal data",
+    ...requirements,
   };
 }
 
@@ -214,7 +256,9 @@ export function normalizePlan(
     plan = buildFallbackPlan(language);
   }
 
-  const hasPrediction = plan.some((segment) => (segment?.agentType || "general") === "prediction");
+  const hasPrediction = plan.some(
+    (segment) => (segment?.agentType || "general") === "prediction",
+  );
   if (!hasPrediction) {
     if (language === "zh") {
       plan.push({
@@ -242,3 +286,4 @@ export function normalizePlan(
     contextMode: segment?.contextMode || "build_upon",
   }));
 }
+

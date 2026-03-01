@@ -1,5 +1,5 @@
 ﻿import { GenerateContentResponse } from "@google/genai";
-import { availableSkills, executeSkill } from "../../skills";
+import { executeSkill, getAvailableSkills } from "../../skills";
 import { getSettings } from "../settings";
 import { getGeminiAI } from "./geminiClient";
 import { resolveRuntimeModelRoute } from "./runtimeModel";
@@ -44,6 +44,7 @@ export async function* streamAIRequest(
   const runtimeModel = resolveRuntimeModelRoute(settings, agentId);
   const provider = runtimeModel.provider;
   const model = runtimeModel.model;
+  const availableSkills = getAvailableSkills();
   const activeSkills = allowedSkills
     ? availableSkills.filter((s) => allowedSkills.includes(s.name))
     : [];

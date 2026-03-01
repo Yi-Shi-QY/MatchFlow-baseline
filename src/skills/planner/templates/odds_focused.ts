@@ -2,9 +2,12 @@
 
 export const oddsFocusedTemplate: PlanTemplate = {
   id: 'odds_focused',
+  version: '1.0.0',
   name: 'Odds Focused Template',
   description: 'Focuses heavily on betting odds (Asian Handicap, European Odds).',
   rule: 'Use when the user explicitly asks for betting advice, odds analysis, or when odds data is the primary focus.',
+  requiredAgents: ['overview', 'stats', 'odds', 'prediction'],
+  requiredSkills: [],
   getSegments: (isZh: boolean) => [
     {
       title: isZh ? '比赛概览' : 'Match Overview',

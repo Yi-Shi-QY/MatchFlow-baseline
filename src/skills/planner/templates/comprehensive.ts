@@ -2,9 +2,12 @@
 
 export const comprehensiveTemplate: PlanTemplate = {
   id: 'comprehensive',
+  version: '1.0.0',
   name: 'Comprehensive Template',
   description: 'All segments including overview, stats, tactical, odds, and prediction.',
   rule: 'Use when the user wants a deep, detailed, and complete analysis covering all aspects of the match.',
+  requiredAgents: ['overview', 'stats', 'tactical', 'odds', 'prediction'],
+  requiredSkills: [],
   getSegments: (isZh: boolean) => [
     {
       title: isZh ? '比赛概览' : 'Match Overview',

@@ -4,25 +4,96 @@ import { standardTemplate } from "./templates/standard";
 import { oddsFocusedTemplate } from "./templates/odds_focused";
 import { comprehensiveTemplate } from "./templates/comprehensive";
 import { PlanTemplate } from "./types";
+import { listInstalledTemplateManifests } from "@/src/services/extensions/store";
+import { TemplateExtensionManifest } from "@/src/services/extensions/types";
 
-const templates: PlanTemplate[] = [
+const BUILTIN_TEMPLATES: PlanTemplate[] = [
   basicTemplate,
   standardTemplate,
   oddsFocusedTemplate,
-  comprehensiveTemplate
+  comprehensiveTemplate,
 ];
 
-const templateDescriptions = templates.map(t => `- ${t.id}: ${t.description} (${t.rule})`).join('\n');
+function manifestToTemplate(manifest: TemplateExtensionManifest): PlanTemplate {
+  return {
+    id: manifest.id,
+    version: manifest.version,
+    name: manifest.name,
+    description: manifest.description,
+    rule: manifest.rule,
+    requiredAgents: manifest.requiredAgents || [],
+    requiredSkills: manifest.requiredSkills || [],
+    getSegments: (isZh: boolean) =>
+      manifest.segments.map((segment) => ({
+        title: isZh ? segment.title.zh : segment.title.en,
+        focus: isZh ? segment.focus.zh : segment.focus.en,
+        animationType: segment.animationType || "none",
+        agentType: segment.agentType || "general",
+        contextMode: segment.contextMode || "build_upon",
+      })),
+  };
+}
+
+export function listPlanTemplates(): PlanTemplate[] {
+  const installed = listInstalledTemplateManifests().map(manifestToTemplate);
+  const merged = [...BUILTIN_TEMPLATES];
+  const seen = new Set(merged.map((template) => template.id));
+
+  installed.forEach((template) => {
+    if (seen.has(template.id)) return;
+    merged.push(template);
+    seen.add(template.id);
+  });
+
+  return merged;
+}
+
+export function getPlanTemplateById(id: string): PlanTemplate | null {
+  const templates = listPlanTemplates();
+  return templates.find((template) => template.id === id) || null;
+}
+
+export function hasPlanTemplate(id: string): boolean {
+  return !!getPlanTemplateById(id);
+}
+
+export function getTemplateRequirements(templateId: string): {
+  requiredAgents: string[];
+  requiredSkills: string[];
+} {
+  const template = getPlanTemplateById(templateId);
+  if (!template) {
+    return { requiredAgents: [], requiredSkills: [] };
+  }
+
+  const segmentAgents = template
+    .getSegments(false)
+    .map((segment) => segment?.agentType || "general")
+    .filter((agentId) => typeof agentId === "string" && agentId.trim().length > 0);
+
+  const requiredAgents = Array.from(
+    new Set([...(template.requiredAgents || []), ...segmentAgents]),
+  );
+
+  return {
+    requiredAgents,
+    requiredSkills: Array.from(new Set(template.requiredSkills || [])),
+  };
+}
+
+const templateDescriptions = BUILTIN_TEMPLATES
+  .map((template) => `- ${template.id}: ${template.description} (${template.rule})`)
+  .join("\n");
 
 export const selectPlanTemplateDeclaration: FunctionDeclaration = {
   name: "select_plan_template",
-  description: `Selects a predefined analysis plan template based on the available data richness and user requirements. Use this by default unless the user requests a completely custom analysis structure. Available templates:\n${templateDescriptions}`,
+  description: `Selects an analysis plan template based on data richness and user requirements. Use this by default unless the user requests a fully custom structure. Built-in templates:\n${templateDescriptions}\nAlso supports hub-installed templates by id.`,
   parameters: {
     type: Type.OBJECT,
     properties: {
       templateType: {
         type: Type.STRING,
-        description: `The type of template to use. Must be one of: ${templates.map(t => t.id).join(', ')}.`,
+        description: `Template id to use. Built-ins: ${BUILTIN_TEMPLATES.map((template) => template.id).join(", ")}. Hub-installed template ids are also accepted.`,
       },
       language: {
         type: Type.STRING,
@@ -41,7 +112,7 @@ export async function executeSelectPlanTemplate(args: { templateType: string; la
   const { templateType, language, includeAnimations } = args;
   const isZh = language === 'zh';
 
-  const template = templates.find(t => t.id === templateType) || standardTemplate;
+  const template = getPlanTemplateById(templateType) || standardTemplate;
   const segments = template.getSegments(isZh);
 
   if (!includeAnimations) {

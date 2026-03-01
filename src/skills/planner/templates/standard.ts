@@ -2,9 +2,12 @@
 
 export const standardTemplate: PlanTemplate = {
   id: 'standard',
+  version: '1.0.0',
   name: 'Standard Template',
   description: 'Includes overview, stats, tactical battle, and prediction.',
   rule: 'Use by default for a balanced analysis when standard match data is available.',
+  requiredAgents: ['overview', 'stats', 'tactical', 'prediction'],
+  requiredSkills: [],
   getSegments: (isZh: boolean) => [
     {
       title: isZh ? '比赛概览' : 'Match Overview',

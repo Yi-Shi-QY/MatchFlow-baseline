@@ -4,6 +4,13 @@ import { getAgent } from "../agents";
 import { buildFallbackPlan, normalizePlan, resolvePlanningRoute } from "./ai/planning";
 import { streamAIRequest } from "./ai/streamRequest";
 import { generateValidatedAnimationBlock } from "./ai/animationPipeline";
+import {
+  ensureAgentAvailable,
+  ensurePlanAgentRequirements,
+  ensureSkillAvailable,
+  ensureTemplateRequirements,
+} from "./extensions/runtime";
+import { HubEndpointHint } from "./extensions/types";
 export { testConnection } from "./ai/connection";
 export { getGeminiAI } from "./ai/geminiClient";
 export { streamAnimationAgent, streamFixAnimationParams } from "./ai/animationPipeline";
@@ -22,21 +29,68 @@ export interface MatchAnalysis {
   };
 }
 
+function resolvePlanningHubHint(
+  matchData: any,
+  routeHub?: HubEndpointHint,
+): HubEndpointHint | undefined {
+  const sourceHub = matchData?.sourceContext?.planning?.hub;
+  if (!routeHub && (!sourceHub || typeof sourceHub !== "object")) {
+    return undefined;
+  }
+
+  return {
+    baseUrl:
+      routeHub?.baseUrl ||
+      (typeof sourceHub?.baseUrl === "string" ? sourceHub.baseUrl : undefined),
+    apiKey:
+      routeHub?.apiKey ||
+      (typeof sourceHub?.apiKey === "string" ? sourceHub.apiKey : undefined),
+    autoInstall:
+      typeof routeHub?.autoInstall === "boolean"
+        ? routeHub.autoInstall
+        : typeof sourceHub?.autoInstall === "boolean"
+          ? sourceHub.autoInstall
+          : undefined,
+  };
+}
+
 export async function generateAnalysisPlan(matchData: any, includeAnimations: boolean = true): Promise<any[]> {
   const settings = getSettings();
   const route = resolvePlanningRoute(matchData, settings);
   const language = settings.language === "zh" ? "zh" : "en";
+  const hubHint = resolvePlanningHubHint(matchData, route.hub);
 
   try {
+    if (Array.isArray(route.requiredAgentIds) && route.requiredAgentIds.length > 0) {
+      for (const agentId of route.requiredAgentIds) {
+        await ensureAgentAvailable(agentId, hubHint);
+      }
+    }
+
+    if (Array.isArray(route.requiredSkillIds) && route.requiredSkillIds.length > 0) {
+      for (const skillId of route.requiredSkillIds) {
+        await ensureSkillAvailable(skillId, hubHint);
+      }
+    }
+
     // Deterministic path: route source/capabilities directly to a fixed template.
     if (route.mode === "template" && route.templateType) {
+      await ensureTemplateRequirements(route.templateType, hubHint);
+
       const directResult = await executeSkill("select_plan_template", {
         templateType: route.templateType,
         language,
         includeAnimations,
       });
       if (Array.isArray(directResult)) {
-        return normalizePlan(directResult, includeAnimations, route.allowedAgentTypes, language);
+        const normalized = normalizePlan(
+          directResult,
+          includeAnimations,
+          route.allowedAgentTypes,
+          language,
+        );
+        await ensurePlanAgentRequirements(normalized, hubHint);
+        return normalized;
       }
     }
 
@@ -70,7 +124,14 @@ export async function generateAnalysisPlan(matchData: any, includeAnimations: bo
         try {
           const parsedResult = JSON.parse(toolResultMatch[1].trim());
           if (Array.isArray(parsedResult)) {
-            return normalizePlan(parsedResult, includeAnimations, route.allowedAgentTypes, language);
+            const normalized = normalizePlan(
+              parsedResult,
+              includeAnimations,
+              route.allowedAgentTypes,
+              language,
+            );
+            await ensurePlanAgentRequirements(normalized, hubHint);
+            return normalized;
           }
         } catch (e) {
           console.error("Failed to parse tool result", e);
@@ -88,16 +149,28 @@ export async function generateAnalysisPlan(matchData: any, includeAnimations: bo
 
     const jsonMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(cleanText);
-    return normalizePlan(parsed, includeAnimations, route.allowedAgentTypes, language);
+    const normalized = normalizePlan(parsed, includeAnimations, route.allowedAgentTypes, language);
+    await ensurePlanAgentRequirements(normalized, hubHint);
+    return normalized;
   } catch (e) {
     console.error("Failed to parse plan JSON", e, "route:", route.reason);
-    return normalizePlan(buildFallbackPlan(language), includeAnimations, route.allowedAgentTypes, language);
+    const normalized = normalizePlan(
+      buildFallbackPlan(language),
+      includeAnimations,
+      route.allowedAgentTypes,
+      language,
+    );
+    await ensurePlanAgentRequirements(normalized, hubHint);
+    return normalized;
   }
 }
 
 export async function* streamAnalysisAgent(matchData: any, segmentPlan: any, previousAnalysis: string = "") {
   const settings = getSettings();
-  const agent = getAgent(segmentPlan.agentType || 'general');
+  const hubHint = resolvePlanningHubHint(matchData);
+  const agentId = segmentPlan.agentType || 'general';
+  await ensureAgentAvailable(agentId, hubHint);
+  const agent = getAgent(agentId);
   // No animation schema passed here anymore
   const prompt = agent.systemPrompt({ matchData, segmentPlan, language: settings.language, previousAnalysis });
 
@@ -139,6 +212,7 @@ export async function* streamAgentThoughts(
   resumeState?: AnalysisResumeState,
   onStateUpdate?: (state: AnalysisResumeState) => void
 ) {
+  const hubHint = resolvePlanningHubHint(matchData);
   // 1. Planning Phase (Hidden)
   let plan = resumeState?.plan || [];
   let completedSegmentIndices = resumeState?.completedSegmentIndices || [];
@@ -166,6 +240,7 @@ export async function* streamAgentThoughts(
     }
 
     const agentId = segment.agentType || 'general';
+    await ensureAgentAvailable(agentId, hubHint);
     const agent = getAgent(agentId);
     
     let filteredContext = "";

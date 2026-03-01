@@ -2,9 +2,12 @@
 
 export const basicTemplate: PlanTemplate = {
   id: 'basic',
+  version: '1.0.0',
   name: 'Basic Template',
   description: 'Only overview and prediction.',
   rule: 'Use when the user only wants a quick overview or prediction, or when data is very limited.',
+  requiredAgents: ['overview', 'prediction'],
+  requiredSkills: [],
   getSegments: (isZh: boolean) => [
     {
       title: isZh ? '比赛概览' : 'Match Overview',

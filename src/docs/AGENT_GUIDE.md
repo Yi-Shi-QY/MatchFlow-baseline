@@ -53,8 +53,10 @@ Current supported skills:
 
 When adding a new skill:
 1. Add declaration + executor in `src/skills`.
-2. Register in `availableSkills` and `executeSkill`.
-3. Add agent-level `skills` entry.
+2. Register builtin executor in `executeSkill` and builtin declaration map in `src/skills/index.ts`.
+3. If the skill should be distributable via hub, add manifest contract in `src/docs/EXTENSION_HUB_SPEC.md`.
+4. Runtime-distributed skills currently use secure alias mode (`runtime.mode = "builtin_alias"`).
+5. Add agent-level `skills` entry.
 
 ## 5. Planner Integration
 
