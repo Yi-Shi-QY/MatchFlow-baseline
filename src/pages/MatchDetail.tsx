@@ -18,7 +18,7 @@ import { useAnalysis } from '@/src/contexts/AnalysisContext';
 import { compressToEncodedURIComponent } from 'lz-string';
 import { jsPDF } from 'jspdf';
 import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { ensurePdfCjkFont, PDF_CJK_FONT_FAMILY } from '@/src/services/pdfFont';
 import {
@@ -318,47 +318,6 @@ export default function MatchDetail() {
       alert(`${t('match.export_failed')}: ${error?.message || t('match.export_unknown_error')}`);
     } finally {
       setIsExporting(false);
-    }
-  };
-
-  const handleDownloadAnimationPayload = async (segmentId: string, animation: any) => {
-    if (!animation) return;
-
-    const safe = (value: string) =>
-      value.replace(/[\\/:*?"<>|]/g, '_').trim() || 'animation';
-
-    const fileName = `${safe(match?.id || 'match')}_${safe(segmentId)}_animation.json`;
-
-    try {
-      const payload = JSON.stringify(animation, null, 2);
-      if (Capacitor.isNativePlatform()) {
-        const result = await Filesystem.writeFile({
-          path: fileName,
-          data: payload,
-          directory: Directory.Cache,
-          encoding: Encoding.UTF8,
-        });
-        await Share.share({
-          title: t('match.download_animation'),
-          text: t('match.download_animation'),
-          url: result.uri,
-          dialogTitle: t('match.download_animation'),
-        });
-        return;
-      }
-
-      const blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (error: any) {
-      console.error('Failed to download animation payload:', error);
-      alert(`${t('match.download_animation_failed')}: ${error?.message || t('match.export_unknown_error')}`);
     }
   };
 
@@ -1003,20 +962,8 @@ export default function MatchDetail() {
                 {seg.animation && (
                   <div className="border-t border-zinc-800 bg-black p-4">
                     <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                        <div className="flex items-center gap-2 text-blue-400 text-xs font-bold">
-                          <Video className="w-4 h-4" /> {seg.animation.title || t('match.data_visualization')}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 gap-1 border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300"
-                          onClick={() => handleDownloadAnimationPayload(seg.id, seg.animation)}
-                          title={t('match.download_animation')}
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span className="text-[10px]">{t('match.download')}</span>
-                        </Button>
+                      <div className="flex items-center gap-2 text-blue-400 text-xs font-bold border-b border-white/10 pb-2">
+                        <Video className="w-4 h-4" /> {seg.animation.title || t('match.data_visualization')}
                       </div>
                       <div className="text-zinc-300 text-xs italic bg-zinc-900/50 p-3 rounded-lg border-l-2 border-blue-500">
                         "{seg.animation.narration}"

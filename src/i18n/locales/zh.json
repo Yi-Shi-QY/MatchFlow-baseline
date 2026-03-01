@@ -122,9 +122,10 @@
     "pdf_win_probability": "胜率：主队 {{home}}% / 平 {{draw}}% / 客队 {{away}}%",
     "pdf_expected_goals": "预期进球：主队 {{home}} / 客队 {{away}}",
     "pdf_key_factors": "关键因素",
-    "download": "下载",
-    "download_animation": "下载动画",
-    "download_animation_failed": "下载动画数据失败"
+    "download_video": "下载视频",
+    "downloading_video": "录制中...",
+    "download_video_failed": "导出动画视频失败",
+    "download_video_unsupported": "当前设备或浏览器不支持视频导出。"
   },
   "settings": {
     "title": "设置",

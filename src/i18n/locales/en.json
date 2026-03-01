@@ -122,9 +122,10 @@
     "pdf_win_probability": "Win Probability: Home {{home}}% / Draw {{draw}}% / Away {{away}}%",
     "pdf_expected_goals": "Expected Goals: Home {{home}} / Away {{away}}",
     "pdf_key_factors": "Key Factors",
-    "download": "Download",
-    "download_animation": "Download Animation",
-    "download_animation_failed": "Failed to download animation payload"
+    "download_video": "Download Video",
+    "downloading_video": "Recording...",
+    "download_video_failed": "Failed to export animation video",
+    "download_video_unsupported": "Current device or browser does not support video export."
   },
   "settings": {
     "title": "Settings",
