@@ -100,12 +100,13 @@
     "scan_to_import": "Scan to import match data and start analysis",
     "close": "Close",
     "export_modal_title": "Select PDF Export Content",
-    "export_modal_desc": "Export only selected segments and animation details for a smaller, cleaner PDF.",
+    "export_modal_desc": "Export only selected segments and final summary for a smaller, cleaner PDF.",
     "export_segment_fallback": "Segment {{index}}",
     "export_segment_empty": "No text content",
     "export_include_animation": "Include animation content for this segment (title/narration/key data)",
     "export_include_summary": "Include final summary (prediction/probability/key factors)",
     "export_include_disclaimer": "Include disclaimer page",
+    "export_disclaimer_forced": "Disclaimer page is always included.",
     "export_share": "Export & Share",
     "export_validation": "Select at least one segment or keep final summary enabled.",
     "export_failed": "Failed to export PDF",
@@ -120,7 +121,10 @@
     "pdf_prediction": "Prediction",
     "pdf_win_probability": "Win Probability: Home {{home}}% / Draw {{draw}}% / Away {{away}}%",
     "pdf_expected_goals": "Expected Goals: Home {{home}} / Away {{away}}",
-    "pdf_key_factors": "Key Factors"
+    "pdf_key_factors": "Key Factors",
+    "download": "Download",
+    "download_animation": "Download Animation",
+    "download_animation_failed": "Failed to download animation payload"
   },
   "settings": {
     "title": "Settings",

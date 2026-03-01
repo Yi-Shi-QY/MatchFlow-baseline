@@ -18,7 +18,7 @@ import { useAnalysis } from '@/src/contexts/AnalysisContext';
 import { compressToEncodedURIComponent } from 'lz-string';
 import { jsPDF } from 'jspdf';
 import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { ensurePdfCjkFont, PDF_CJK_FONT_FAMILY } from '@/src/services/pdfFont';
 import {
@@ -37,7 +37,6 @@ import {
 
 interface ExportSegmentOption {
   includeSegment: boolean;
-  includeAnimation: boolean;
 }
 
 export default function MatchDetail() {
@@ -119,7 +118,6 @@ export default function MatchDetail() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportSegments, setExportSegments] = useState<Record<string, ExportSegmentOption>>({});
   const [includeSummaryInExport, setIncludeSummaryInExport] = useState(true);
-  const [includeDisclaimerInExport, setIncludeDisclaimerInExport] = useState(true);
 
   useEffect(() => {
     setSelectedSources({});
@@ -155,49 +153,17 @@ export default function MatchDetail() {
       .trim();
   };
 
-  const flattenObjectEntries = (
-    value: any,
-    prefix: string = '',
-    depth: number = 0,
-    maxDepth: number = 3,
-    maxEntries: number = 30,
-    acc: string[] = []
-  ): string[] => {
-    if (acc.length >= maxEntries || depth > maxDepth) return acc;
-    if (value == null) return acc;
-
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => {
-        flattenObjectEntries(item, `${prefix}[${index}]`, depth + 1, maxDepth, maxEntries, acc);
-      });
-      return acc;
-    }
-
-    if (typeof value === 'object') {
-      Object.entries(value).forEach(([k, v]) => {
-        const key = prefix ? `${prefix}.${k}` : k;
-        flattenObjectEntries(v, key, depth + 1, maxDepth, maxEntries, acc);
-      });
-      return acc;
-    }
-
-    acc.push(`${prefix}: ${String(value)}`);
-    return acc;
-  };
-
   const openExportModal = (stream: AgentResult | null, hasSummary: boolean) => {
     const segments = stream?.segments || [];
     const defaults = segments.reduce((acc, seg) => {
       acc[seg.id] = {
         includeSegment: true,
-        includeAnimation: !!seg.animation,
       };
       return acc;
     }, {} as Record<string, ExportSegmentOption>);
 
     setExportSegments(defaults);
     setIncludeSummaryInExport(hasSummary);
-    setIncludeDisclaimerInExport(true);
     setShowExportModal(true);
   };
 
@@ -288,26 +254,6 @@ export default function MatchDetail() {
           });
         }
 
-        if (exportSegments[seg.id]?.includeAnimation && seg.animation) {
-          writeParagraph(t('match.pdf_animation_content'), { fontSize: 11, bold: true, spacingAfter: 1 });
-          if (typeof seg.animation.title === 'string' && seg.animation.title.trim()) {
-            writeParagraph(`${t('match.pdf_animation_title')}: ${seg.animation.title}`, { fontSize: 9.5, spacingAfter: 1 });
-          }
-          if (typeof seg.animation.narration === 'string' && seg.animation.narration.trim()) {
-            writeParagraph(`${t('match.pdf_animation_narration')}: ${normalizeTextForPdf(seg.animation.narration)}`, { fontSize: 9.5, spacingAfter: 1 });
-          }
-          const animationData = seg.animation.params || seg.animation.data || {};
-          const entries = flattenObjectEntries(animationData);
-          if (entries.length > 0) {
-            writeParagraph(`${t('match.pdf_animation_data')}:`, { fontSize: 9.5, bold: true, spacingAfter: 0.5 });
-            entries.forEach(entry => writeParagraph(`- ${entry}`, { fontSize: 9, spacingAfter: 0.5 }));
-            if (entries.length >= 30) {
-              writeParagraph(`- ${t('match.pdf_data_truncated')}`, { fontSize: 9, spacingAfter: 1 });
-            }
-          }
-          cursorY += 1;
-        }
-
         cursorY += 1;
       });
 
@@ -335,14 +281,13 @@ export default function MatchDetail() {
         }
       }
 
-      if (includeDisclaimerInExport) {
-        pdf.addPage();
-        cursorY = 16;
-        writeParagraph(t('match.disclaimer_title'), { fontSize: 14, bold: true, spacingAfter: 3 });
-        [1, 2, 3, 4, 5].forEach((index) => {
-          writeParagraph(t(`match.disclaimer_${index}`), { fontSize: 10 });
-        });
-      }
+      // Disclaimer page is always included by policy.
+      pdf.addPage();
+      cursorY = 16;
+      writeParagraph(t('match.disclaimer_title'), { fontSize: 14, bold: true, spacingAfter: 3 });
+      [1, 2, 3, 4, 5].forEach((index) => {
+        writeParagraph(t(`match.disclaimer_${index}`), { fontSize: 10 });
+      });
 
       const safeFilePart = (value: string) =>
         value.replace(/[\\/:*?"<>|]/g, '_').trim() || 'match';
@@ -373,6 +318,47 @@ export default function MatchDetail() {
       alert(`${t('match.export_failed')}: ${error?.message || t('match.export_unknown_error')}`);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleDownloadAnimationPayload = async (segmentId: string, animation: any) => {
+    if (!animation) return;
+
+    const safe = (value: string) =>
+      value.replace(/[\\/:*?"<>|]/g, '_').trim() || 'animation';
+
+    const fileName = `${safe(match?.id || 'match')}_${safe(segmentId)}_animation.json`;
+
+    try {
+      const payload = JSON.stringify(animation, null, 2);
+      if (Capacitor.isNativePlatform()) {
+        const result = await Filesystem.writeFile({
+          path: fileName,
+          data: payload,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+        });
+        await Share.share({
+          title: t('match.download_animation'),
+          text: t('match.download_animation'),
+          url: result.uri,
+          dialogTitle: t('match.download_animation'),
+        });
+        return;
+      }
+
+      const blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Failed to download animation payload:', error);
+      alert(`${t('match.download_animation_failed')}: ${error?.message || t('match.export_unknown_error')}`);
     }
   };
 
@@ -1017,8 +1003,20 @@ export default function MatchDetail() {
                 {seg.animation && (
                   <div className="border-t border-zinc-800 bg-black p-4">
                     <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2 text-blue-400 text-xs font-bold border-b border-white/10 pb-2">
-                        <Video className="w-4 h-4" /> {seg.animation.title || t('match.data_visualization')}
+                      <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                        <div className="flex items-center gap-2 text-blue-400 text-xs font-bold">
+                          <Video className="w-4 h-4" /> {seg.animation.title || t('match.data_visualization')}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 gap-1 border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300"
+                          onClick={() => handleDownloadAnimationPayload(seg.id, seg.animation)}
+                          title={t('match.download_animation')}
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span className="text-[10px]">{t('match.download')}</span>
+                        </Button>
                       </div>
                       <div className="text-zinc-300 text-xs italic bg-zinc-900/50 p-3 rounded-lg border-l-2 border-blue-500">
                         "{seg.animation.narration}"
@@ -1168,7 +1166,6 @@ export default function MatchDetail() {
               <div className="flex-1 overflow-y-auto pr-1 space-y-3">
                 {(parsedStream?.segments || []).map((seg, index) => {
                   const selected = exportSegments[seg.id];
-                  const hasAnimation = !!seg.animation;
                   return (
                     <div key={seg.id} className="border border-white/10 rounded-xl p-3 bg-black/30">
                       <label className="flex items-start gap-2 cursor-pointer">
@@ -1180,9 +1177,6 @@ export default function MatchDetail() {
                               ...prev,
                               [seg.id]: {
                                 includeSegment: e.target.checked,
-                                includeAnimation: e.target.checked
-                                  ? prev[seg.id]?.includeAnimation ?? hasAnimation
-                                  : false,
                               },
                             }))
                           }
@@ -1197,26 +1191,6 @@ export default function MatchDetail() {
                           </div>
                         </div>
                       </label>
-
-                      {hasAnimation && (
-                        <label className="mt-2 ml-5 flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={!!selected?.includeAnimation}
-                            disabled={!selected?.includeSegment}
-                            onChange={(e) =>
-                              setExportSegments(prev => ({
-                                ...prev,
-                                [seg.id]: {
-                                  includeSegment: prev[seg.id]?.includeSegment ?? true,
-                                  includeAnimation: e.target.checked,
-                                },
-                              }))
-                            }
-                          />
-                          {t('match.export_include_animation')}
-                        </label>
-                      )}
                     </div>
                   );
                 })}
@@ -1231,14 +1205,9 @@ export default function MatchDetail() {
                   />
                   {t('match.export_include_summary')}
                 </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={includeDisclaimerInExport}
-                    onChange={(e) => setIncludeDisclaimerInExport(e.target.checked)}
-                  />
-                  {t('match.export_include_disclaimer')}
-                </label>
+                <div className="text-[11px] text-zinc-500">
+                  {t('match.export_disclaimer_forced')}
+                </div>
               </div>
 
               <div className="mt-4 flex items-center gap-2">

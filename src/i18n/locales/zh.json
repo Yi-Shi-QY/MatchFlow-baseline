@@ -100,12 +100,13 @@
     "scan_to_import": "扫码导入赛事数据并开始分析",
     "close": "关闭",
     "export_modal_title": "选择 PDF 导出内容",
-    "export_modal_desc": "仅导出你勾选的段落与动画内容，文件体积更小、结构更清晰。",
+    "export_modal_desc": "仅导出你勾选的段落与最终摘要，文件体积更小、结构更清晰。",
     "export_segment_fallback": "段落 {{index}}",
     "export_segment_empty": "无文本内容",
     "export_include_animation": "包含本段动画内容（标题/旁白/关键数据）",
     "export_include_summary": "包含最终摘要（预测、概率、关键因素）",
     "export_include_disclaimer": "包含免责声明页",
+    "export_disclaimer_forced": "免责声明页固定包含，无法取消。",
     "export_share": "导出并分享",
     "export_validation": "请至少选择一个段落或保留最终摘要。",
     "export_failed": "导出 PDF 失败",
@@ -120,7 +121,10 @@
     "pdf_prediction": "预测",
     "pdf_win_probability": "胜率：主队 {{home}}% / 平 {{draw}}% / 客队 {{away}}%",
     "pdf_expected_goals": "预期进球：主队 {{home}} / 客队 {{away}}",
-    "pdf_key_factors": "关键因素"
+    "pdf_key_factors": "关键因素",
+    "download": "下载",
+    "download_animation": "下载动画",
+    "download_animation_failed": "下载动画数据失败"
   },
   "settings": {
     "title": "设置",
