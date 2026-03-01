@@ -5,33 +5,35 @@ This folder is the **single source of truth** for project documentation.
 
 ## Document Index / 文档索引
 
-1. [01-product-overview.md](./01-product-overview.md)  
+1. [00-role-navigation.md](./00-role-navigation.md)  
+   Role-based reading paths / 按角色阅读路径
+2. [01-product-overview.md](./01-product-overview.md)  
    Product scope, features, current goals / 产品范围、能力与当前目标
-2. [02-architecture.md](./02-architecture.md)  
+3. [02-architecture.md](./02-architecture.md)  
    App/server architecture and runtime flow / 前后端架构与运行流程
-3. [03-development.md](./03-development.md)  
+4. [03-development.md](./03-development.md)  
    Local development and release workflow / 本地开发与发布流程
-4. [04-ai-agent-framework.md](./04-ai-agent-framework.md)  
+5. [04-ai-agent-framework.md](./04-ai-agent-framework.md)  
    Agent/skill pipeline and model routing / Agent-Skill 流程与模型路由
-5. [05-i18n-and-encoding.md](./05-i18n-and-encoding.md)  
+6. [05-i18n-and-encoding.md](./05-i18n-and-encoding.md)  
    i18n and UTF-8 quality rules / i18n 与 UTF-8 质量规范
-6. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)  
+7. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)  
    Agent/Skill/Template extension guide / Agent、Skill、Template 扩展指南
-7. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)  
+8. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)  
    Declarative data source extension guide / 声明式数据源扩展指南
-8. [08-server-api-guide.md](./08-server-api-guide.md)  
+9. [08-server-api-guide.md](./08-server-api-guide.md)  
    Match data server API reference / 数据服务端 API 参考
-9. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)  
+10. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)  
    Deployment, PostgreSQL schema, admin workflows / 部署、数据库与运维流程
-10. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)  
+11. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)  
     Server evolution roadmap / 服务端重构与演进路线
-11. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)  
+12. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)  
     Linux environment validation checklist / Linux 环境联调校验清单
-12. [12-changelog.md](./12-changelog.md)  
+13. [12-changelog.md](./12-changelog.md)  
     Human-readable project change log / 项目变更记录
-13. [13-cicd-guide.md](./13-cicd-guide.md)  
+14. [13-cicd-guide.md](./13-cicd-guide.md)  
     CI/CD workflow and release strategy / CI/CD 工作流与发布策略
-14. [14-extension-hub-spec.md](./14-extension-hub-spec.md)  
+15. [14-extension-hub-spec.md](./14-extension-hub-spec.md)  
     Manifest schema and hub compatibility / Manifest 结构与 Hub 兼容规范
 
 ## Writing Rules / 文档规范
@@ -45,7 +47,7 @@ This folder is the **single source of truth** for project documentation.
 4. When behavior changes, update docs in this folder in the same PR/commit.  
    功能行为变化时，必须在同一 PR/提交中同步更新本目录文档。
 
-## Legacy Entrypoints / 旧文档入口
+## Scope / 范围声明
 
-Legacy markdown files outside `docs/` are now compatibility stubs that point back to this folder.  
-`docs/` 目录外的旧 Markdown 文件已改为兼容入口页，内容维护请仅在本目录进行。
+Only markdown files under `docs/` are considered maintained project documentation.  
+仅 `docs/` 目录内的 Markdown 文件属于正式维护文档。

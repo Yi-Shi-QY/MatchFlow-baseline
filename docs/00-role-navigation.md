@@ -1,0 +1,196 @@
+# Role-Based Navigation / 按读者角色导航
+
+## EN
+
+## 1. Product Owner / PM
+
+Start here:
+
+1. [01-product-overview.md](./01-product-overview.md)
+2. [02-architecture.md](./02-architecture.md)
+3. [12-changelog.md](./12-changelog.md)
+
+Focus:
+
+1. Product scope and roadmap.
+2. Major architecture decisions and tradeoffs.
+3. Release-visible changes.
+
+## 2. Frontend Engineer
+
+Start here:
+
+1. [02-architecture.md](./02-architecture.md)
+2. [03-development.md](./03-development.md)
+3. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)
+4. [05-i18n-and-encoding.md](./05-i18n-and-encoding.md)
+
+Focus:
+
+1. `MatchDetail` data flow and `sourceContext`.
+2. Streaming analysis lifecycle and UI behaviors.
+3. i18n and UTF-8 quality controls.
+
+## 3. AI / Agent Engineer
+
+Start here:
+
+1. [04-ai-agent-framework.md](./04-ai-agent-framework.md)
+2. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)
+3. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
+
+Focus:
+
+1. Agent contract and output tag stability.
+2. Skill runtime safety model.
+3. Manifest compatibility and auto-install behavior.
+
+## 4. Backend Engineer
+
+Start here:
+
+1. [08-server-api-guide.md](./08-server-api-guide.md)
+2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
+3. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
+4. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
+
+Focus:
+
+1. API contracts and compatibility constraints.
+2. DB schema, extension lifecycle, and hub endpoints.
+3. Server refactor priorities and next phases.
+
+## 5. QA / Integration Engineer
+
+Start here:
+
+1. [08-server-api-guide.md](./08-server-api-guide.md)
+2. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)
+3. [13-cicd-guide.md](./13-cicd-guide.md)
+
+Focus:
+
+1. Endpoint contract and auth checks.
+2. Linux validation checklist.
+3. CI/CD execution signals and release artifacts.
+
+## 6. DevOps / Release Engineer
+
+Start here:
+
+1. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
+2. [13-cicd-guide.md](./13-cicd-guide.md)
+3. [12-changelog.md](./12-changelog.md)
+
+Focus:
+
+1. Deployment environments and runtime variables.
+2. Pipeline behavior and release controls.
+3. Version tags and release deliverables.
+
+## 7. New Team Member (Fast Onboarding Path)
+
+Suggested reading order:
+
+1. [01-product-overview.md](./01-product-overview.md)
+2. [02-architecture.md](./02-architecture.md)
+3. [03-development.md](./03-development.md)
+4. Your role-specific section in this file.
+
+## ZH
+
+## 1. 产品 / 项目负责人
+
+建议先读：
+
+1. [01-product-overview.md](./01-product-overview.md)
+2. [02-architecture.md](./02-architecture.md)
+3. [12-changelog.md](./12-changelog.md)
+
+关注重点：
+
+1. 产品边界与路线。
+2. 架构关键决策与权衡。
+3. 发布层面的变化。
+
+## 2. 前端工程师
+
+建议先读：
+
+1. [02-architecture.md](./02-architecture.md)
+2. [03-development.md](./03-development.md)
+3. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)
+4. [05-i18n-and-encoding.md](./05-i18n-and-encoding.md)
+
+关注重点：
+
+1. `MatchDetail` 与 `sourceContext` 数据流。
+2. 流式分析生命周期与 UI 行为。
+3. i18n 与 UTF-8 质量控制。
+
+## 3. AI / Agent 工程师
+
+建议先读：
+
+1. [04-ai-agent-framework.md](./04-ai-agent-framework.md)
+2. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)
+3. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
+
+关注重点：
+
+1. Agent 契约与输出标签稳定性。
+2. Skill 运行安全模型。
+3. Manifest 兼容性与自动安装行为。
+
+## 4. 后端工程师
+
+建议先读：
+
+1. [08-server-api-guide.md](./08-server-api-guide.md)
+2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
+3. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
+4. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
+
+关注重点：
+
+1. API 契约与兼容约束。
+2. 数据库结构、扩展生命周期、Hub 接口。
+3. 服务端下一阶段重构重点。
+
+## 5. 测试 / 集成工程师
+
+建议先读：
+
+1. [08-server-api-guide.md](./08-server-api-guide.md)
+2. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)
+3. [13-cicd-guide.md](./13-cicd-guide.md)
+
+关注重点：
+
+1. 接口契约和鉴权校验。
+2. Linux 环境验证清单。
+3. CI/CD 信号与发布产物检查。
+
+## 6. 运维 / 发布工程师
+
+建议先读：
+
+1. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
+2. [13-cicd-guide.md](./13-cicd-guide.md)
+3. [12-changelog.md](./12-changelog.md)
+
+关注重点：
+
+1. 部署环境和运行变量。
+2. 流水线行为与发布控制。
+3. 版本 tag 与交付产物。
+
+## 7. 新成员快速上手路径
+
+推荐阅读顺序：
+
+1. [01-product-overview.md](./01-product-overview.md)
+2. [02-architecture.md](./02-architecture.md)
+3. [03-development.md](./03-development.md)
+4. 再进入本文件对应角色章节。
+
