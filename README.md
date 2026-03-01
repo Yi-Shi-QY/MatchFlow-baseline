@@ -19,11 +19,12 @@ The runtime flow is:
 
 ## Documentation
 
-- Architecture overview: `PROJECT_GUIDE.md`
-- Agent framework details: `AI_AGENT_FRAMEWORK.md`
-- Agent authoring guide: `src/docs/AGENT_GUIDE.md`
-- Data service deployment: `match-data-server/DEPLOY.md`
-- Day-to-day development commands: `DEVELOPMENT.md`
+- Unified docs hub: `docs/README.md`
+- Architecture and runtime: `docs/02-architecture.md`
+- Agent framework: `docs/04-ai-agent-framework.md`
+- Extension guides: `docs/06-agent-skill-extension-guide.md` and `docs/07-data-source-extension-guide.md`
+- Server API/deploy/database: `docs/08-server-api-guide.md` and `docs/09-server-deploy-and-database-guide.md`
+- CI/CD guide: `docs/13-cicd-guide.md`
 
 ## Quick Start
 
