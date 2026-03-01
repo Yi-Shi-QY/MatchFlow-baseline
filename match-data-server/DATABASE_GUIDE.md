@@ -14,6 +14,7 @@ Main tables:
 
 - `teams`
 - `matches`
+- `extension_manifests`
 
 Schema file:
 
@@ -58,6 +59,8 @@ Recommended flow:
 1. Upsert teams via `POST /admin/teams`
 2. Upsert matches via `POST /admin/matches`
 3. Update live score/status via `PUT /admin/matches/:id/score`
+4. Upsert hub manifests via `POST /admin/extensions`
+5. Publish specific versions via `POST /admin/extensions/publish`
 
 Example script:
 
@@ -70,3 +73,19 @@ Example script:
 - Add request rate limiting for admin APIs
 - Add periodic DB backup
 - Add read endpoint cache for high traffic (`/matches`)
+
+## 7. Hub Manifest APIs
+
+Read endpoints consumed by app auto-install:
+
+- `GET /hub/agents/:id`
+- `GET /hub/skills/:id`
+- `GET /hub/templates/:id`
+- Alias forms under `/hub/{kind}/:id` and `/extensions/*`
+
+Admin endpoints for version lifecycle:
+
+- `GET /admin/extensions`
+- `POST /admin/extensions`
+- `PUT /admin/extensions/:kind/:id/:version`
+- `POST /admin/extensions/publish`

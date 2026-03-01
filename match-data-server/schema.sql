@@ -50,10 +50,30 @@ CREATE TABLE matches (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 3. Extension Manifests Table
+-- Stores versioned agent/skill/template manifests for hub distribution
+CREATE TABLE IF NOT EXISTS extension_manifests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    kind VARCHAR(32) NOT NULL,
+    extension_id VARCHAR(128) NOT NULL,
+    version VARCHAR(64) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    manifest_json JSONB NOT NULL,
+    channel VARCHAR(32) NOT NULL DEFAULT 'stable',
+    status VARCHAR(32) NOT NULL DEFAULT 'draft',
+    checksum VARCHAR(128),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMP WITH TIME ZONE
+);
+
 -- Indexes for performance
 CREATE INDEX idx_matches_date ON matches(match_date);
 CREATE INDEX idx_matches_status ON matches(status);
 CREATE INDEX idx_matches_league ON matches(league_name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_extension_manifest_version ON extension_manifests(kind, extension_id, version);
+CREATE INDEX IF NOT EXISTS idx_extension_manifest_lookup ON extension_manifests(kind, extension_id, channel, status);
 
 -- Trigger to automatically update 'updated_at'
 CREATE OR REPLACE FUNCTION update_modified_column()
@@ -66,6 +86,19 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER update_teams_modtime BEFORE UPDATE ON teams FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_matches_modtime BEFORE UPDATE ON matches FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'update_extension_manifests_modtime'
+    ) THEN
+        CREATE TRIGGER update_extension_manifests_modtime
+        BEFORE UPDATE ON extension_manifests
+        FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+    END IF;
+END;
+$$;
 
 -- =============================================
 -- Seed Data (Optional - For Testing)

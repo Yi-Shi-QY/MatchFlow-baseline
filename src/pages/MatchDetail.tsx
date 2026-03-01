@@ -22,6 +22,11 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { ensurePdfCjkFont, PDF_CJK_FONT_FAMILY } from '@/src/services/pdfFont';
 import {
+  fetchMatchAnalysisConfig,
+  mergeServerPlanningIntoMatchData,
+  resolveAnalysisConfig,
+} from '@/src/services/analysisConfig';
+import {
   ANALYSIS_DATA_SOURCES,
   FormFieldSchema,
   SourceIconKey,
@@ -650,6 +655,21 @@ export default function MatchDetail() {
     } catch (e) {
       alert(t('match.invalid_json_preview'));
       return;
+    }
+
+    try {
+      let serverConfig = null;
+      if (typeof match.id === 'string' && match.id.trim().length > 0 && !match.id.startsWith('custom_')) {
+        serverConfig = await fetchMatchAnalysisConfig(match.id.trim());
+      }
+
+      if (!serverConfig) {
+        serverConfig = await resolveAnalysisConfig(dataToAnalyze);
+      }
+
+      dataToAnalyze = mergeServerPlanningIntoMatchData(dataToAnalyze, serverConfig);
+    } catch (error) {
+      console.warn('Failed to load server planning config; continue with local source context.', error);
     }
 
     setStep('analyzing');
