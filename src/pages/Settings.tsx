@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell, Send, Package } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell, Send, Package, RefreshCw } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
@@ -10,6 +10,7 @@ import { testConnection } from '@/src/services/ai';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { AGENT_MODEL_CONFIG, ALL_AGENT_IDS } from '@/src/config/agentModelConfig';
+import { syncRecommendedExtensions } from '@/src/services/extensions/recommendedSync';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -33,6 +34,8 @@ export default function Settings() {
   const [aiTestMessage, setAiTestMessage] = useState('');
   const [dataTestStatus, setDataTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [dataTestMessage, setDataTestMessage] = useState('');
+  const [extensionSyncStatus, setExtensionSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [extensionSyncMessage, setExtensionSyncMessage] = useState('');
 
   const [isBehaviorCollapsed, setIsBehaviorCollapsed] = useState(true);
   const [isAiConfigCollapsed, setIsAiConfigCollapsed] = useState(true);
@@ -154,6 +157,59 @@ export default function Settings() {
     } catch (e: any) {
       setDataTestStatus('error');
       setDataTestMessage(e.message || t('settings.data_failed'));
+    }
+  };
+
+  const handleSyncRecommendedExtensions = async () => {
+    if (!String(settings.matchDataServerUrl || '').trim()) {
+      setExtensionSyncStatus('error');
+      setExtensionSyncMessage(t('settings.enter_server_url'));
+      return;
+    }
+
+    setExtensionSyncStatus('syncing');
+    setExtensionSyncMessage(t('settings.extension_syncing'));
+
+    try {
+      const result = await syncRecommendedExtensions({ sampleSize: 50 });
+      const syncedCount =
+        result.syncedTemplates.length + result.syncedAgents.length + result.syncedSkills.length;
+      const missingCount =
+        result.missingTemplates.length + result.missingAgents.length + result.missingSkills.length;
+
+      if (missingCount > 0) {
+        setExtensionSyncStatus('error');
+        setExtensionSyncMessage(
+          t('settings.extension_sync_partial', {
+            synced: syncedCount,
+            missing: missingCount,
+          }),
+        );
+        return;
+      }
+
+      if (syncedCount > 0) {
+        setExtensionSyncStatus('success');
+        setExtensionSyncMessage(
+          t('settings.extension_sync_success', {
+            synced: syncedCount,
+            templates: result.templateIds.length,
+            matches: result.sampledMatchCount,
+          }),
+        );
+        return;
+      }
+
+      setExtensionSyncStatus('success');
+      setExtensionSyncMessage(
+        t('settings.extension_sync_noop', {
+          templates: result.templateIds.length,
+          matches: result.sampledMatchCount,
+        }),
+      );
+    } catch (e: any) {
+      setExtensionSyncStatus('error');
+      setExtensionSyncMessage(`${t('settings.extension_sync_failed')}: ${e?.message || t('extensions.unknown_error')}`);
     }
   };
 
@@ -632,6 +688,8 @@ export default function Settings() {
                       onChange={(e) => {
                         setLocalSettings({...settings, matchDataServerUrl: e.target.value});
                         setDataTestStatus('idle');
+                        setExtensionSyncStatus('idle');
+                        setExtensionSyncMessage('');
                       }}
                       placeholder="https://api.example.com"
                       className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
@@ -646,6 +704,8 @@ export default function Settings() {
                       onChange={(e) => {
                         setLocalSettings({...settings, matchDataApiKey: e.target.value});
                         setDataTestStatus('idle');
+                        setExtensionSyncStatus('idle');
+                        setExtensionSyncMessage('');
                       }}
                       placeholder="Bearer Token"
                       className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
@@ -688,12 +748,41 @@ export default function Settings() {
             </div>
 
             <div className="pt-6 border-t border-white/10 space-y-3">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Package className="w-4 h-4 text-emerald-500" /> {t('settings.extension_hub')}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Package className="w-4 h-4 text-emerald-500" /> {t('settings.extension_hub')}
+                </h3>
+                {extensionSyncStatus === 'success' && (
+                  <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> {t('settings.extension_sync_done')}
+                  </span>
+                )}
+                {extensionSyncStatus === 'error' && (
+                  <span className="text-[10px] text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <XCircle className="w-3 h-3" /> {t('settings.extension_sync_failed')}
+                  </span>
+                )}
+                {extensionSyncStatus === 'syncing' && (
+                  <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Activity className="w-3 h-3 animate-spin" /> {t('settings.extension_syncing')}
+                  </span>
+                )}
+              </div>
               <p className="text-[10px] text-zinc-500">
                 {t('settings.extension_hub_desc')}
               </p>
+              <Button
+                onClick={handleSyncRecommendedExtensions}
+                className="w-full gap-2"
+                disabled={extensionSyncStatus === 'syncing'}
+              >
+                {extensionSyncStatus === 'syncing' ? (
+                  <Activity className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                {t('settings.sync_recommended_extensions')}
+              </Button>
               <Button
                 onClick={() => navigate('/extensions')}
                 variant="outline"
@@ -702,6 +791,20 @@ export default function Settings() {
                 <Package className="w-4 h-4" />
                 {t('settings.open_extension_hub')}
               </Button>
+              {extensionSyncStatus !== 'idle' && (
+                <div className={`flex items-center gap-2 text-xs p-3 rounded-lg border ${
+                  extensionSyncStatus === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    : extensionSyncStatus === 'error'
+                      ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                      : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                }`}>
+                  {extensionSyncStatus === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                  {extensionSyncStatus === 'error' && <XCircle className="w-4 h-4 shrink-0" />}
+                  {extensionSyncStatus === 'syncing' && <Activity className="w-4 h-4 shrink-0 animate-pulse" />}
+                  <span className="break-all">{extensionSyncMessage || t('settings.extension_syncing')}</span>
+                </div>
+              )}
             </div>
 
 

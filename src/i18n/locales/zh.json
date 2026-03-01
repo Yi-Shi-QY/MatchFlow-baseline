@@ -177,8 +177,15 @@
     "enter_server_url": "请先输入 Server URL",
     "testing": "正在测试连接...",
     "extension_hub": "扩展 Hub",
-    "extension_hub_desc": "管理已安装的 Agents / Skills / Templates，并从服务端 Hub 安装或更新扩展。",
-    "open_extension_hub": "打开扩展管理"
+    "extension_hub_desc": "根据服务端推荐规划模板，一键同步所需 Agents / Skills / Templates。",
+    "sync_recommended_extensions": "一键同步推荐扩展",
+    "extension_syncing": "正在同步推荐扩展...",
+    "extension_sync_success": "同步完成。基于 {{templates}} 个模板推荐（采样 {{matches}} 场比赛），已同步 {{synced}} 个扩展。",
+    "extension_sync_partial": "同步完成但仍有缺失依赖。已同步 {{synced}} 个，缺失 {{missing}} 个。",
+    "extension_sync_noop": "无需新增扩展。已检查 {{matches}} 场比赛中的 {{templates}} 个模板推荐。",
+    "extension_sync_failed": "推荐扩展同步失败",
+    "extension_sync_done": "已同步",
+    "open_extension_hub": "打开高级扩展管理"
   },
   "extensions": {
     "title": "扩展 Hub",

@@ -177,8 +177,15 @@
     "enter_server_url": "Please enter Server URL first",
     "testing": "Testing connection...",
     "extension_hub": "Extension Hub",
-    "extension_hub_desc": "Manage installed Agents / Skills / Templates, and install or update extensions from server hub.",
-    "open_extension_hub": "Open Extension Manager"
+    "extension_hub_desc": "Sync required Agents / Skills / Templates from server-recommended planning templates with one click.",
+    "sync_recommended_extensions": "One-Click Sync Recommended Extensions",
+    "extension_syncing": "Syncing recommended extensions...",
+    "extension_sync_success": "Sync completed. Synced {{synced}} extensions from {{templates}} template recommendations (sampled {{matches}} matches).",
+    "extension_sync_partial": "Sync completed with missing dependencies. Synced {{synced}}, missing {{missing}}.",
+    "extension_sync_noop": "No new extensions required. Checked {{templates}} template recommendations from {{matches}} matches.",
+    "extension_sync_failed": "Recommended extension sync failed",
+    "extension_sync_done": "Synced",
+    "open_extension_hub": "Open Advanced Extension Manager"
   },
   "extensions": {
     "title": "Extension Hub",
