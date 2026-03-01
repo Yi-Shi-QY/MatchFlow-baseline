@@ -2,6 +2,8 @@
 
 ## EN
 
+If you prefer task-first lookup, also see [15-task-navigation.md](./15-task-navigation.md).
+
 ## 1. Product Owner / PM
 
 Start here:
@@ -99,6 +101,8 @@ Suggested reading order:
 
 ## ZH
 
+如果你更习惯按任务查文档，也可以先看 [15-task-navigation.md](./15-task-navigation.md)。
+
 ## 1. 产品 / 项目负责人
 
 建议先读：
@@ -193,4 +197,3 @@ Suggested reading order:
 2. [02-architecture.md](./02-architecture.md)
 3. [03-development.md](./03-development.md)
 4. 再进入本文件对应角色章节。
-

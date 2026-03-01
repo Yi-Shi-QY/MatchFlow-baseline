@@ -35,6 +35,8 @@ This folder is the **single source of truth** for project documentation.
     CI/CD workflow and release strategy / CI/CD 工作流与发布策略
 15. [14-extension-hub-spec.md](./14-extension-hub-spec.md)  
     Manifest schema and hub compatibility / Manifest 结构与 Hub 兼容规范
+16. [15-task-navigation.md](./15-task-navigation.md)  
+    Task-based reading paths / 按任务定位阅读路径
 
 ## Writing Rules / 文档规范
 
