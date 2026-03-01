@@ -28,6 +28,8 @@ interface AnalysisContextType {
   setCollapsedSegments: (matchId: string, segments: Record<string, boolean>) => void;
 }
 
+const RESUME_SNAPSHOT_INTERVAL_MS = 3000;
+
 const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined);
 
 export function AnalysisProvider({ children }: { children: ReactNode }) {
@@ -114,7 +116,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       if (savedState) {
         resumeStateData = savedState.state;
         
-        // Reconstruct initialThoughts from completed segments to discard any partial segment
+        // Prefer completed segments. Keep draft thoughts only for temporary preview.
         if (resumeStateData && resumeStateData.segmentResults) {
           initialThoughts = resumeStateData.segmentResults.map(r => r.content).join('');
         } else {
@@ -148,8 +150,23 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
     setActiveAnalyses(prev => ({ ...prev, [matchId]: newAnalysis }));
 
+    let currentThoughts = initialThoughts;
+    let latestResumeState: AnalysisResumeState | undefined = resumeStateData;
+    let lastSnapshotAt = 0;
+    let dropStaleDraftOnFirstChunk =
+      isResume && (!resumeStateData?.segmentResults || resumeStateData.segmentResults.length === 0);
+
+    const persistResumeSnapshot = (force: boolean = false) => {
+      if (!latestResumeState) return;
+      const now = Date.now();
+      if (!force && now - lastSnapshotAt < RESUME_SNAPSHOT_INTERVAL_MS) {
+        return;
+      }
+      lastSnapshotAt = now;
+      void saveResumeState(matchId, latestResumeState, currentThoughts);
+    };
+
     try {
-      let currentThoughts = initialThoughts;
       let currentParsedStream = initialParsedStream;
       let currentCollapsed = initialCollapsed;
       
@@ -158,11 +175,17 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         includeAnimations,
         resumeStateData,
         (state) => {
-          saveResumeState(matchId, state, currentThoughts);
+          latestResumeState = state;
+          persistResumeSnapshot(true);
         }
       );
       
       for await (const chunk of stream) {
+        if (dropStaleDraftOnFirstChunk) {
+          // Avoid duplicated content when resuming from a draft-only snapshot.
+          currentThoughts = '';
+          dropStaleDraftOnFirstChunk = false;
+        }
         currentThoughts += chunk;
         currentParsedStream = parseAgentStream(currentThoughts);
         
@@ -187,6 +210,8 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
             }
           };
         });
+
+        persistResumeSnapshot();
       }
 
       // Final parse after stream completes
@@ -202,6 +227,8 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           }
         };
       });
+
+      persistResumeSnapshot(true);
 
       if (finalParsed.summary) {
         const finalAnalysis = finalParsed.summary as MatchAnalysis;
@@ -249,6 +276,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
     } catch (error: any) {
       console.error("Analysis failed:", error);
+      persistResumeSnapshot(true);
       setActiveAnalyses(prev => {
         if (!prev[matchId]) return prev;
         return {
