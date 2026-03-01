@@ -1,5 +1,6 @@
 import {
   AgentExtensionManifest,
+  ExtensionKind,
   ExtensionStore,
   InstalledExtensionRecord,
   SkillExtensionManifest,
@@ -219,4 +220,85 @@ export function saveInstalledTemplateManifest(
   };
   writeStore(store);
   return true;
+}
+
+export function removeInstalledAgentManifest(id: string): boolean {
+  const store = readStore();
+  if (!store.agents[id]) return false;
+  delete store.agents[id];
+  writeStore(store);
+  return true;
+}
+
+export function removeInstalledSkillManifest(id: string): boolean {
+  const store = readStore();
+  if (!store.skills[id]) return false;
+  delete store.skills[id];
+  writeStore(store);
+  return true;
+}
+
+export function removeInstalledTemplateManifest(id: string): boolean {
+  const store = readStore();
+  if (!store.templates[id]) return false;
+  delete store.templates[id];
+  writeStore(store);
+  return true;
+}
+
+export function removeInstalledExtension(kind: ExtensionKind, id: string): boolean {
+  if (kind === "agent") return removeInstalledAgentManifest(id);
+  if (kind === "skill") return removeInstalledSkillManifest(id);
+  return removeInstalledTemplateManifest(id);
+}
+
+export function listInstalledExtensionRecords(): Array<{
+  kind: ExtensionKind;
+  id: string;
+  version: string;
+  name: string;
+  description: string;
+  installedAt: number;
+  source: "hub";
+  sourceUrl?: string;
+  manifest: AgentExtensionManifest | SkillExtensionManifest | TemplateExtensionManifest;
+}> {
+  const store = readStore();
+  const agentRecords = Object.values(store.agents).map((entry) => ({
+    kind: "agent" as const,
+    id: entry.manifest.id,
+    version: entry.manifest.version,
+    name: entry.manifest.name,
+    description: entry.manifest.description,
+    installedAt: entry.installedAt,
+    source: entry.source,
+    sourceUrl: entry.sourceUrl,
+    manifest: entry.manifest,
+  }));
+  const skillRecords = Object.values(store.skills).map((entry) => ({
+    kind: "skill" as const,
+    id: entry.manifest.id,
+    version: entry.manifest.version,
+    name: entry.manifest.name,
+    description: entry.manifest.description,
+    installedAt: entry.installedAt,
+    source: entry.source,
+    sourceUrl: entry.sourceUrl,
+    manifest: entry.manifest,
+  }));
+  const templateRecords = Object.values(store.templates).map((entry) => ({
+    kind: "template" as const,
+    id: entry.manifest.id,
+    version: entry.manifest.version,
+    name: entry.manifest.name,
+    description: entry.manifest.description,
+    installedAt: entry.installedAt,
+    source: entry.source,
+    sourceUrl: entry.sourceUrl,
+    manifest: entry.manifest,
+  }));
+
+  return [...agentRecords, ...skillRecords, ...templateRecords].sort(
+    (a, b) => b.installedAt - a.installedAt,
+  );
 }

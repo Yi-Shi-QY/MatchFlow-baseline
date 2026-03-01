@@ -10,6 +10,7 @@ import MatchDetail from './pages/MatchDetail';
 import Share from './pages/Share';
 import Scan from './pages/Scan';
 import Settings from './pages/Settings';
+import ExtensionsHub from './pages/ExtensionsHub';
 import { AnalysisProvider } from './contexts/AnalysisContext';
 import { App as CapacitorApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -109,6 +110,7 @@ function AppRoutes() {
       <Route path="/share" element={<Share />} />
       <Route path="/scan" element={<Scan />} />
       <Route path="/settings" element={<Settings />} />
+      <Route path="/extensions" element={<ExtensionsHub />} />
     </Routes>
   );
 }

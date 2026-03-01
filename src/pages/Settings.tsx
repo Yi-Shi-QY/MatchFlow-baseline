@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell, Send } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell, Send, Package } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
@@ -685,6 +685,23 @@ export default function Settings() {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="pt-6 border-t border-white/10 space-y-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Package className="w-4 h-4 text-emerald-500" /> {t('settings.extension_hub')}
+              </h3>
+              <p className="text-[10px] text-zinc-500">
+                {t('settings.extension_hub_desc')}
+              </p>
+              <Button
+                onClick={() => navigate('/extensions')}
+                variant="outline"
+                className="w-full gap-2 border-zinc-700 bg-zinc-900 hover:bg-zinc-800"
+              >
+                <Package className="w-4 h-4" />
+                {t('settings.open_extension_hub')}
+              </Button>
             </div>
 
 
