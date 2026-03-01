@@ -6,10 +6,27 @@ export interface AnimationTemplate {
   id: string;
   name: string;
   description: string;
-  schema: any; // JSON Schema for the data prop
-  example: any; // Example data
+  schema: any; // JSON Schema for the params/data prop
+  requiredParams: string[];
+  example: any; // Example params
+  fillParams: (params: any) => any; // Deterministic template fill function
   Component: React.FC<{ data: any }>;
 }
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+};
+
+const toText = (value: unknown, fallback: string): string => {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return fallback;
+};
 
 // --- Template 1: Stats Comparison (Bar Chart) ---
 const StatsComparison: React.FC<{ data: any }> = ({ data }) => {
@@ -82,6 +99,7 @@ export const statsTemplate: AnimationTemplate = {
     },
     required: ['homeLabel', 'awayLabel', 'metric', 'homeValue', 'awayValue']
   },
+  requiredParams: ['homeLabel', 'awayLabel', 'metric', 'homeValue', 'awayValue'],
   example: {
     homeLabel: "Man City",
     awayLabel: "Liverpool",
@@ -89,6 +107,13 @@ export const statsTemplate: AnimationTemplate = {
     homeValue: 65,
     awayValue: 35
   },
+  fillParams: (params: any) => ({
+    homeLabel: toText(params?.homeLabel, 'Home Team'),
+    awayLabel: toText(params?.awayLabel, 'Away Team'),
+    metric: toText(params?.metric, 'Metric'),
+    homeValue: toNumber(params?.homeValue, 0),
+    awayValue: toNumber(params?.awayValue, 0),
+  }),
   Component: StatsComparison
 };
 
@@ -103,7 +128,7 @@ const OddsCard: React.FC<{ data: any }> = ({ data }) => {
   return (
     <div style={{ display: 'flex', gap: '40px', width: '100%', justifyContent: 'center', transform: `scale(${enter})` }}>
       <div style={{ background: '#18181b', padding: '40px', borderRadius: '20px', textAlign: 'center', minWidth: '200px', border: '2px solid #10b981' }}>
-        <div style={{ fontSize: '30px', color: '#a1a1aa', marginBottom: '10px' }}>HOME</div>
+        <div style={{ fontSize: '30px', color: '#a1a1aa', marginBottom: '10px' }}>{data.homeLabel || 'HOME'}</div>
         <div style={{ fontSize: '60px', fontWeight: 'bold', color: '#fff' }}>{had.h}</div>
       </div>
       <div style={{ background: '#18181b', padding: '40px', borderRadius: '20px', textAlign: 'center', minWidth: '200px', border: '2px solid #71717a' }}>
@@ -111,7 +136,7 @@ const OddsCard: React.FC<{ data: any }> = ({ data }) => {
         <div style={{ fontSize: '60px', fontWeight: 'bold', color: '#fff' }}>{had.d}</div>
       </div>
       <div style={{ background: '#18181b', padding: '40px', borderRadius: '20px', textAlign: 'center', minWidth: '200px', border: '2px solid #3b82f6' }}>
-        <div style={{ fontSize: '30px', color: '#a1a1aa', marginBottom: '10px' }}>AWAY</div>
+        <div style={{ fontSize: '30px', color: '#a1a1aa', marginBottom: '10px' }}>{data.awayLabel || 'AWAY'}</div>
         <div style={{ fontSize: '60px', fontWeight: 'bold', color: '#fff' }}>{had.a}</div>
       </div>
     </div>
@@ -136,9 +161,19 @@ export const oddsTemplate: AnimationTemplate = {
     },
     required: ['had']
   },
+  requiredParams: ['had.h', 'had.d', 'had.a'],
   example: {
     had: { h: 1.55, d: 4.20, a: 6.50 }
   },
+  fillParams: (params: any) => ({
+    homeLabel: toText(params?.homeLabel, 'HOME'),
+    awayLabel: toText(params?.awayLabel, 'AWAY'),
+    had: {
+      h: toNumber(params?.had?.h, 0),
+      d: toNumber(params?.had?.d, 0),
+      a: toNumber(params?.had?.a, 0),
+    }
+  }),
   Component: OddsCard
 };
 
@@ -192,10 +227,15 @@ export const tacticalTemplate: AnimationTemplate = {
       note: { type: 'string' }
     }
   },
+  requiredParams: ['formation'],
   example: {
     formation: "4-3-3 Attacking",
     note: "High press line"
   },
+  fillParams: (params: any) => ({
+    formation: toText(params?.formation, 'Tactical View'),
+    note: toText(params?.note, ''),
+  }),
   Component: TacticalBoard
 };
 

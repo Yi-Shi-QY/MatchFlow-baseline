@@ -4,15 +4,15 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { MOCK_MATCHES, Match } from '@/src/data/matches';
-import { analyzeMatch, streamAgentThoughts, streamRemotionCode, MatchAnalysis, AnalysisResumeState } from '@/src/services/ai';
-import { saveHistory, getHistory, saveResumeState, getResumeState, clearResumeState, HistoryRecord } from '@/src/services/history';
+import { MatchAnalysis } from '@/src/services/ai';
+import { getHistory, getResumeState, HistoryRecord } from '@/src/services/history';
 import { getSavedMatches, SavedMatchRecord } from '@/src/services/savedMatches';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
 import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate, FileText, ChevronDown, ChevronUp, Video, Download, Loader2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
-import { parseAgentStream, AgentResult } from '@/src/services/agentParser';
+import { AgentResult } from '@/src/services/agentParser';
 import { RemotionPlayer } from '@/src/components/RemotionPlayer';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
 import { compressToEncodedURIComponent } from 'lz-string';
@@ -28,7 +28,7 @@ export default function MatchDetail() {
   const { t } = useTranslation();
   const location = useLocation();
   const importedData = location.state?.importedData;
-  const { activeAnalyses, startAnalysis: contextStartAnalysis, setCollapsedSegments: contextSetCollapsedSegments, generateCodeForSegment: contextGenerateCode } = useAnalysis();
+  const { activeAnalyses, startAnalysis: contextStartAnalysis, setCollapsedSegments: contextSetCollapsedSegments } = useAnalysis();
   
   const isCustom = id === 'custom';
   const customMatch = React.useMemo(() => {
@@ -112,7 +112,6 @@ export default function MatchDetail() {
   const [showJson, setShowJson] = useState(false);
   const [savedResumeState, setSavedResumeState] = useState<any | null>(null);
   const [showShare, setShowShare] = useState(false);
-  const [animationInstructions, setAnimationInstructions] = useState<Record<string, string>>({});
   const [isExporting, setIsExporting] = useState(false);
   const [isPreviewExpanded, setIsPreviewExpanded] = useState(true);
 
@@ -637,8 +636,6 @@ export default function MatchDetail() {
     thoughts: '',
     parsedStream: null as AgentResult | null,
     collapsedSegments: {} as Record<string, boolean>,
-    generatedCodes: {} as Record<string, string>,
-    isGeneratingCode: {} as Record<string, boolean>,
     isAnalyzing: false,
     error: null as string | null
   };
@@ -650,8 +647,6 @@ export default function MatchDetail() {
       thoughts: activeAnalysis.thoughts,
       parsedStream: activeAnalysis.parsedStream,
       collapsedSegments: activeAnalysis.collapsedSegments,
-      generatedCodes: activeAnalysis.generatedCodes,
-      isGeneratingCode: activeAnalysis.isGeneratingCode,
       isAnalyzing: activeAnalysis.isAnalyzing,
       error: activeAnalysis.error
     };
@@ -662,8 +657,6 @@ export default function MatchDetail() {
       thoughts: '[SYSTEM] Loaded from local history cache.\n\nAnalysis complete.',
       parsedStream: historyRecord.parsedStream || null,
       collapsedSegments: {},
-      generatedCodes: historyRecord.generatedCodes || {},
-      isGeneratingCode: {},
       isAnalyzing: false,
       error: null
     };
@@ -675,8 +668,6 @@ export default function MatchDetail() {
     thoughts,
     parsedStream,
     collapsedSegments,
-    generatedCodes,
-    isGeneratingCode,
     isAnalyzing,
     error
   } = displayData;
@@ -985,54 +976,9 @@ export default function MatchDetail() {
                         "{seg.animation.narration}"
                       </div>
                       
-                      {/* Remotion Player */}
-                      {(isGeneratingCode[seg.id] || generatedCodes[seg.id]) && (
-                        <div className="mt-2 w-full max-w-[300px] mx-auto">
-                          <RemotionPlayer 
-                            code={generatedCodes[seg.id]} 
-                            data={seg.animation.data}
-                            title={seg.animation.title || ''}
-                            narration={seg.animation.narration || ''}
-                            isGenerating={isGeneratingCode[seg.id]}
-                          />
-                        </div>
-                      )}
-
-                      {/* Raw Code Toggle */}
-                      {generatedCodes[seg.id] && (
-                        <details className="mt-2 group">
-                          <summary className="text-[10px] text-emerald-500 cursor-pointer hover:text-emerald-400 font-mono flex items-center gap-1">
-                            <Code2 className="w-3 h-3" /> {t('match.view_remotion_code')}
-                          </summary>
-                          <div className="bg-zinc-950 rounded-lg p-4 border border-white/5 font-mono text-[10px] text-zinc-400 overflow-x-auto mt-2">
-                            <pre>{generatedCodes[seg.id]}</pre>
-                          </div>
-                        </details>
-                      )}
-
-                      {/* Retry / Custom Instruction */}
-                      {!isGeneratingCode[seg.id] && (
-                        <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-2">
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              placeholder={t('match.regen_animation_placeholder')}
-                              value={animationInstructions[seg.id] || ''}
-                              onChange={(e) => setAnimationInstructions(prev => ({ ...prev, [seg.id]: e.target.value }))}
-                              className="flex-1 bg-zinc-900 border border-white/10 rounded p-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => contextGenerateCode(match.id, seg, animationInstructions[seg.id])}
-                              disabled={isGeneratingCode[seg.id]}
-                              className="h-7 text-[10px] gap-1 border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
-                            >
-                              <RefreshCw className="w-3 h-3" /> {t('match.regenerate')}
-                            </Button>
-                          </div>
-                        </div>
-                      )}
+                      <div className="mt-2 w-full max-w-[300px] mx-auto">
+                        <RemotionPlayer animation={seg.animation} />
+                      </div>
                     </div>
                   </div>
                 )}

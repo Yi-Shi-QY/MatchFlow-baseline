@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { Match } from '@/src/data/matches';
-import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState, streamRemotionCode } from '@/src/services/ai';
+import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState } from '@/src/services/ai';
 import { saveHistory, saveResumeState, clearResumeState, getResumeState } from '@/src/services/history';
 import { deleteSavedMatch } from '@/src/services/savedMatches';
 import { AgentResult, parseAgentStream } from '@/src/services/agentParser';
@@ -16,8 +16,6 @@ export interface ActiveAnalysis {
   thoughts: string;
   parsedStream: AgentResult | null;
   collapsedSegments: Record<string, boolean>;
-  generatedCodes: Record<string, string>;
-  isGeneratingCode: Record<string, boolean>;
   isAnalyzing: boolean;
   analysis: MatchAnalysis | null;
   error: string | null;
@@ -28,7 +26,6 @@ interface AnalysisContextType {
   startAnalysis: (match: Match, dataToAnalyze: any, includeAnimations: boolean, isResume?: boolean) => void;
   clearActiveAnalysis: (matchId: string) => void;
   setCollapsedSegments: (matchId: string, segments: Record<string, boolean>) => void;
-  generateCodeForSegment: (matchId: string, seg: any, customInstruction?: string) => void;
 }
 
 const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined);
@@ -103,61 +100,6 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     updateAnalysis(matchId, { collapsedSegments: segments });
   }, [updateAnalysis]);
 
-  const generateCodeForSegment = useCallback(async (matchId: string, seg: any, customInstruction?: string) => {
-    const analysis = activeAnalyses[matchId];
-    if (!analysis || analysis.isGeneratingCode[seg.id]) return;
-
-    updateAnalysis(matchId, { 
-      isGeneratingCode: { ...analysis.isGeneratingCode, [seg.id]: true },
-      generatedCodes: { ...analysis.generatedCodes, [seg.id]: '' }
-    });
-    
-    try {
-      let fullCode = '';
-      const stream = streamRemotionCode(seg.animation, customInstruction);
-      
-      for await (const chunk of stream) {
-        fullCode += chunk;
-        setActiveAnalyses(prev => {
-          if (!prev[matchId]) return prev;
-          return {
-            ...prev,
-            [matchId]: {
-              ...prev[matchId],
-              generatedCodes: { ...prev[matchId].generatedCodes, [seg.id]: fullCode }
-            }
-          };
-        });
-      }
-    } catch (error) {
-      console.error(`Error generating code for segment ${seg.id}:`, error);
-    } finally {
-      setActiveAnalyses(prev => {
-        if (!prev[matchId]) return prev;
-        return {
-          ...prev,
-          [matchId]: {
-            ...prev[matchId],
-            isGeneratingCode: { ...prev[matchId].isGeneratingCode, [seg.id]: false }
-          }
-        };
-      });
-    }
-  }, [activeAnalyses, updateAnalysis]);
-
-  // Auto-generate code effect
-  useEffect(() => {
-    Object.values(activeAnalyses).forEach(analysis => {
-      if (analysis.parsedStream) {
-        analysis.parsedStream.segments.forEach(seg => {
-          if (seg.animation && !analysis.generatedCodes[seg.id] && !analysis.isGeneratingCode[seg.id]) {
-            generateCodeForSegment(analysis.matchId, seg);
-          }
-        });
-      }
-    });
-  }, [activeAnalyses, generateCodeForSegment]);
-
   const startAnalysis = useCallback(async (match: Match, dataToAnalyze: any, includeAnimations: boolean, isResume: boolean = false) => {
     const matchId = match.id;
     
@@ -199,8 +141,6 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       thoughts: initialThoughts,
       parsedStream: initialParsedStream,
       collapsedSegments: initialCollapsed,
-      generatedCodes: {},
-      isGeneratingCode: {},
       isAnalyzing: true,
       analysis: null,
       error: null
@@ -278,8 +218,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         
         setActiveAnalyses(prev => {
           if (!prev[matchId]) return prev;
-          const currentAnalysisState = prev[matchId];
-          saveHistory(finalMatch, finalAnalysis, finalParsed, currentAnalysisState.generatedCodes).catch(console.error);
+          saveHistory(finalMatch, finalAnalysis, finalParsed).catch(console.error);
           
           // Also try to delete from saved matches if it exists (it's now history)
           deleteSavedMatch(matchId).catch(() => {});
@@ -326,7 +265,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AnalysisContext.Provider value={{ activeAnalyses, startAnalysis, clearActiveAnalysis, setCollapsedSegments, generateCodeForSegment }}>
+    <AnalysisContext.Provider value={{ activeAnalyses, startAnalysis, clearActiveAnalysis, setCollapsedSegments }}>
       {children}
     </AnalysisContext.Provider>
   );

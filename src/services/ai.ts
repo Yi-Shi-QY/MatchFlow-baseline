@@ -1,9 +1,14 @@
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { getSettings } from "./settings";
-import { REMOTION_RULES } from "./remotionRules";
-import { NARRATION_RULES } from "./remotion/narrationRules";
-import { ANIMATION_RULES } from "./remotion/animationRules";
 import { availableSkills, executeSkill } from "../skills";
+import { extractJson } from "../utils/json";
+import {
+  buildAnimationBlock,
+  buildFallbackAnimationPayload,
+  buildTemplatePromptSpec,
+  getTemplateDeclaration,
+  validateAndNormalizeAnimationPayload,
+} from "./remotion/templateParams";
 
 let aiInstance: GoogleGenAI | null = null;
 let currentApiKey: string | null = null;
@@ -36,129 +41,6 @@ export interface MatchAnalysis {
     home: number;
     away: number;
   };
-}
-
-export async function analyzeMatch(matchData: any): Promise<MatchAnalysis> {
-  const settings = getSettings();
-  const prompt = `
-    Analyze the following football match data and provide a detailed prediction, key factors, win probabilities, and expected goals (xG).
-    Match Data: ${JSON.stringify(matchData)}
-    
-    You MUST return the response in strict JSON format matching this schema:
-    {
-      "prediction": "A short, engaging prediction text for the match outcome.",
-      "keyFactors": ["factor 1", "factor 2", "factor 3"],
-      "winProbability": { "home": 40, "draw": 30, "away": 30 },
-      "expectedGoals": { "home": 1.5, "away": 1.2 }
-    }
-  `;
-
-  if (settings.provider === "deepseek") {
-    if (!settings.deepseekApiKey) {
-      throw new Error("DeepSeek API Key is not configured in settings.");
-    }
-
-    const response = await fetch("https://api.deepseek.com/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.deepseekApiKey}`,
-      },
-      body: JSON.stringify({
-        model: settings.model || "deepseek-chat",
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(
-        err.error?.message || `DeepSeek API error: ${response.statusText}`
-      );
-    }
-
-    const data = await response.json();
-    const text = data.choices[0]?.message?.content || "";
-
-    // Attempt to extract JSON from the text, as DeepSeek might wrap it in markdown
-    const jsonMatch =
-      text.match(/```json\n([\s\S]*?)\n```/) || text.match(/\{[\s\S]*\}/);
-    const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : text;
-
-    try {
-      return JSON.parse(jsonStr) as MatchAnalysis;
-    } catch (e) {
-      console.error("Failed to parse DeepSeek JSON response:", text);
-      throw new Error("Invalid JSON response from DeepSeek");
-    }
-  } else {
-    // Gemini
-    const ai = getGeminiAI();
-    const response = await ai.models.generateContent({
-      model: settings.model || "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            prediction: {
-              type: Type.STRING,
-              description:
-                "A short, engaging prediction text for the match outcome.",
-            },
-            keyFactors: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description:
-                "3-5 key tactical or statistical factors that will decide the match.",
-            },
-            winProbability: {
-              type: Type.OBJECT,
-              properties: {
-                home: {
-                  type: Type.NUMBER,
-                  description: "Home team win probability (0-100)",
-                },
-                draw: {
-                  type: Type.NUMBER,
-                  description: "Draw probability (0-100)",
-                },
-                away: {
-                  type: Type.NUMBER,
-                  description: "Away team win probability (0-100)",
-                },
-              },
-              required: ["home", "draw", "away"],
-            },
-            expectedGoals: {
-              type: Type.OBJECT,
-              properties: {
-                home: {
-                  type: Type.NUMBER,
-                  description: "Home team expected goals (e.g., 1.5)",
-                },
-                away: {
-                  type: Type.NUMBER,
-                  description: "Away team expected goals (e.g., 0.8)",
-                },
-              },
-              required: ["home", "away"],
-            },
-          },
-          required: [
-            "prediction",
-            "keyFactors",
-            "winProbability",
-            "expectedGoals",
-          ],
-        },
-      },
-    });
-
-    const jsonStr = response.text?.trim() || "{}";
-    return JSON.parse(jsonStr) as MatchAnalysis;
-  }
 }
 
 export async function testConnection(settings: any): Promise<boolean> {
@@ -504,14 +386,15 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
 
 import { getAgent } from "../agents";
 
-export async function generateAnalysisPlan(matchData: any): Promise<any[]> {
+export async function generateAnalysisPlan(matchData: any, includeAnimations: boolean = true): Promise<any[]> {
   const settings = getSettings();
   const agentId = settings.enableAutonomousPlanning ? 'planner_autonomous' : 'planner_template';
   const agent = getAgent(agentId);
   
   const prompt = agent.systemPrompt({ 
     matchData, 
-    language: settings.language
+    language: settings.language,
+    includeAnimations
   });
 
   let responseText = "";
@@ -574,53 +457,163 @@ export async function* streamAnalysisAgent(matchData: any, segmentPlan: any, pre
   yield* streamAIRequest(prompt, false, agent.skills);
 }
 
+async function collectStreamText(stream: AsyncGenerator<string>): Promise<string> {
+  let output = '';
+  for await (const chunk of stream) {
+    output += chunk;
+  }
+  return output;
+}
+
+function extractAnimationPayload(outputText: string): any {
+  const blockMatch = outputText.match(/<animation>([\s\S]*?)(?:<\/animation>|$)/);
+  const raw = (blockMatch?.[1] ?? outputText).trim();
+  return extractJson(raw);
+}
+
 export async function* streamAnimationAgent(matchData: any, segmentPlan: any, analysisText: string) {
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
-  
-  let animationSchema = "";
-  
-  if (segmentPlan.animationType === 'odds') {
-    animationSchema = `
-    <animation>
-    {
-      "type": "odds",
-      "title": "${segmentPlan.title}",
-      "narration": "A short, engaging voiceover script for this animation.",
-      "data": {
-        "homeLabel": "${homeName}", "awayLabel": "${awayName}",
-        "had": { "h": 1.5, "d": 3.2, "a": 4.5 },
-        "hhad": { "h": 2.1, "d": 3.5, "a": 2.8, "goalline": -1 }
-      }
-    }
-    </animation>`;
-  } else {
-    animationSchema = `
-    <animation>
-    {
-      "type": "${segmentPlan.animationType}",
-      "title": "${segmentPlan.title}",
-      "narration": "A short, engaging voiceover script for this animation.",
-      "data": {
-        "homeLabel": "${homeName}", "awayLabel": "${awayName}",
-        "homeValue": 10, "awayValue": 5,
-        "metric": "REPLACE_WITH_REAL_METRIC"
-      }
-    }
-    </animation>`;
+  const declaration = getTemplateDeclaration(segmentPlan.animationType || 'stats');
+  const fallback = buildFallbackAnimationPayload(
+    segmentPlan.animationType || 'stats',
+    segmentPlan.title || 'Data Visualization',
+    homeName,
+    awayName,
+  );
+
+  const animationSchema = `
+  ${buildTemplatePromptSpec(segmentPlan.animationType || 'stats', segmentPlan.title || '', homeName, awayName)}
+
+  OUTPUT CONTRACT (STRICT):
+  <animation>
+  {
+    "type": "${segmentPlan.animationType || 'stats'}",
+    "templateId": "${declaration.templateId}",
+    "title": "${segmentPlan.title || 'Data Visualization'}",
+    "narration": "A short voiceover script in the same language as the analysis.",
+    "params": ${JSON.stringify(fallback.params, null, 2)},
+    "data": ${JSON.stringify(fallback.params, null, 2)}
   }
+  </animation>
+
+  IMPORTANT:
+  - "params" MUST contain only template parameters.
+  - "data" MUST be exactly the same object as "params" (for backward compatibility).
+  - Do NOT output any explanation outside the <animation> block.
+  `;
 
   const settings = getSettings();
   const agent = getAgent('animation');
-  const prompt = agent.systemPrompt({ 
-    matchData, 
-    segmentPlan, 
-    analysisText, 
-    animationSchema, 
-    language: settings.language 
+  const prompt = agent.systemPrompt({
+    matchData,
+    segmentPlan,
+    analysisText,
+    animationSchema,
+    language: settings.language
   });
 
   yield* streamAIRequest(prompt, false, agent.skills);
+}
+
+export async function* streamFixAnimationParams(
+  matchData: any,
+  segmentPlan: any,
+  analysisText: string,
+  wrongOutput: string,
+  errors: string[],
+) {
+  const homeName = matchData?.homeTeam?.name || "Home Team";
+  const awayName = matchData?.awayTeam?.name || "Away Team";
+  const declaration = getTemplateDeclaration(segmentPlan.animationType || 'stats');
+
+  const prompt = `
+  You are fixing animation template parameters.
+  You are NOT writing Remotion component code.
+  You must return exactly one <animation> JSON block with valid params.
+
+  TEMPLATE CONTRACT:
+  ${buildTemplatePromptSpec(segmentPlan.animationType || 'stats', segmentPlan.title || '', homeName, awayName)}
+
+  EXPECTED TEMPLATE ID: ${declaration.templateId}
+
+  CONTEXT:
+  MATCH DATA:
+  ${JSON.stringify(matchData)}
+
+  EXPERT ANALYSIS:
+  ${analysisText}
+
+  INVALID OUTPUT:
+  ${wrongOutput}
+
+  VALIDATION ERRORS:
+  ${errors.join('\n')}
+
+  STRICT OUTPUT:
+  <animation>
+  {
+    "type": "${segmentPlan.animationType || 'stats'}",
+    "templateId": "${declaration.templateId}",
+    "title": "${segmentPlan.title || 'Data Visualization'}",
+    "narration": "Short voiceover",
+    "params": { ... },
+    "data": { ...same as params... }
+  }
+  </animation>
+  `;
+
+  yield* streamAIRequest(prompt, false);
+}
+
+async function generateValidatedAnimationBlock(
+  matchData: any,
+  segmentPlan: any,
+  analysisText: string,
+): Promise<string> {
+  const homeName = matchData?.homeTeam?.name || "Home Team";
+  const awayName = matchData?.awayTeam?.name || "Away Team";
+  const expectedType = segmentPlan.animationType || 'stats';
+  const maxFixAttempts = 2;
+
+  let candidateText = await collectStreamText(streamAnimationAgent(matchData, segmentPlan, analysisText));
+
+  for (let attempt = 0; attempt <= maxFixAttempts; attempt++) {
+    const rawPayload = extractAnimationPayload(candidateText);
+    const validation = validateAndNormalizeAnimationPayload(rawPayload, expectedType);
+
+    if (!validation.payload.title) {
+      validation.payload.title = segmentPlan.title || 'Data Visualization';
+    }
+    if (!validation.payload.narration && typeof rawPayload?.narration === 'string') {
+      validation.payload.narration = rawPayload.narration;
+    }
+
+    if (validation.isValid) {
+      return buildAnimationBlock(validation.payload);
+    }
+
+    if (attempt < maxFixAttempts) {
+      candidateText = await collectStreamText(
+        streamFixAnimationParams(
+          matchData,
+          segmentPlan,
+          analysisText,
+          candidateText,
+          validation.errors,
+        ),
+      );
+    }
+  }
+
+  const fallback = buildFallbackAnimationPayload(
+    expectedType,
+    segmentPlan.title || 'Data Visualization',
+    homeName,
+    awayName,
+  );
+  fallback.narration = typeof segmentPlan?.focus === 'string' ? segmentPlan.focus : '';
+  return buildAnimationBlock(fallback);
 }
 
 export async function* streamTagAgent(analysisText: string) {
@@ -666,7 +659,7 @@ export async function* streamAgentThoughts(
 
   if (!resumeState) {
     try {
-      plan = await generateAnalysisPlan(matchData);
+      plan = await generateAnalysisPlan(matchData, includeAnimations);
     } catch (e) {
       plan = [{ title: "Analysis", focus: "General analysis", animationType: "none", agentType: "general" }];
     }
@@ -711,17 +704,13 @@ export async function* streamAgentThoughts(
 
     // A.1 Run Animation Agent (if needed)
     if (includeAnimations && segment.animationType && segment.animationType !== 'none') {
-      // Extract clean text for the animation agent (remove XML tags if any, though analysis agent should output markdown inside tags)
-      // The prompt for analysis agent asks for <thought> tags, so we might want to extract content inside <thought> if present, 
-      // or just pass the whole thing. The animation agent is robust enough to handle the whole thing.
-      
-      const animationStream = streamAnimationAgent(matchData, segment, segmentText);
-      let animationOutput = "";
-      for await (const chunk of animationStream) {
-        animationOutput += chunk;
-        yield chunk;
-      }
-      
+      // Parameter-first flow:
+      // 1) LLM extracts template params JSON
+      // 2) System validates and retries if invalid
+      // 3) System emits normalized <animation> block
+      const animationOutput = await generateValidatedAnimationBlock(matchData, segment, segmentText);
+      yield animationOutput;
+
       // Append animation output to the text tracking variables
       segmentText += "\n" + animationOutput;
       fullAnalysisText += "\n" + animationOutput;
@@ -751,102 +740,4 @@ export async function* streamAgentThoughts(
   for await (const chunk of summaryStream) {
     yield chunk;
   }
-}
-
-export async function* streamRegenerateSegment(matchData: any, segmentIndex: number) {
-  const homeName = matchData?.homeTeam?.name || "Home Team";
-  const awayName = matchData?.awayTeam?.name || "Away Team";
-  const prompt = `
-    You are an expert football analyst director.
-    Please regenerate ONLY Segment ${segmentIndex + 1} for the match between ${homeName} and ${awayName}.
-    
-    You MUST output your response as XML-like tags:
-    <thought>
-    Your detailed analysis and reasoning for this specific segment.
-    </thought>
-    <animation>
-    {
-      "type": "comparison" | "tactical" | "stats",
-      "title": "Segment Title",
-      "narration": "Voiceover script",
-      "data": { "homeValue": "...", "awayValue": "..." }
-    }
-    </animation>
-
-    Match Data: ${JSON.stringify(matchData)}
-  `;
-
-  yield* streamAIRequest(prompt, false);
-}
-
-export async function* streamRemotionCode(segmentData: any, customInstruction?: string) {
-  // 1. Yield Imports
-  yield `import React from 'react';\n`;
-  yield `import * as Lucide from 'lucide-react';\n`;
-  yield `import { TEMPLATES } from '@/src/services/remotion/templates';\n`;
-  yield `import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence } from 'remotion';\n\n`;
-
-  // 2. Generate Animation Component
-  const animationPrompt = `
-    ${ANIMATION_RULES}
-    
-    Create the DataVisualization component for the following data:
-    ${JSON.stringify(segmentData.data, null, 2)}
-    
-    ${customInstruction ? `\nUSER CUSTOM INSTRUCTION:\n${customInstruction}\n` : ''}
-  `;
-
-  yield `// --- Animation Component ---\n`;
-  const animationStream = streamAIRequest(animationPrompt, false);
-  for await (const chunk of animationStream) {
-    yield chunk;
-  }
-  yield `\n\n`;
-
-  // 3. Generate Narration Component
-  const narrationPrompt = `
-    ${NARRATION_RULES}
-    
-    Create the NarrationOverlay component for the following content:
-    Title: "${segmentData.title}"
-    Narration: "${segmentData.narration}"
-  `;
-
-  yield `// --- Narration Component ---\n`;
-  const narrationStream = streamAIRequest(narrationPrompt, false);
-  for await (const chunk of narrationStream) {
-    yield chunk;
-  }
-  yield `\n\n`;
-
-  // 4. Yield Main Scene
-  yield `// --- Main Scene ---\n`;
-  yield `export default function Scene({ data, title, narration }) {\n`;
-  yield `  return (\n`;
-  yield `    <AbsoluteFill style={{ backgroundColor: '#09090b' }}>\n`;
-  yield `      <DataVisualization data={data} />\n`;
-  yield `      <NarrationOverlay title={title} narration={narration} />\n`;
-  yield `    </AbsoluteFill>\n`;
-  yield `  );\n`;
-  yield `}\n`;
-}
-
-export async function* streamFixRemotionCode(segmentData: any, wrongCode: string, errors: string[]) {
-  const prompt = `
-    ${REMOTION_RULES}
-
-    The following Remotion component code has errors and violates the rules:
-    ERRORS:
-    ${errors.join('\n')}
-
-    WRONG CODE:
-    ${wrongCode}
-
-    Please fix the code for the following scene data:
-    ${JSON.stringify(segmentData, null, 2)}
-    
-    Remember: Return ONLY valid TSX code. No markdown formatting.
-  `;
-
-  yield* streamAIRequest(prompt, false);
 }
