@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell, Send } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
-import { getSettings, saveSettings, AppSettings } from '@/src/services/settings';
+import { getSettings, saveSettings, AppSettings, AIProvider } from '@/src/services/settings';
 import { testConnection } from '@/src/services/ai';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import { AGENT_MODEL_CONFIG, ALL_AGENT_IDS } from '@/src/config/agentModelConfig';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -16,8 +17,11 @@ export default function Settings() {
   const [settings, setLocalSettings] = useState<AppSettings>({
     provider: 'gemini',
     model: 'gemini-3-flash-preview',
+    agentModelMode: 'global',
     deepseekApiKey: '',
     geminiApiKey: '',
+    openaiCompatibleBaseUrl: 'https://api.openai.com/v1',
+    openaiCompatibleApiKey: '',
     matchDataServerUrl: '',
     matchDataApiKey: '',
     language: 'en',
@@ -63,10 +67,16 @@ export default function Settings() {
   };
 
   const handleProviderChange = (provider: string) => {
+    const nextProvider = provider as AIProvider;
+    const nextModel = nextProvider === 'gemini'
+      ? 'gemini-3-flash-preview'
+      : nextProvider === 'deepseek'
+        ? 'deepseek-chat'
+        : 'gpt-4o-mini';
     setLocalSettings({
       ...settings,
-      provider: provider as 'gemini' | 'deepseek',
-      model: provider === 'gemini' ? 'gemini-3-flash-preview' : 'deepseek-chat',
+      provider: nextProvider,
+      model: nextModel,
     });
     setAiTestStatus('idle');
     setAiTestMessage('');
@@ -76,7 +86,38 @@ export default function Settings() {
     setAiTestStatus('testing');
     setAiTestMessage('');
     try {
-      await testConnection(settings);
+      if (settings.agentModelMode === 'config') {
+        const targetsMap = new Map<string, { provider: AIProvider; model: string }>();
+        const configuredAgentIds = new Set<string>();
+
+        Object.entries(AGENT_MODEL_CONFIG).forEach(([agentId, config]) => {
+          if (!config?.provider || !config?.model) return;
+          configuredAgentIds.add(agentId);
+          targetsMap.set(`${config.provider}:${config.model}`, {
+            provider: config.provider,
+            model: config.model
+          });
+        });
+
+        const hasFallbackAgents = ALL_AGENT_IDS.some(id => !configuredAgentIds.has(id));
+        if (hasFallbackAgents || targetsMap.size === 0) {
+          targetsMap.set(`${settings.provider}:${settings.model}`, {
+            provider: settings.provider,
+            model: settings.model
+          });
+        }
+
+        for (const target of targetsMap.values()) {
+          await testConnection({
+            ...settings,
+            provider: target.provider,
+            model: target.model
+          });
+        }
+      } else {
+        await testConnection(settings);
+      }
+
       setAiTestStatus('success');
       setAiTestMessage(t('settings.ai_connected'));
     } catch (e: any) {
@@ -118,16 +159,70 @@ export default function Settings() {
 
   const providerOptions = [
     { value: 'gemini', label: 'Google Gemini' },
-    { value: 'deepseek', label: 'DeepSeek' }
+    { value: 'deepseek', label: 'DeepSeek' },
+    { value: 'openai_compatible', label: 'OpenAI-Compatible' }
   ];
 
-  const modelOptions = settings.provider === 'gemini' ? [
-    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview (Fast)' },
-    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview (Smart)' }
-  ] : [
-    { value: 'deepseek-chat', label: 'DeepSeek Chat (V3)' },
-    { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner (R1)' }
+  const openAIBaseModelOptions = [
+    { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+    { value: 'gpt-4.1-mini', label: 'gpt-4.1-mini' },
+    { value: 'o3-mini', label: 'o3-mini' }
   ];
+  const openAIModelOptions = openAIBaseModelOptions.some(opt => opt.value === settings.model)
+    ? openAIBaseModelOptions
+    : [{ value: settings.model, label: settings.model }, ...openAIBaseModelOptions];
+
+  const modelOptions = settings.provider === 'gemini'
+    ? [
+      { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview (Fast)' },
+      { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview (Smart)' }
+    ]
+    : settings.provider === 'deepseek'
+      ? [
+        { value: 'deepseek-chat', label: 'DeepSeek Chat (V3)' },
+        { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner (R1)' }
+      ]
+      : openAIModelOptions;
+
+  const modelModeOptions = [
+    { value: 'global', label: t('settings.model_mode_global') },
+    { value: 'config', label: t('settings.model_mode_config') }
+  ];
+
+  const configEntries = React.useMemo(() => {
+    return Object.entries(AGENT_MODEL_CONFIG)
+      .filter(([, value]) => !!value?.provider && !!value?.model)
+      .map(([agentId, value]) => ({
+        agentId,
+        provider: value!.provider,
+        model: value!.model
+      }));
+  }, []);
+
+  const configuredAgentIds = React.useMemo(
+    () => new Set(configEntries.map(entry => entry.agentId)),
+    [configEntries]
+  );
+
+  const configMissingAgents = React.useMemo(
+    () => ALL_AGENT_IDS.filter(id => !configuredAgentIds.has(id)),
+    [configuredAgentIds]
+  );
+
+  const configProviders = React.useMemo(
+    () => new Set(configEntries.map(entry => entry.provider)),
+    [configEntries]
+  );
+
+  const showGeminiKeyInput = settings.agentModelMode === 'global'
+    ? settings.provider === 'gemini'
+    : configProviders.has('gemini') || settings.provider === 'gemini';
+  const showDeepseekKeyInput = settings.agentModelMode === 'global'
+    ? settings.provider === 'deepseek'
+    : configProviders.has('deepseek') || settings.provider === 'deepseek';
+  const showOpenAICompatibleInput = settings.agentModelMode === 'global'
+    ? settings.provider === 'openai_compatible'
+    : configProviders.has('openai_compatible') || settings.provider === 'openai_compatible';
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col pb-[calc(5rem+env(safe-area-inset-bottom))]">
@@ -250,13 +345,13 @@ export default function Settings() {
                             notifications: [{
                               id: 999,
                               title: settings.language === 'zh' ? '测试通知' : 'Test Notification',
-                              body: settings.language === 'zh' ? '如果您看到这条通知，说明后台通知功能正常。' : 'If you see this, background notifications are working.',
+                              body: settings.language === 'zh' ? '如果你看到这条通知，说明后台通知功能正常。' : 'If you see this, background notifications are working.',
                               schedule: { at: new Date(Date.now() + 1000) }
                             }]
                           });
                           
                           if (!Capacitor.isNativePlatform()) {
-                            alert(settings.language === 'zh' ? '测试通知已发送（仅限原生平台显示）' : 'Test notification scheduled (native only)');
+                            alert(settings.language === 'zh' ? '测试通知已发送（仅原生平台显示）' : 'Test notification scheduled (native only)');
                           }
                         }}
                         variant="outline"
@@ -305,6 +400,23 @@ export default function Settings() {
               
               {!isAiConfigCollapsed && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="space-y-2 relative z-30">
+                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.model_mode')}</label>
+                    <Select
+                      value={settings.agentModelMode}
+                      onChange={(value) => {
+                        setLocalSettings({...settings, agentModelMode: value as 'global' | 'config'});
+                        setAiTestStatus('idle');
+                      }}
+                      options={modelModeOptions}
+                    />
+                    <p className="text-[10px] text-zinc-500">
+                      {settings.agentModelMode === 'global'
+                        ? t('settings.model_mode_global_desc')
+                        : t('settings.model_mode_config_desc')}
+                    </p>
+                  </div>
+
                   <div className="space-y-2 relative z-20">
                     <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.ai_provider')}</label>
                     <Select
@@ -312,18 +424,48 @@ export default function Settings() {
                       onChange={handleProviderChange}
                       options={providerOptions}
                     />
+                    {settings.agentModelMode === 'config' && (
+                      <p className="text-[10px] text-zinc-500">{t('settings.global_fallback_hint')}</p>
+                    )}
                   </div>
 
-                  <div className="space-y-2 relative z-10">
-                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.model')}</label>
-                    <Select
-                      value={settings.model}
-                      onChange={(value) => {
-                        setLocalSettings({...settings, model: value});
-                        setAiTestStatus('idle');
-                      }}
-                      options={modelOptions}
-                    />
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                      {settings.agentModelMode === 'config'
+                        ? t('settings.global_fallback_model')
+                        : t('settings.model')}
+                    </label>
+                    {settings.provider === 'openai_compatible' ? (
+                      <>
+                        <input
+                          type="text"
+                          value={settings.model}
+                          onChange={(e) => {
+                            setLocalSettings({...settings, model: e.target.value});
+                            setAiTestStatus('idle');
+                          }}
+                          placeholder="gpt-4o-mini / o3-mini / your-model-id"
+                          className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                        />
+                        <Select
+                          value={settings.model}
+                          onChange={(value) => {
+                            setLocalSettings({...settings, model: value});
+                            setAiTestStatus('idle');
+                          }}
+                          options={modelOptions}
+                        />
+                      </>
+                    ) : (
+                      <Select
+                        value={settings.model}
+                        onChange={(value) => {
+                          setLocalSettings({...settings, model: value});
+                          setAiTestStatus('idle');
+                        }}
+                        options={modelOptions}
+                      />
+                    )}
                     {settings.model === 'deepseek-reasoner' && (
                       <p className="text-[10px] text-emerald-500/80 mt-1">
                         {t('settings.reasoner_warning')}
@@ -331,7 +473,34 @@ export default function Settings() {
                     )}
                   </div>
 
-                  {settings.provider === 'deepseek' && (
+                  {settings.agentModelMode === 'config' && (
+                    <div className="space-y-2 border border-white/10 rounded-lg p-3 bg-zinc-900/40">
+                      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.config_preview')}</label>
+                      <p className="text-[10px] text-zinc-500">
+                        {t('settings.config_file_hint')} <span className="font-mono text-zinc-300">src/config/agentModelConfig.ts</span>
+                      </p>
+                      <div className="max-h-44 overflow-auto space-y-1 pr-1">
+                        {configEntries.map(entry => (
+                          <div
+                            key={entry.agentId}
+                            className="flex items-center justify-between text-[11px] bg-black/30 border border-white/5 rounded px-2 py-1"
+                          >
+                            <span className="font-mono text-zinc-300">{entry.agentId}</span>
+                            <span className="text-zinc-500">
+                              {entry.provider} / <span className="text-zinc-300">{entry.model}</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {configMissingAgents.length > 0 && (
+                        <p className="text-[10px] text-amber-400">
+                          {t('settings.config_missing_agents')}: {configMissingAgents.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {showDeepseekKeyInput && (
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.deepseek_api_key')}</label>
                       <input 
@@ -348,7 +517,7 @@ export default function Settings() {
                     </div>
                   )}
 
-                  {settings.provider === 'gemini' && (
+                  {showGeminiKeyInput && (
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.gemini_api_key_optional')}</label>
                       <input 
@@ -362,6 +531,44 @@ export default function Settings() {
                         className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
                       />
                       <p className="text-[10px] text-zinc-500 mt-1" dangerouslySetInnerHTML={{__html: t('settings.gemini_key_hint')}} />
+                    </div>
+                  )}
+
+                  {showOpenAICompatibleInput && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.openai_base_url')}</label>
+                        <input
+                          type="text"
+                          value={settings.openaiCompatibleBaseUrl || ''}
+                          onChange={(e) => {
+                            setLocalSettings({...settings, openaiCompatibleBaseUrl: e.target.value});
+                            setAiTestStatus('idle');
+                          }}
+                          placeholder="https://api.openai.com/v1"
+                          className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                        />
+                        <p className="text-[10px] text-zinc-500">
+                          {t('settings.openai_base_url_hint')}
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.openai_api_key_optional')}</label>
+                        <input
+                          type="password"
+                          value={settings.openaiCompatibleApiKey || ''}
+                          onChange={(e) => {
+                            setLocalSettings({...settings, openaiCompatibleApiKey: e.target.value});
+                            setAiTestStatus('idle');
+                          }}
+                          placeholder="sk-..."
+                          className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                        />
+                        <p className="text-[10px] text-zinc-500">
+                          {t('settings.openai_api_key_hint')}
+                        </p>
+                      </div>
                     </div>
                   )}
 

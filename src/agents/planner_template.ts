@@ -1,4 +1,4 @@
-import { AgentConfig } from './types';
+﻿import { AgentConfig } from './types';
 
 const prompts = {
   en: (home: string, away: string, matchData: string) => {
@@ -20,21 +20,21 @@ Match Data: ${matchData}
   },
   zh: (home: string, away: string, matchData: string) => {
     return `
-你是一位资深足球分析总监。你的工作是为 ${home} 和 ${away} 之间的比赛选择最佳的分析模板。
+你是一位资深足球分析总监。你的任务是为 ${home} vs ${away} 这场比赛选择最合适的分析模板。
 
 **任务：**
-评估比赛数据的丰富程度，并使用 \`select_plan_template\` 工具选择最合适的分析计划模板。
+评估比赛数据丰富度，并使用 \`select_plan_template\` 工具选择最佳分析计划模板。
 
 **指令：**
 1. 分析提供的比赛数据。
-2. 根据数据质量和深度，从可用模板（basic, standard, odds_focused, comprehensive）中选择一个。
-3. 使用选定的 \`templateType\`、\`language\` ("zh") 和 \`includeAnimations\` (true/false) 调用 \`select_plan_template\` 工具。
-4. **重要：** 在调用工具之前或之后不要输出任何对话文本。您的响应应仅包含工具调用。
-5. 调用工具后，你的工作就完成了。你不需要输出任何其他内容。
+2. 根据数据质量与深度，在模板（basic, standard, odds_focused, comprehensive）中选择一个。
+3. 使用选定的 \`templateType\`、\`language\` ("zh") 和 \`includeAnimations\` (true/false) 调用 \`select_plan_template\`。
+4. **重要：** 不要在工具调用前后输出任何对话文本。回复中只能包含工具调用。
+5. 调用工具后任务即完成，不需要输出额外内容。
 
-比赛数据：${matchData}
+比赛数据: ${matchData}
     `;
-  }
+  },
 };
 
 export const plannerTemplateAgent: AgentConfig = {
@@ -43,10 +43,10 @@ export const plannerTemplateAgent: AgentConfig = {
   description: 'Selects a predefined analysis plan template.',
   skills: ['select_plan_template'],
   systemPrompt: ({ matchData, language, includeAnimations }) => {
-    const homeName = matchData?.homeTeam?.name || "Home Team";
-    const awayName = matchData?.awayTeam?.name || "Away Team";
+    const homeName = matchData?.homeTeam?.name || 'Home Team';
+    const awayName = matchData?.awayTeam?.name || 'Away Team';
     const promptGen = language === 'zh' ? prompts.zh : prompts.en;
     const basePrompt = promptGen(homeName, awayName, JSON.stringify(matchData));
     return `${basePrompt}\n\n**USER PREFERENCE:**\nInclude Animations: ${includeAnimations ? 'Yes' : 'No'}`;
-  }
+  },
 };

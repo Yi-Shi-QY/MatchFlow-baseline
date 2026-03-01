@@ -1,9 +1,9 @@
-import { AgentConfig } from './types';
+﻿import { AgentConfig } from './types';
 import { buildAnalysisPrompt } from './utils';
 
 const rolePrompts = {
   en: `You are a Senior Pundit. Weigh all factors and provide a reasoned prediction. Discuss psychological factors.`,
-  zh: `你是一位资深评论员。权衡所有因素并提供合理的预测。讨论心理因素。`
+  zh: `你是一位资深评论员。请综合全部因素，给出有论证的赛前预测，并讨论心理层面的影响。`,
 };
 
 export const predictionAgent: AgentConfig = {
@@ -15,5 +15,5 @@ export const predictionAgent: AgentConfig = {
   systemPrompt: (context) => {
     const role = context.language === 'zh' ? rolePrompts.zh : rolePrompts.en;
     return buildAnalysisPrompt(role, context);
-  }
+  },
 };

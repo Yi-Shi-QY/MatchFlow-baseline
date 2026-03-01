@@ -1,6 +1,12 @@
 export interface Match {
   id: string;
   league: string;
+  source?: string;
+  capabilities?: {
+    hasStats: boolean;
+    hasOdds: boolean;
+    hasCustom: boolean;
+  };
   homeTeam: {
     id: string;
     name: string;
@@ -25,8 +31,8 @@ export interface Match {
     shotsOnTarget: { home: number; away: number };
   };
   odds?: {
-    had?: { h: number; d: number; a: number }; // 胜平负
-    hhad?: { h: number; d: number; a: number; goalline: number }; // 让球胜平负
+    had?: { h: number; d: number; a: number }; // Win/Draw/Loss odds
+    hhad?: { h: number; d: number; a: number; goalline: number }; // Handicap Win/Draw/Loss odds
   };
 }
 

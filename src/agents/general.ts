@@ -1,9 +1,9 @@
-import { AgentConfig } from './types';
+﻿import { AgentConfig } from './types';
 import { buildAnalysisPrompt } from './utils';
 
 const rolePrompts = {
   en: `You are a Senior Football Analyst.`,
-  zh: `你是一位资深足球分析师。`
+  zh: `你是一位资深足球分析师。`,
 };
 
 export const generalAgent: AgentConfig = {
@@ -15,5 +15,5 @@ export const generalAgent: AgentConfig = {
   systemPrompt: (context) => {
     const role = context.language === 'zh' ? rolePrompts.zh : rolePrompts.en;
     return buildAnalysisPrompt(role, context);
-  }
+  },
 };

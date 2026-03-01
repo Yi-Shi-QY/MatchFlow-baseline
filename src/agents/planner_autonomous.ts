@@ -1,4 +1,4 @@
-import { AgentConfig } from './types';
+﻿import { AgentConfig } from './types';
 
 const prompts = {
   en: (home: string, away: string, matchData: string) => {
@@ -28,41 +28,41 @@ Match Data: ${matchData}
   },
   zh: (home: string, away: string, matchData: string) => {
     return `
-你是一位资深足球分析总监。你的工作是为 ${home} 和 ${away} 之间的比赛手动规划分析结构。
+你是一位资深足球分析总监。你的任务是为 ${home} vs ${away} 手动规划分析结构。
 
 **任务：**
-用户请求了一个不符合标准模板的自定义分析结构。你必须遵循以下规则手动生成计划：
+用户希望使用不受标准模板限制的分析结构。请依据以下规则手动生成计划。
 
 **规则：**
 1. **逻辑流程：** 概览 -> 近期状态 -> 战术/数据 -> 赔率分析 -> 关键因素 -> 结论。
-2. **部分数量：** 3 到 6 个部分。
+2. **片段数量：** 3 到 6 段。
 3. **动画策略（严格映射）：**
-   - 如果部分关注 **近期状态 / 球队数据**，设置 \`animationType\` 为 "stats"。
-   - 如果部分关注 **战术 / 阵容 / 对位**，设置 \`animationType\` 为 "tactical"。
-   - 如果部分关注 **赔率 / 市场 / 投注**，设置 \`animationType\` 为 "odds"。
-   - 对于 **概览** 或 **预测**，设置 \`animationType\` 为 "none"。
-   - 不要发明新的动画类型。仅使用："stats", "tactical", "odds", "none"。
-4. **上下文策略（可控冗余）：** 分配一个 "contextMode" ('build_upon', 'independent', 或 'compare')。
+   - 聚焦 **近期状态 / 球队数据**：\`animationType\` 设为 "stats"。
+   - 聚焦 **战术 / 阵容 / 对位**：\`animationType\` 设为 "tactical"。
+   - 聚焦 **赔率 / 市场 / 投注**：\`animationType\` 设为 "odds"。
+   - **概览** 或 **预测**：\`animationType\` 设为 "none"。
+   - 不得发明新动画类型。仅可使用："stats", "tactical", "odds", "none"。
+4. **上下文策略（可控冗余）：** 为每段设置 \`contextMode\`，可选 'build_upon'、'independent'、'compare'。
 
 **输出格式：**
-必须返回一个严格的 JSON 对象数组。不要使用 Markdown 代码块。
-每个对象必须包含："title", "focus", "animationType", "agentType", 和 "contextMode"。
-**重要：所有 "title" 和 "focus" 字段的值必须使用中文。禁止使用英文。**
+必须返回严格 JSON 数组，不要使用 Markdown 代码块。
+每个对象必须包含："title", "focus", "animationType", "agentType", "contextMode"。
+**重要：title 与 focus 的值必须使用中文。**
 
-比赛数据：${matchData}
+比赛数据: ${matchData}
     `;
-  }
+  },
 };
 
 export const plannerAutonomousAgent: AgentConfig = {
   id: 'planner_autonomous',
   name: 'Autonomous Planner',
   description: 'Manually plans the analysis structure for custom requests.',
-  skills: [], // No tools needed for manual planning
+  skills: [],
   systemPrompt: ({ matchData, language }) => {
-    const homeName = matchData?.homeTeam?.name || "Home Team";
-    const awayName = matchData?.awayTeam?.name || "Away Team";
+    const homeName = matchData?.homeTeam?.name || 'Home Team';
+    const awayName = matchData?.awayTeam?.name || 'Away Team';
     const promptGen = language === 'zh' ? prompts.zh : prompts.en;
     return promptGen(homeName, awayName, JSON.stringify(matchData));
-  }
+  },
 };

@@ -61,14 +61,37 @@ Current active skills:
 - `calculator`
 - `select_plan_template`
 
-`streamAIRequest` handles provider-specific tool-calling loops for Gemini and DeepSeek.
+`streamAIRequest` handles provider-specific tool-calling loops for Gemini and OpenAI-compatible providers (including DeepSeek).
 
 ## 5. Active Agent Roster
 
 - Orchestration: `planner_template`, `planner_autonomous`, `tag`, `summary`, `animation`
 - Specialists: `overview`, `stats`, `tactical`, `odds`, `prediction`, `general`
 
-## 6. Removed Legacy Paths
+## 6. Agent Model Routing
+
+Model selection now supports two runtime modes from Settings:
+
+- `global`: all agents use one shared `provider + model` pair.
+- `config`: each agent can use its own provider/model from `src/config/agentModelConfig.ts`.
+
+Supported providers:
+- `gemini`
+- `deepseek` (V3 and R1/Reasoner models)
+- `openai_compatible` (any endpoint implementing OpenAI Chat Completions format)
+
+Resolution order at runtime:
+1. If mode is `config` and the current agent has an entry in `AGENT_MODEL_CONFIG`, use that entry.
+2. Otherwise fall back to the global provider/model from Settings.
+
+This resolution is applied inside `streamAIRequest` in `src/services/ai.ts`, so all pipeline stages
+(planner, specialist agents, tag, summary, animation/fix) use consistent routing.
+
+Tool calling compatibility:
+- First try native tool calls.
+- If model/endpoint rejects tools (typical for some reasoning models), runtime falls back to manual tool-call protocol (`<tool_call>...</tool_call>`).
+
+## 7. Removed Legacy Paths
 
 The following legacy path is no longer part of active architecture:
 - Dynamic Remotion TSX code generation and repair loop

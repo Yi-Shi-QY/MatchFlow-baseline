@@ -1,5 +1,5 @@
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
-import { getSettings } from "./settings";
+﻿import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { AIProvider, getSettings } from "./settings";
 import { availableSkills, executeSkill } from "../skills";
 import { extractJson } from "../utils/json";
 import {
@@ -9,6 +9,7 @@ import {
   getTemplateDeclaration,
   validateAndNormalizeAnimationPayload,
 } from "./remotion/templateParams";
+import { AGENT_MODEL_CONFIG } from "@/src/config/agentModelConfig";
 
 let aiInstance: GoogleGenAI | null = null;
 let currentApiKey: string | null = null;
@@ -72,6 +73,36 @@ export async function testConnection(settings: any): Promise<boolean> {
         );
       }
       return true;
+    } else if (settings.provider === "openai_compatible") {
+      const baseUrl = (settings.openaiCompatibleBaseUrl || "").trim();
+      if (!baseUrl) {
+        throw new Error("OpenAI-compatible base URL is not configured.");
+      }
+
+      const endpoint = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (settings.openaiCompatibleApiKey) {
+        headers.Authorization = `Bearer ${settings.openaiCompatibleApiKey}`;
+      }
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: settings.model || "gpt-4o-mini",
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(
+          err.error?.message || `HTTP error! status: ${response.status}`,
+        );
+      }
+      return true;
     } else {
       const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
       if (!apiKey) {
@@ -89,7 +120,7 @@ export async function testConnection(settings: any): Promise<boolean> {
     // Provide a more helpful message for Failed to fetch
     if (e.message === "Failed to fetch") {
       throw new Error(
-        "网络请求失败。这可能是由于网络问题、API地址无效或跨域(CORS)限制导致。请检查您的网络连接或API密钥。"
+        "Network request failed. Please check connectivity, endpoint URL, API key, or CORS settings."
       );
     }
     throw e;
@@ -125,21 +156,102 @@ function convertToOpenAITools(declarations: any[]) {
   });
 }
 
-async function* streamAIRequest(prompt: string, includeReasoning: boolean = false, allowedSkills?: string[], stopAfterToolCall: boolean = false) {
+function isProvider(value: any): value is AIProvider {
+  return value === "gemini" || value === "deepseek" || value === "openai_compatible";
+}
+
+function resolveRuntimeModelRoute(settings: any, agentId?: string) {
+  const fallbackProvider: AIProvider = isProvider(settings?.provider) ? settings.provider : "gemini";
+  const fallbackModel =
+    typeof settings?.model === "string" && settings.model.trim().length > 0
+      ? settings.model.trim()
+      : fallbackProvider === "deepseek"
+        ? "deepseek-chat"
+        : fallbackProvider === "openai_compatible"
+          ? "gpt-4o-mini"
+          : "gemini-3-flash-preview";
+
+  if (settings?.agentModelMode !== "config") {
+    return {
+      provider: fallbackProvider,
+      model: fallbackModel,
+      source: "global" as const,
+    };
+  }
+
+  if (!agentId) {
+    return {
+      provider: fallbackProvider,
+      model: fallbackModel,
+      source: "global_fallback" as const,
+    };
+  }
+
+  const configured = AGENT_MODEL_CONFIG[agentId as keyof typeof AGENT_MODEL_CONFIG];
+  if (
+    configured &&
+    isProvider(configured.provider) &&
+    typeof configured.model === "string" &&
+    configured.model.trim().length > 0
+  ) {
+    return {
+      provider: configured.provider,
+      model: configured.model.trim(),
+      source: "config" as const,
+    };
+  }
+
+  return {
+    provider: fallbackProvider,
+    model: fallbackModel,
+    source: "global_fallback" as const,
+  };
+}
+
+async function* streamAIRequest(
+  prompt: string,
+  includeReasoning: boolean = false,
+  allowedSkills?: string[],
+  stopAfterToolCall: boolean = false,
+  agentId?: string,
+) {
   const settings = getSettings();
+  const runtimeModel = resolveRuntimeModelRoute(settings, agentId);
+  const provider = runtimeModel.provider;
+  const model = runtimeModel.model;
   const activeSkills = allowedSkills 
     ? availableSkills.filter(s => allowedSkills.includes(s.name))
     : [];
 
-  if (settings.provider === "deepseek") {
-    if (!settings.deepseekApiKey) {
-      yield "[错误] 未配置 DeepSeek API Key。请在设置中配置。";
+  if (provider === "deepseek" || provider === "openai_compatible") {
+    if (provider === "deepseek" && !settings.deepseekApiKey) {
+      yield "[ERROR] DeepSeek API Key is not configured in settings.";
+      return;
+    }
+    if (provider === "openai_compatible" && !settings.openaiCompatibleBaseUrl) {
+      yield "[ERROR] OpenAI-compatible base URL is not configured in settings.";
       return;
     }
 
     let messages: any[] = [{ role: "user", content: prompt }];
     const openAITools = convertToOpenAITools(activeSkills);
-    let useTools = settings.model !== 'deepseek-reasoner';
+    const lowerModel = model.toLowerCase();
+    const likelyReasoningOnly =
+      lowerModel.includes("reasoner") ||
+      /(^|[^a-z0-9])r1([^a-z0-9]|$)/.test(lowerModel);
+    let useTools = !likelyReasoningOnly;
+    const endpoint = provider === "deepseek"
+      ? "https://api.deepseek.com/chat/completions"
+      : `${String(settings.openaiCompatibleBaseUrl).replace(/\/+$/, "")}/chat/completions`;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (provider === "deepseek" && settings.deepseekApiKey) {
+      headers.Authorization = `Bearer ${settings.deepseekApiKey}`;
+    }
+    if (provider === "openai_compatible" && settings.openaiCompatibleApiKey) {
+      headers.Authorization = `Bearer ${settings.openaiCompatibleApiKey}`;
+    }
 
     if (!useTools && openAITools.length > 0) {
       const toolInstructions = `\n\n[SYSTEM WARNING: You are running in an environment that requires manual tool calling. You have access to the following tools:\n${JSON.stringify(openAITools, null, 2)}\n\nIf you need to use a tool, you MUST output exactly this format and stop generating:\n<tool_call>{"name": "tool_name", "arguments": {"arg1": "val"}}</tool_call>\n\nThe system will provide the result in the next message.]`;
@@ -149,7 +261,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
     while (true) {
       try {
         const requestBody: any = {
-          model: settings.model || "deepseek-chat",
+          model,
           messages: messages,
           stream: true,
         };
@@ -158,22 +270,20 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
           requestBody.tools = openAITools;
         }
 
-        const response = await fetch(
-          "https://api.deepseek.com/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${settings.deepseekApiKey}`,
-            },
-            body: JSON.stringify(requestBody),
-          }
-        );
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(requestBody),
+        });
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
-          if (response.status === 400 && err.error?.message?.toLowerCase().includes("tool")) {
-            yield `\n[系统提示] 当前模型 (${settings.model}) 原生不支持工具调用，切换为手动工具调用模式...\n`;
+          const errMessage = String(err.error?.message || "").toLowerCase();
+          if (
+            response.status === 400 &&
+            (errMessage.includes("tool") || errMessage.includes("function"))
+          ) {
+            yield `\n[SYSTEM_NOTICE] Current model (${model}) does not support native tool calls, switching to manual tool-call mode.\n`;
             useTools = false;
             const toolInstructions = `\n\n[SYSTEM WARNING: You are running in an environment that requires manual tool calling. You have access to the following tools:\n${JSON.stringify(openAITools, null, 2)}\n\nIf you need to use a tool, you MUST output exactly this format and stop generating:\n<tool_call>{"name": "tool_name", "arguments": {"arg1": "val"}}</tool_call>\n\nThe system will provide the result in the next message.]`;
             messages[0].content += toolInstructions;
@@ -184,7 +294,28 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
 
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
-        if (!reader) throw new Error("No reader available");
+        if (!reader) {
+          const single = await response.json().catch(() => ({}));
+          const messageContent = single?.choices?.[0]?.message?.content;
+          let singleText = "";
+          if (typeof messageContent === "string") {
+            singleText = messageContent;
+          } else if (Array.isArray(messageContent)) {
+            singleText = messageContent
+              .map((item: any) =>
+                typeof item === "string"
+                  ? item
+                  : item?.text || item?.content || "",
+              )
+              .join("");
+          } else {
+            singleText = single?.choices?.[0]?.delta?.content || "";
+          }
+          if (singleText) {
+            yield String(singleText);
+          }
+          break;
+        }
 
         let currentContent = "";
         let currentReasoning = "";
@@ -203,10 +334,13 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
               try {
                 const data = JSON.parse(line.slice(6));
                 const delta = data.choices[0]?.delta;
+                const reasoningChunk =
+                  delta?.reasoning_content ||
+                  (typeof delta?.reasoning === "string" ? delta.reasoning : "");
 
-                if (delta?.reasoning_content && includeReasoning) {
-                  currentReasoning += delta.reasoning_content;
-                  yield delta.reasoning_content;
+                if (reasoningChunk && includeReasoning) {
+                  currentReasoning += reasoningChunk;
+                  yield reasoningChunk;
                 } else if (delta?.content) {
                   currentContent += delta.content;
                   yield delta.content;
@@ -242,11 +376,11 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
           });
 
           for (const tc of validToolCalls) {
-            yield `\n[系统] 正在调用工具: ${tc.function.name}...\n`;
+            yield `\n[SYSTEM] Calling tool: ${tc.function.name}...\n`;
             try {
               const args = JSON.parse(tc.function.arguments);
               const result = await executeSkill(tc.function.name, args);
-              yield `[系统] 工具调用结果: ${JSON.stringify(result)}\n`;
+              yield `[SYSTEM] Tool result: ${JSON.stringify(result)}\n`;
               if (stopAfterToolCall) return;
               messages.push({
                 role: "tool",
@@ -254,7 +388,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
                 content: JSON.stringify(result)
               });
             } catch (err: any) {
-              yield `\n[错误] 工具调用失败: ${err.message}\n`;
+              yield `\n[ERROR] Tool call failed: ${err.message}\n`;
               if (stopAfterToolCall) return;
               messages.push({
                 role: "tool",
@@ -270,9 +404,9 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
             try {
               const cleanJson = match[1].replace(/```json/g, '').replace(/```/g, '').trim();
               const tc = JSON.parse(cleanJson);
-              yield `\n[系统] 正在调用工具 (R1模式): ${tc.name}...\n`;
+              yield `\n[SYSTEM] Calling tool (manual mode): ${tc.name}...\n`;
               const result = await executeSkill(tc.name, tc.arguments);
-              yield `[系统] 工具调用结果: ${JSON.stringify(result)}\n`;
+              yield `[SYSTEM] Tool result: ${JSON.stringify(result)}\n`;
               if (stopAfterToolCall) return;
               
               messages.push({
@@ -285,7 +419,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
               });
               continue; // Make another API call with the result
             } catch (err: any) {
-              yield `\n[错误] 工具调用失败: ${err.message}\n`;
+              yield `\n[ERROR] Tool call failed: ${err.message}\n`;
               if (stopAfterToolCall) return;
               messages.push({
                 role: "assistant",
@@ -304,8 +438,9 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
           break; // No tool calls, we are done
         }
       } catch (e: any) {
-        yield `\n[错误] DeepSeek API 错误: ${
-          e.message === "Failed to fetch" ? "网络或跨域(CORS)错误" : e.message
+        const label = provider === "deepseek" ? "DeepSeek" : "OpenAI-compatible";
+        yield `\n[ERROR] ${label} API error: ${
+          e.message === "Failed to fetch" ? "Network or CORS error" : e.message
         }`;
         break;
       }
@@ -320,7 +455,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
       }
 
       const chat = ai.chats.create({
-        model: settings.model || "gemini-3-flash-preview",
+        model,
         config,
       });
 
@@ -335,9 +470,9 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
         if (c.functionCalls && c.functionCalls.length > 0) {
           for (const call of c.functionCalls) {
             try {
-              yield `\n[系统] 正在调用工具: ${call.name}...\n`;
+              yield `\n[SYSTEM] Calling tool: ${call.name}...\n`;
               const result = await executeSkill(call.name, call.args);
-              yield `[系统] 工具调用结果: ${JSON.stringify(result)}\n`;
+              yield `[SYSTEM] Tool result: ${JSON.stringify(result)}\n`;
               if (stopAfterToolCall) return;
               
               // Send the result back to the model
@@ -357,7 +492,7 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
                 }
               }
             } catch (err: any) {
-              yield `\n[错误] 工具调用失败: ${err.message}\n`;
+              yield `\n[ERROR] Tool call failed: ${err.message}\n`;
               if (stopAfterToolCall) return;
               // Send error back to model
               const errorResponse = await chat.sendMessageStream({
@@ -379,43 +514,302 @@ async function* streamAIRequest(prompt: string, includeReasoning: boolean = fals
         }
       }
     } catch (e: any) {
-      yield `\n[错误] Gemini API 错误: ${e.message}`;
+      yield `\n[ERROR] Gemini API error: ${e.message}`;
     }
   }
 }
 
 import { getAgent } from "../agents";
 
+type TemplateType = "basic" | "standard" | "odds_focused" | "comprehensive";
+
+interface PlanningRouteDecision {
+  mode: "template" | "autonomous";
+  templateType?: TemplateType;
+  allowedAgentTypes: string[] | null;
+  reason: string;
+}
+
+function isTemplateType(value: any): value is TemplateType {
+  return (
+    value === "basic" ||
+    value === "standard" ||
+    value === "odds_focused" ||
+    value === "comprehensive"
+  );
+}
+
+function hasNonEmptyObject(value: any): boolean {
+  return !!value && typeof value === "object" && Object.keys(value).length > 0;
+}
+
+function deriveSourceSignals(matchData: any) {
+  const selected = matchData?.sourceContext?.selectedSources;
+  const selectedIds = Array.isArray(matchData?.sourceContext?.selectedSourceIds)
+    ? new Set(
+        matchData.sourceContext.selectedSourceIds.filter(
+          (id: any) => typeof id === "string",
+        ),
+      )
+    : null;
+  const sourceCapabilities = matchData?.sourceContext?.capabilities || {};
+
+  const wantsFundamental =
+    typeof selected?.fundamental === "boolean"
+      ? !!selected.fundamental
+      : selectedIds?.has("fundamental") ?? sourceCapabilities.hasFundamental ?? true;
+
+  const wantsMarket =
+    typeof selected?.market === "boolean"
+      ? !!selected.market
+      : selectedIds?.has("market") ?? hasNonEmptyObject(matchData?.odds);
+
+  const wantsCustom =
+    typeof selected?.custom === "boolean"
+      ? !!selected.custom
+      : selectedIds?.has("custom") ??
+        (typeof matchData?.customInfo === "string"
+          ? matchData.customInfo.trim().length > 0
+          : matchData?.customInfo != null);
+
+  const hasStats =
+    typeof sourceCapabilities.hasStats === "boolean"
+      ? sourceCapabilities.hasStats
+      : hasNonEmptyObject(matchData?.stats);
+  const hasOdds =
+    typeof sourceCapabilities.hasOdds === "boolean"
+      ? sourceCapabilities.hasOdds
+      : hasNonEmptyObject(matchData?.odds);
+  const status =
+    typeof matchData?.status === "string" ? matchData.status.toLowerCase() : "unknown";
+
+  return {
+    wantsFundamental,
+    wantsMarket,
+    wantsCustom,
+    hasStats,
+    hasOdds,
+    status,
+  };
+}
+
+function resolvePlanningRoute(matchData: any, settings: any): PlanningRouteDecision {
+  if (settings.enableAutonomousPlanning) {
+    return {
+      mode: "autonomous",
+      allowedAgentTypes: null,
+      reason: "settings.enableAutonomousPlanning=true",
+    };
+  }
+
+  const forcedMode = matchData?.sourceContext?.planning?.mode;
+  if (forcedMode === "autonomous") {
+    return {
+      mode: "autonomous",
+      allowedAgentTypes: null,
+      reason: "sourceContext.planning.mode=autonomous",
+    };
+  }
+
+  const forcedTemplate = matchData?.sourceContext?.planning?.templateType;
+  if (isTemplateType(forcedTemplate)) {
+    return {
+      mode: "template",
+      templateType: forcedTemplate,
+      allowedAgentTypes: null,
+      reason: `sourceContext.planning.templateType=${forcedTemplate}`,
+    };
+  }
+
+  const signals = deriveSourceSignals(matchData);
+
+  if (signals.wantsCustom && !signals.wantsFundamental && !signals.wantsMarket) {
+    return {
+      mode: "autonomous",
+      allowedAgentTypes: null,
+      reason: "custom-only input",
+    };
+  }
+
+  if (signals.wantsMarket && !signals.wantsFundamental) {
+    return {
+      mode: "template",
+      templateType: "odds_focused",
+      allowedAgentTypes: ["overview", "odds", "prediction", "general"],
+      reason: "market-only input",
+    };
+  }
+
+  if (signals.hasOdds && signals.hasStats) {
+    return {
+      mode: "template",
+      templateType: "comprehensive",
+      allowedAgentTypes: null,
+      reason: signals.status === "live" ? "live match with stats+odds" : "stats+odds",
+    };
+  }
+
+  if (signals.hasOdds && !signals.hasStats) {
+    return {
+      mode: "template",
+      templateType: "odds_focused",
+      allowedAgentTypes: ["overview", "odds", "prediction", "general"],
+      reason: "odds without stats",
+    };
+  }
+
+  if (signals.hasStats) {
+    return {
+      mode: "template",
+      templateType: "standard",
+      allowedAgentTypes: null,
+      reason: signals.status === "live" ? "live match with stats" : "stats only",
+    };
+  }
+
+  return {
+    mode: "template",
+    templateType: "basic",
+    allowedAgentTypes: ["overview", "prediction", "general"],
+    reason: "minimal data",
+  };
+}
+
+function buildFallbackPlan(language: "en" | "zh") {
+  if (language === "zh") {
+    return [
+      {
+        title: "比赛概览",
+        focus: "整体背景与关键线索",
+        animationType: "none",
+        agentType: "overview",
+        contextMode: "independent",
+      },
+      {
+        title: "赛前预测",
+        focus: "最终预测与结论",
+        animationType: "none",
+        agentType: "prediction",
+        contextMode: "all",
+      },
+    ];
+  }
+
+  return [
+    {
+      title: "Match Overview",
+      focus: "General context",
+      animationType: "none",
+      agentType: "overview",
+      contextMode: "independent",
+    },
+    {
+      title: "Match Prediction",
+      focus: "Main talking points",
+      animationType: "none",
+      agentType: "prediction",
+      contextMode: "all",
+    },
+  ];
+}
+
+function normalizePlan(
+  rawPlan: any[],
+  includeAnimations: boolean,
+  allowedAgentTypes: string[] | null,
+  language: "en" | "zh",
+) {
+  let plan = Array.isArray(rawPlan) ? [...rawPlan] : [];
+
+  if (allowedAgentTypes && allowedAgentTypes.length > 0) {
+    plan = plan.filter((segment) => {
+      const agentType = segment?.agentType || "general";
+      return allowedAgentTypes.includes(agentType);
+    });
+  }
+
+  if (plan.length === 0) {
+    plan = buildFallbackPlan(language);
+  }
+
+  const hasPrediction = plan.some((segment) => (segment?.agentType || "general") === "prediction");
+  if (!hasPrediction) {
+    if (language === "zh") {
+      plan.push({
+        title: "赛前预测",
+        focus: "最终预测与结论",
+        animationType: "none",
+        agentType: "prediction",
+        contextMode: "all",
+      });
+    } else {
+      plan.push({
+        title: "Match Prediction",
+        focus: "Final prediction and conclusion",
+        animationType: "none",
+        agentType: "prediction",
+        contextMode: "all",
+      });
+    }
+  }
+
+  return plan.map((segment) => ({
+    ...segment,
+    agentType: segment?.agentType || "general",
+    animationType: includeAnimations ? segment?.animationType || "none" : "none",
+    contextMode: segment?.contextMode || "build_upon",
+  }));
+}
+
 export async function generateAnalysisPlan(matchData: any, includeAnimations: boolean = true): Promise<any[]> {
   const settings = getSettings();
-  const agentId = settings.enableAutonomousPlanning ? 'planner_autonomous' : 'planner_template';
-  const agent = getAgent(agentId);
-  
-  const prompt = agent.systemPrompt({ 
-    matchData, 
-    language: settings.language,
-    includeAnimations
-  });
+  const route = resolvePlanningRoute(matchData, settings);
+  const language = settings.language === "zh" ? "zh" : "en";
 
-  let responseText = "";
-  
   try {
-    // Only stop after tool call if we are using the template planner (which uses tools)
-    const stopAfterToolCall = agentId === 'planner_template';
-    const stream = streamAIRequest(prompt, false, agent.skills, stopAfterToolCall);
-    
+    // Deterministic path: route source/capabilities directly to a fixed template.
+    if (route.mode === "template" && route.templateType) {
+      const directResult = await executeSkill("select_plan_template", {
+        templateType: route.templateType,
+        language,
+        includeAnimations,
+      });
+      if (Array.isArray(directResult)) {
+        return normalizePlan(directResult, includeAnimations, route.allowedAgentTypes, language);
+      }
+    }
+
+    // Fallback path: ask planner agent to generate plan.
+    const agentId = route.mode === "autonomous" ? "planner_autonomous" : "planner_template";
+    const agent = getAgent(agentId);
+
+    const prompt = agent.systemPrompt({
+      matchData,
+      language,
+      includeAnimations,
+    });
+
+    let responseText = "";
+    const stopAfterToolCall = agentId === "planner_template";
+    const stream = streamAIRequest(
+      prompt,
+      false,
+      agent.skills,
+      stopAfterToolCall,
+      agent.id,
+    );
+
     for await (const chunk of stream) {
       responseText += chunk;
     }
 
-    // Check if there's a tool result before cleaning up (only for template planner)
     if (stopAfterToolCall) {
-      const toolResultMatch = responseText.match(/\[系统\] 工具调用结果: (.*)\n?/);
+      const toolResultMatch = responseText.match(/\[SYSTEM\] Tool result: (.*)\n?/);
       if (toolResultMatch) {
         try {
           const parsedResult = JSON.parse(toolResultMatch[1].trim());
           if (Array.isArray(parsedResult)) {
-            return parsedResult;
+            return normalizePlan(parsedResult, includeAnimations, route.allowedAgentTypes, language);
           }
         } catch (e) {
           console.error("Failed to parse tool result", e);
@@ -423,28 +817,20 @@ export async function generateAnalysisPlan(matchData: any, includeAnimations: bo
       }
     }
 
-    // Clean up system logs and markdown formatting
     const cleanText = responseText
-      .replace(/\[系统\].*?\n/g, '')
-      .replace(/\[系统提示\].*?\n/g, '')
-      .replace(/\[错误\].*?\n/g, '')
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
+      .replace(/\[SYSTEM\].*?\n/g, "")
+      .replace(/\[SYSTEM_NOTICE\].*?\n/g, "")
+      .replace(/\[ERROR\].*?\n/g, "")
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
       .trim();
 
-    // Find the first occurrence of a JSON array
     const jsonMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-
-    return JSON.parse(cleanText);
+    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(cleanText);
+    return normalizePlan(parsed, includeAnimations, route.allowedAgentTypes, language);
   } catch (e) {
-    console.error("Failed to parse plan JSON", e);
-    return [
-      { title: "Match Overview", focus: "General context", animationType: "none", agentType: "overview", contextMode: "independent" },
-      { title: "Key Analysis", focus: "Main talking points", animationType: "none", agentType: "general", contextMode: "build_upon" }
-    ];
+    console.error("Failed to parse plan JSON", e, "route:", route.reason);
+    return normalizePlan(buildFallbackPlan(language), includeAnimations, route.allowedAgentTypes, language);
   }
 }
 
@@ -454,7 +840,7 @@ export async function* streamAnalysisAgent(matchData: any, segmentPlan: any, pre
   // No animation schema passed here anymore
   const prompt = agent.systemPrompt({ matchData, segmentPlan, language: settings.language, previousAnalysis });
 
-  yield* streamAIRequest(prompt, false, agent.skills);
+  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id);
 }
 
 async function collectStreamText(stream: AsyncGenerator<string>): Promise<string> {
@@ -513,7 +899,7 @@ export async function* streamAnimationAgent(matchData: any, segmentPlan: any, an
     language: settings.language
   });
 
-  yield* streamAIRequest(prompt, false, agent.skills);
+  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id);
 }
 
 export async function* streamFixAnimationParams(
@@ -563,7 +949,7 @@ export async function* streamFixAnimationParams(
   </animation>
   `;
 
-  yield* streamAIRequest(prompt, false);
+  yield* streamAIRequest(prompt, false, undefined, false, "animation");
 }
 
 async function generateValidatedAnimationBlock(
@@ -621,7 +1007,7 @@ export async function* streamTagAgent(analysisText: string) {
   const agent = getAgent('tag');
   const prompt = agent.systemPrompt({ analysisText, language: settings.language });
 
-  yield* streamAIRequest(prompt, false, agent.skills);
+  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id);
 }
 
 export async function* streamSummaryAgent(matchData: any, previousAnalysis: string) {
@@ -629,7 +1015,7 @@ export async function* streamSummaryAgent(matchData: any, previousAnalysis: stri
   const agent = getAgent('summary');
   const prompt = agent.systemPrompt({ matchData, previousAnalysis, language: settings.language });
 
-  yield* streamAIRequest(prompt, false, agent.skills);
+  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id);
 }
 
 export interface SegmentResult {
@@ -741,3 +1127,4 @@ export async function* streamAgentThoughts(
     yield chunk;
   }
 }
+

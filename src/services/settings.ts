@@ -1,8 +1,14 @@
+export type AIProvider = 'gemini' | 'deepseek' | 'openai_compatible';
+export type AgentModelMode = 'global' | 'config';
+
 export interface AppSettings {
-  provider: 'gemini' | 'deepseek';
+  provider: AIProvider;
   model: string;
+  agentModelMode: AgentModelMode;
   deepseekApiKey: string;
   geminiApiKey: string;
+  openaiCompatibleBaseUrl: string;
+  openaiCompatibleApiKey: string;
   matchDataServerUrl: string;
   matchDataApiKey: string;
   language: 'en' | 'zh';
@@ -15,8 +21,11 @@ const SETTINGS_KEY = 'matchflow_settings';
 export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'gemini',
   model: 'gemini-3-flash-preview',
+  agentModelMode: 'global',
   deepseekApiKey: '',
   geminiApiKey: '',
+  openaiCompatibleBaseUrl: 'https://api.openai.com/v1',
+  openaiCompatibleApiKey: '',
   matchDataServerUrl: '',
   matchDataApiKey: '',
   language: 'en',

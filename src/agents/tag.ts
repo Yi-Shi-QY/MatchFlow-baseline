@@ -1,4 +1,4 @@
-import { AgentConfig } from './types';
+﻿import { AgentConfig } from './types';
 
 const prompts = {
   en: (analysisText: string) => `
@@ -23,27 +23,27 @@ Output ONLY a <tags> block containing a valid JSON array.
 </tags>
   `,
   zh: (analysisText: string) => `
-分析以下足球分析文本并提取 3-5 个关键“标签”或见解。
+请分析下面的足球分析文本，并提取 3-5 个关键“标签”或洞察。
 
 **分析文本：**
 ${analysisText}
 
 **规则：**
-- 标签应简短（2-4 个字）。
-- 按球队分类每个标签（'home' - 主队, 'away' - 客队）或 'neutral' - 中立。
-- 如果适用，分配情感/类型。
-- **所有标签文本必须使用中文。禁止使用英文。**
+- 标签应简短（2-4 个字或词）。
+- 每个标签需标注归属：'home'（主队）、'away'（客队）或 'neutral'（中立）。
+- 如有必要，可给出倾向色彩（color）。
+- **所有标签文本必须使用中文。**
 
 **输出格式：**
-仅输出包含有效 JSON 数组的 <tags> 块。
+仅输出一个包含合法 JSON 数组的 <tags> 区块。
 <tags>
 [
   { "label": "高位逼抢", "team": "home", "color": "emerald" },
-  { "label": "防守薄弱", "team": "away", "color": "blue" },
+  { "label": "防线松动", "team": "away", "color": "blue" },
   { "label": "争冠关键战", "team": "neutral", "color": "zinc" }
 ]
 </tags>
-  `
+  `,
 };
 
 export const tagAgent: AgentConfig = {
@@ -54,5 +54,5 @@ export const tagAgent: AgentConfig = {
   systemPrompt: ({ analysisText, language }) => {
     const promptGen = language === 'zh' ? prompts.zh : prompts.en;
     return promptGen(analysisText || '');
-  }
+  },
 };

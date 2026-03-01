@@ -1,4 +1,4 @@
-import { AgentConfig } from './types';
+﻿import { AgentConfig } from './types';
 
 const prompts = {
   en: (previousAnalysis: string, matchData: string) => `
@@ -22,26 +22,25 @@ Output ONLY the summary tag with valid JSON content.
 </summary>
   `,
   zh: (previousAnalysis: string, matchData: string) => `
-你是一位资深足球分析师。基于以下详细的分析片段，生成最终的比赛总结和预测。
+你是一位资深足球分析师。请基于以下各阶段分析内容，生成最终比赛总结与预测。
 
-**之前的分析：**
+**前序分析：**
 ${previousAnalysis}
 
 **比赛数据：**
 ${matchData}
 
 **输出格式：**
-仅输出包含有效 JSON 内容的 summary 标签。
-**重要：所有文本内容（prediction, keyFactors）必须使用中文。**
+仅输出包含合法 JSON 的 <summary> 标签。**重要：prediction 和 keyFactors 必须使用中文。**
 <summary>
 {
-  "prediction": "最终比赛预测文本（简洁、果断）",
+  "prediction": "最终比赛预测（简洁、明确）",
   "winProbability": { "home": 40, "draw": 30, "away": 30 },
   "expectedGoals": { "home": 1.5, "away": 1.2 },
   "keyFactors": ["关键因素 1", "关键因素 2", "关键因素 3"]
 }
 </summary>
-  `
+  `,
 };
 
 export const summaryAgent: AgentConfig = {
@@ -52,5 +51,5 @@ export const summaryAgent: AgentConfig = {
   systemPrompt: ({ matchData, previousAnalysis, language }) => {
     const promptGen = language === 'zh' ? prompts.zh : prompts.en;
     return promptGen(previousAnalysis || '', JSON.stringify(matchData));
-  }
+  },
 };

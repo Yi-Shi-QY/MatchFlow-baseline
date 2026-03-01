@@ -48,6 +48,24 @@ const MOCK_MATCHES = [
   }
 ];
 
+function buildCapabilities(match) {
+  const hasStats = !!match?.stats && typeof match.stats === 'object' && Object.keys(match.stats).length > 0;
+  const hasOdds = !!match?.odds && typeof match.odds === 'object' && Object.keys(match.odds).length > 0;
+  const hasCustom = typeof match?.customInfo === 'string'
+    ? match.customInfo.trim().length > 0
+    : match?.customInfo != null;
+
+  return { hasStats, hasOdds, hasCustom };
+}
+
+function withSourceMeta(match, source) {
+  return {
+    ...match,
+    source,
+    capabilities: buildCapabilities(match)
+  };
+}
+
 // Authentication Middleware
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -109,7 +127,7 @@ app.get('/matches', authenticate, async (req, res) => {
 
       const result = await db.query(query, params);
       
-      const formatted = result.rows.map(row => ({
+      const formatted = result.rows.map(row => withSourceMeta({
         id: row.id,
         league: row.league_name,
         date: row.match_date,
@@ -129,7 +147,7 @@ app.get('/matches', authenticate, async (req, res) => {
           logo: row.awayTeam.logo_url,
           form: row.awayTeam.recent_form
         }
-      }));
+      }, 'server-db'));
       
       return res.json({ data: formatted, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: formatted.length } });
     } catch (err) {
@@ -158,7 +176,9 @@ app.get('/matches', authenticate, async (req, res) => {
     );
   }
 
-  const paginated = filtered.slice(parseInt(offset, 10), parseInt(offset, 10) + parseInt(limit, 10));
+  const paginated = filtered
+    .slice(parseInt(offset, 10), parseInt(offset, 10) + parseInt(limit, 10))
+    .map(match => withSourceMeta(match, 'server-mock'));
 
   res.json({ data: paginated, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: paginated.length, total: filtered.length } });
 });
@@ -179,7 +199,7 @@ app.get('/matches/live', authenticate, async (req, res) => {
       `;
       const result = await db.query(query);
       
-      const formatted = result.rows.map(row => ({
+      const formatted = result.rows.map(row => withSourceMeta({
         id: row.id,
         league: row.league_name,
         date: row.match_date,
@@ -199,7 +219,7 @@ app.get('/matches/live', authenticate, async (req, res) => {
           logo: row.awayTeam.logo_url,
           form: row.awayTeam.recent_form
         }
-      }));
+      }, 'server-db'));
       
       return res.json({ data: formatted, count: formatted.length });
     } catch (err) {
@@ -209,7 +229,9 @@ app.get('/matches/live', authenticate, async (req, res) => {
   }
 
   // Fallback to Mock Data
-  const liveMatches = MOCK_MATCHES.filter(m => m.status === 'live');
+  const liveMatches = MOCK_MATCHES
+    .filter(m => m.status === 'live')
+    .map(match => withSourceMeta(match, 'server-mock'));
   res.json({ data: liveMatches, count: liveMatches.length });
 });
 
@@ -299,7 +321,7 @@ app.get('/teams/:id/matches', authenticate, async (req, res) => {
       `;
       const result = await db.query(query, [id, parseInt(limit, 10), parseInt(offset, 10)]);
       
-      const formatted = result.rows.map(row => ({
+      const formatted = result.rows.map(row => withSourceMeta({
         id: row.id,
         league: row.league_name,
         date: row.match_date,
@@ -319,7 +341,7 @@ app.get('/teams/:id/matches', authenticate, async (req, res) => {
           logo: row.awayTeam.logo_url,
           form: row.awayTeam.recent_form
         }
-      }));
+      }, 'server-db'));
       
       return res.json({ data: formatted, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: formatted.length } });
     } catch (err) {
@@ -332,7 +354,9 @@ app.get('/teams/:id/matches', authenticate, async (req, res) => {
   const teamMatches = MOCK_MATCHES.filter(m => m.homeTeam.id === id || m.awayTeam.id === id)
     .sort((a, b) => new Date(b.date) - new Date(a.date));
   
-  const paginated = teamMatches.slice(parseInt(offset, 10), parseInt(offset, 10) + parseInt(limit, 10));
+  const paginated = teamMatches
+    .slice(parseInt(offset, 10), parseInt(offset, 10) + parseInt(limit, 10))
+    .map(match => withSourceMeta(match, 'server-mock'));
   res.json({ data: paginated, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: paginated.length, total: teamMatches.length } });
 });
 
@@ -358,7 +382,7 @@ app.get('/matches/:id', authenticate, async (req, res) => {
       }
 
       const row = result.rows[0];
-      const formatted = {
+      const formatted = withSourceMeta({
         id: row.id,
         league: row.league_name,
         date: row.match_date,
@@ -378,7 +402,7 @@ app.get('/matches/:id', authenticate, async (req, res) => {
           logo: row.awayTeam.logo_url,
           form: row.awayTeam.recent_form
         }
-      };
+      }, 'server-db');
       
       return res.json({ data: formatted });
     } catch (err) {
@@ -392,7 +416,7 @@ app.get('/matches/:id', authenticate, async (req, res) => {
     return res.status(404).json({ error: { message: 'Match not found' } });
   }
 
-  res.json({ data: match });
+  res.json({ data: withSourceMeta(match, 'server-mock') });
 });
 
 // --- Admin Routes (For Data Injection) ---
