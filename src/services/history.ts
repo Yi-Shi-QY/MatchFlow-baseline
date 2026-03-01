@@ -16,12 +16,81 @@ export interface HistoryRecord {
 
 const HISTORY_KEY = 'matchflow_history';
 const RESUME_STATE_KEY = 'matchflow_resume_state';
+const RESUME_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_RESUME_STATE_COUNT = 20;
 
 export interface SavedResumeState {
   matchId: string;
   state: AnalysisResumeState;
   thoughts: string;
   timestamp: number;
+}
+
+type ResumeStateMap = Record<string, SavedResumeState>;
+
+function isResumeFresh(timestamp: number): boolean {
+  return Date.now() - timestamp < RESUME_TTL_MS;
+}
+
+function normalizeResumeStateMap(raw: any): ResumeStateMap {
+  // Backward compatibility: old schema stored a single SavedResumeState object.
+  if (
+    raw &&
+    typeof raw === 'object' &&
+    typeof raw.matchId === 'string' &&
+    raw.state &&
+    typeof raw.timestamp === 'number'
+  ) {
+    return { [raw.matchId]: raw as SavedResumeState };
+  }
+
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+
+  const map: ResumeStateMap = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (
+      value &&
+      typeof value === 'object' &&
+      typeof (value as SavedResumeState).matchId === 'string' &&
+      (value as SavedResumeState).state &&
+      typeof (value as SavedResumeState).timestamp === 'number'
+    ) {
+      map[key] = value as SavedResumeState;
+    }
+  }
+  return map;
+}
+
+function readResumeStateMap(): ResumeStateMap {
+  try {
+    const data = localStorage.getItem(RESUME_STATE_KEY);
+    if (!data) return {};
+    return normalizeResumeStateMap(JSON.parse(data));
+  } catch {
+    return {};
+  }
+}
+
+function writeResumeStateMap(map: ResumeStateMap) {
+  const keys = Object.keys(map);
+  if (keys.length === 0) {
+    localStorage.removeItem(RESUME_STATE_KEY);
+    return;
+  }
+  localStorage.setItem(RESUME_STATE_KEY, JSON.stringify(map));
+}
+
+function pruneResumeStateMap(map: ResumeStateMap): ResumeStateMap {
+  const entries = Object.entries(map).filter(([, value]) => isResumeFresh(value.timestamp));
+  if (entries.length <= MAX_RESUME_STATE_COUNT) {
+    return Object.fromEntries(entries);
+  }
+
+  // Keep newest records only when count exceeds cap.
+  entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
+  return Object.fromEntries(entries.slice(0, MAX_RESUME_STATE_COUNT));
 }
 
 export async function getResumeState(matchId: string): Promise<SavedResumeState | null> {
@@ -33,8 +102,7 @@ export async function getResumeState(matchId: string): Promise<SavedResumeState 
         const res = await db.query(`SELECT * FROM ${RESUME_STATE_TABLE} WHERE matchId = ?`, [matchId]);
         if (res.values && res.values.length > 0) {
           const row = res.values[0];
-          // Check timestamp (24 hours)
-          if (Date.now() - row.timestamp < 24 * 60 * 60 * 1000) {
+          if (isResumeFresh(row.timestamp)) {
             return {
               matchId: row.matchId,
               state: JSON.parse(row.stateData),
@@ -50,13 +118,14 @@ export async function getResumeState(matchId: string): Promise<SavedResumeState 
     }
 
     // Fallback to localStorage
-    const data = localStorage.getItem(RESUME_STATE_KEY);
-    if (data) {
-      const parsed = JSON.parse(data) as SavedResumeState;
-      // Only return if it matches the current match and is less than 24 hours old
-      if (parsed.matchId === matchId && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
-        return parsed;
-      }
+    const rawMap = readResumeStateMap();
+    const map = pruneResumeStateMap(rawMap);
+    if (Object.keys(map).length !== Object.keys(rawMap).length) {
+      writeResumeStateMap(map);
+    }
+    const record = map[matchId];
+    if (record && record.matchId === matchId) {
+      return record;
     }
   } catch (e) {
     console.error('Failed to load resume state', e);
@@ -85,20 +154,37 @@ export async function saveResumeState(matchId: string, state: AnalysisResumeStat
       }
     }
 
-    // Always save to localStorage as backup
-    localStorage.setItem(RESUME_STATE_KEY, JSON.stringify(record));
+    // Always save to localStorage as backup (multi-match map).
+    const map = pruneResumeStateMap(readResumeStateMap());
+    map[matchId] = record;
+    writeResumeStateMap(pruneResumeStateMap(map));
   } catch (e) {
     console.error('Failed to save resume state', e);
   }
 }
 
-export async function clearResumeState() {
-  localStorage.removeItem(RESUME_STATE_KEY);
-  if (Capacitor.isNativePlatform()) {
-    const db = await getDB();
-    if (db) {
-      await db.run(`DELETE FROM ${RESUME_STATE_TABLE}`);
+export async function clearResumeState(matchId?: string) {
+  try {
+    if (matchId) {
+      const map = readResumeStateMap();
+      delete map[matchId];
+      writeResumeStateMap(map);
+    } else {
+      localStorage.removeItem(RESUME_STATE_KEY);
     }
+
+    if (Capacitor.isNativePlatform()) {
+      const db = await getDB();
+      if (db) {
+        if (matchId) {
+          await db.run(`DELETE FROM ${RESUME_STATE_TABLE} WHERE matchId = ?`, [matchId]);
+        } else {
+          await db.run(`DELETE FROM ${RESUME_STATE_TABLE}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Failed to clear resume state', e);
   }
 }
 

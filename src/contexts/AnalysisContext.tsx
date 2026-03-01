@@ -130,7 +130,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         });
       }
     } else {
-      await clearResumeState();
+      await clearResumeState(matchId);
     }
 
     const newAnalysis: ActiveAnalysis = {
@@ -233,7 +233,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           };
         });
         
-        await clearResumeState();
+        await clearResumeState(matchId);
       } else {
         setActiveAnalyses(prev => {
           if (!prev[matchId]) return prev;

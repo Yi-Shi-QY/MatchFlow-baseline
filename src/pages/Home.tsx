@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { MOCK_MATCHES } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Plus, Loader2, RefreshCw } from 'lucide-react';
-import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord, getResumeState, clearResumeState } from '@/src/services/history';
+import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord, clearResumeState } from '@/src/services/history';
 import { getSavedMatches, deleteSavedMatch, SavedMatchRecord } from '@/src/services/savedMatches';
 import { fetchMatches } from '@/src/services/matchData';
 import { Match } from '@/src/data/matches';
@@ -68,7 +68,7 @@ export default function Home() {
     }
   }, [activeAnalyses]);
 
-  const handleClearHistory = () => {
+  const handleClearHistory = async () => {
     clearHistory();
     // Clear all completed analyses from context
     Object.values(activeAnalyses).forEach(analysis => {
@@ -77,7 +77,7 @@ export default function Home() {
       }
     });
     // Also clear resume state
-    clearResumeState();
+    await clearResumeState();
     
     setHistory([]);
     setShowClearConfirm(false);
@@ -87,12 +87,7 @@ export default function Home() {
     e.stopPropagation();
     deleteHistoryRecord(id);
     clearActiveAnalysis(matchId); // Clear from context
-    
-    // Also clear resume state if it matches this match
-    const resumeState = await getResumeState(matchId);
-    if (resumeState && resumeState.matchId === matchId) {
-      clearResumeState();
-    }
+    await clearResumeState(matchId);
 
     const data = await getHistory();
     setHistory(data);

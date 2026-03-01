@@ -319,13 +319,14 @@ export default function MatchDetail() {
 
     if (historyRecord && !activeAnalysis) {
       setStep('result');
+      setSavedResumeState(null);
     } else if (!activeAnalysis) {
       // Check for resume state if no completed history exists
       getResumeState(match.id).then(resumeState => {
-        if (resumeState) {
-          setSavedResumeState(resumeState);
-        }
+        setSavedResumeState(resumeState || null);
       });
+    } else {
+      setSavedResumeState(null);
     }
   }, [match, activeAnalysis, historyRecord]);
 
