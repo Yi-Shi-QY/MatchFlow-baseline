@@ -1,90 +1,72 @@
-# Agent Construction Guide (I18n Compatible)
+﻿# Agent Construction Guide
 
-This guide outlines the best practices for creating Agents in this project, with a strict focus on Internationalization (i18n) compatibility.
+This guide describes how to add or modify agents safely.
 
-## 1. Agent Structure
+## 1. Required Rules
 
-All agents must implement the `AgentConfig` interface defined in `src/agents/types.ts`.
+1. Implement `AgentConfig` from `src/agents/types.ts`.
+2. Keep `id` stable after release.
+3. Make prompts language-aware using `context.language`.
+4. Output must follow parser contracts used by `agentParser.ts`.
 
-```typescript
-export interface AgentConfig {
-  id: string;
-  name: string;
-  description: string;
-  skills?: string[];
-  contextDependencies?: string[] | 'all' | 'none';
-  systemPrompt: (context: AgentContext) => string;
-}
-```
+## 2. Prompt Construction
 
-## 2. I18n Compatibility Rules
+Use `buildAnalysisPrompt` from `src/agents/utils.ts` for normal specialist agents.
 
-**Rule #1: Never Hardcode Language in System Prompts**
+Recommended pattern:
 
-Do not write system prompts that are only in English or only in Chinese. You must handle the `context.language` property.
-
-**Bad Pattern:**
-
-```typescript
-// ❌ BAD: Hardcoded English
-systemPrompt: (context) => `You are a football analyst...`
-```
-
-**Good Pattern (Role-based):**
-
-For simple agents that use `buildAnalysisPrompt`, define a `rolePrompts` object:
-
-```typescript
-// ✅ GOOD: Language-aware role definitions
+```ts
 const rolePrompts = {
-  en: `You are a Senior Football Analyst...`,
-  zh: `你是一位资深足球分析师...`
+  en: "...",
+  zh: "..."
 };
 
 export const myAgent: AgentConfig = {
-  // ...
+  id: "my_agent",
+  name: "...",
+  description: "...",
+  skills: [],
+  contextDependencies: "all",
   systemPrompt: (context) => {
-    // Select the correct role description based on language
-    const role = context.language === 'zh' ? rolePrompts.zh : rolePrompts.en;
+    const role = context.language === "zh" ? rolePrompts.zh : rolePrompts.en;
     return buildAnalysisPrompt(role, context);
   }
 };
 ```
 
-**Good Pattern (Full Prompt Control):**
+## 3. Context Dependencies
 
-For complex agents that need full control over the prompt structure:
+Set `contextDependencies` intentionally:
+- `'none'`: independent analysis
+- `'all'`: can consume all previous segments
+- `['stats', 'tactical']`: targeted dependencies
 
-```typescript
-// ✅ GOOD: Separate prompt generators
-const prompts = {
-  en: (data: any) => `Analyze this data: ${data}...`,
-  zh: (data: any) => `分析这些数据：${data}...`
-};
+Avoid unnecessary `all` if repetition is common.
 
-export const myComplexAgent: AgentConfig = {
-  // ...
-  systemPrompt: ({ matchData, language }) => {
-    const promptGen = language === 'zh' ? prompts.zh : prompts.en;
-    return promptGen(JSON.stringify(matchData));
-  }
-};
-```
+## 4. Skills
 
-## 3. Utility Functions
+If the agent needs deterministic computation/tooling, add skill names in `skills`.
 
-Use `buildAnalysisPrompt` from `src/agents/utils.ts` whenever possible. It handles the common structure of:
-1. Role Definition
-2. Previous Context (if any)
-3. Segment Details
-4. Instructions
-5. Output Format
+Current supported skills:
+- `calculator`
+- `select_plan_template`
 
-It automatically switches the "scaffolding" text (headers like "INSTRUCTIONS", "OUTPUT FORMAT") based on `context.language`.
+When adding a new skill:
+1. Add declaration + executor in `src/skills`.
+2. Register in `availableSkills` and `executeSkill`.
+3. Add agent-level `skills` entry.
 
-## 4. Checklist for New Agents
+## 5. Planner Integration
 
-- [ ] Does the agent have a unique `id`?
-- [ ] Is `systemPrompt` using `context.language`?
-- [ ] Are all static strings in the prompt localized?
-- [ ] If using `buildAnalysisPrompt`, is the `rolePrompt` localized?
+For a new specialist agent to run automatically:
+1. Register it in `src/agents/index.ts`.
+2. Ensure planner templates can emit `agentType` with your agent id.
+3. Ensure `animationType` values map to supported template types.
+
+## 6. Validation Checklist
+
+Before merge:
+- `npm run lint`
+- Start one analysis with animations on/off
+- Verify parser sees complete tags
+- Verify no fallback errors in `RemotionPlayer`

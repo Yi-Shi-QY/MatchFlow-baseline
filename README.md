@@ -1,31 +1,51 @@
-# MatchFlow 2.0 ⚽️
+﻿# MatchFlow
 
-**MatchFlow 2.0** 是一个本地化智能足球分析与生成平台。它结合了最新的大语言模型（LLM）技术，为足球爱好者、分析师和球迷提供深度的赛事预测、战术分析和胜率计算。
+MatchFlow is a multi-agent football analysis app built with React + Capacitor.
 
-## ✨ 核心功能
+It combines:
+- A planner + specialist agent pipeline
+- Local tool calling (skills)
+- Parameter-based Remotion templates for animation rendering
+- Local-first persistence for history and resume state
 
-- **🤖 双 AI 引擎支持**：内置支持 **Google Gemini** 和 **DeepSeek**（支持 V3 及 R1 推理模型），用户可根据需求在设置中自由切换。
-- **📊 智能赛事分析**：基于球队基本信息、近期状态（胜平负）、详细比赛数据（控球率、射门数等）以及**市场赔率数据**，自动生成结构化的分析报告。
-- **📈 赔率市场洞察**：内置专业的赔率分析 Agent，解读胜平负 (HAD) 和让球胜平负 (HHAD) 数据，提供市场视角的预测。
-- **🎬 动态演示生成**：一键生成比赛分析的动态演示视频（Remotion），直观展示数据对比和战术分析。
-- **🧠 Agent 运行环境可视化**：在分析过程中，实时展示 AI 的“思考过程”（Agent Runtime），让预测过程更加透明和有趣。
-- **🔗 便捷的分享与导入**：
-  - **生成二维码**：一键将赛事分析结果生成二维码。
-  - **扫码导入**：通过内置的扫码功能，快速读取他人的分析结果，并支持一键保存到本地历史记录。
-- **📱 跨平台支持**：基于 Web 技术构建，并通过 **Capacitor** 完美封装为 Android 和 iOS 原生应用。
-- **💾 本地化存储**：用户的历史分析记录和 API 密钥均安全地存储在本地设备中。
+## Current Architecture (March 2026)
 
-## 🛠 技术栈
+The runtime flow is:
+1. `MatchDetail` collects selected match data.
+2. `AnalysisContext.startAnalysis` starts and tracks a streaming task.
+3. `streamAgentThoughts` executes: planner -> specialist segments -> animation extraction/validation -> tag extraction -> final summary.
+4. `agentParser` parses `<title>`, `<thought>`, `<animation>`, `<tags>`, `<summary>`.
+5. `RemotionPlayer` renders validated animation payloads by template id.
 
-- **前端框架**: React 19 + Vite
-- **路由**: React Router v7
-- **样式**: Tailwind CSS v4
-- **动画**: Motion (Framer Motion)
-- **图标**: Lucide React
-- **AI 接入**: `@google/genai` (Gemini), 原生 Fetch (DeepSeek)
-- **二维码**: `qrcode.react` (生成), `@yudiel/react-qr-scanner` (扫描)
-- **移动端打包**: Capacitor (Android / iOS)
+## Documentation
 
-## 🚀 快速体验
+- Architecture overview: `PROJECT_GUIDE.md`
+- Agent framework details: `AI_AGENT_FRAMEWORK.md`
+- Agent authoring guide: `src/docs/AGENT_GUIDE.md`
+- Data service deployment: `match-data-server/DEPLOY.md`
+- Day-to-day development commands: `DEVELOPMENT.md`
 
-请参阅 [DEVELOPMENT.md](./DEVELOPMENT.md) 获取详细的开发、调试和打包指南。
+## Quick Start
+
+```bash
+npm install
+npm run dev
+```
+
+Type check:
+
+```bash
+npm run lint
+```
+
+Build:
+
+```bash
+npm run build
+```
+
+## Notes
+
+- The app router currently uses `BrowserRouter`.
+- Match list data is fetched from `src/services/matchData.ts` and falls back to mock data when no server is configured.
+- Legacy dynamic Remotion code generation paths were removed. The app now only uses parameterized templates.
