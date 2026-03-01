@@ -2,8 +2,17 @@
 
 ## EN
 
-Use this page when you know **what you want to do**, but not where the docs are.
+Use this page when you know what to do, but do not know where the docs are.  
 If you already know your role, see [00-role-navigation.md](./00-role-navigation.md).
+
+### Quick Modes
+
+1. 30-minute decision support:
+   [01-product-overview.md](./01-product-overview.md) ->
+   [02-architecture.md](./02-architecture.md) ->
+   [12-changelog.md](./12-changelog.md).
+2. Half-day execution mode:
+   Pick one task section below, then pair with [03-development.md](./03-development.md).
 
 ## 1. I want to onboard quickly
 
@@ -98,10 +107,33 @@ Implementation checklist:
 2. Validate CD on `main` and version tags.
 3. Confirm release artifact and server image publish behavior.
 
+## 8. I want to continue after runtime interruption
+
+Read:
+
+1. [02-architecture.md](./02-architecture.md)
+2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
+3. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
+
+Implementation checklist:
+
+1. Persist analysis session identifiers and source context.
+2. Persist stream progress checkpoints and recoverable states.
+3. Validate resume logic for network failure and app restart.
+
 ## ZH
 
-当你明确“要做什么”，但不确定“该看哪篇文档”时，用本页快速定位。
-如果你已经明确自己的角色分工，也可以先看 [00-role-navigation.md](./00-role-navigation.md)。
+当你明确要做什么，但不确定该看哪篇文档时，可以用本页快速定位。  
+如果你已经明确角色分工，也可以先看 [00-role-navigation.md](./00-role-navigation.md)。
+
+### 快速模式
+
+1. 30 分钟决策路径：
+   [01-product-overview.md](./01-product-overview.md) ->
+   [02-architecture.md](./02-architecture.md) ->
+   [12-changelog.md](./12-changelog.md)。
+2. 半天执行路径：
+   从下方选择一个任务分支，再结合 [03-development.md](./03-development.md) 实施。
 
 ## 1. 我想快速上手项目
 
@@ -122,10 +154,10 @@ Implementation checklist:
 
 实施清单：
 
-1. 在 `src/services/dataSources.ts` 新增数据源定义。
-2. 补充表单 schema 和中英文文案。
+1. 在 `src/services/dataSources.ts` 增加数据源定义。
+2. 增加表单 schema 和 i18n 文案。
 3. 校验 `sourceContext` 字段完整性。
-4. 验证规划路由随能力变化是否符合预期。
+4. 验证规划路由变化是否符合预期。
 
 ## 3. 我想新增或修改 Agent/Skill/Template
 
@@ -195,3 +227,17 @@ Implementation checklist:
 1. 在 PR 上验证 CI 任务。
 2. 在 `main` 和 tag 上验证 CD 行为。
 3. 核对发布产物和镜像推送结果。
+
+## 8. 我想支持异常中断后的继续分析
+
+建议阅读：
+
+1. [02-architecture.md](./02-architecture.md)
+2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
+3. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
+
+实施清单：
+
+1. 持久化分析会话 ID 与 source context。
+2. 持久化流式进度检查点和可恢复状态。
+3. 验证网络中断和应用重启后的恢复逻辑。

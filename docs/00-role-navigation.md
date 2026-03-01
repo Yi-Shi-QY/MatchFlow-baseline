@@ -4,6 +4,18 @@
 
 If you prefer task-first lookup, also see [15-task-navigation.md](./15-task-navigation.md).
 
+### Quick Paths
+
+1. 30-minute quick context:
+   [01-product-overview.md](./01-product-overview.md) ->
+   [02-architecture.md](./02-architecture.md) ->
+   [12-changelog.md](./12-changelog.md).
+2. Half-day full onboarding:
+   [01-product-overview.md](./01-product-overview.md) ->
+   [02-architecture.md](./02-architecture.md) ->
+   [03-development.md](./03-development.md) ->
+   [00-role-navigation.md](./00-role-navigation.md).
+
 ## 1. Product Owner / PM
 
 Start here:
@@ -101,7 +113,19 @@ Suggested reading order:
 
 ## ZH
 
-如果你更习惯按任务查文档，也可以先看 [15-task-navigation.md](./15-task-navigation.md)。
+如果你更习惯按任务查阅，也可以先看 [15-task-navigation.md](./15-task-navigation.md)。
+
+### 快速路径
+
+1. 30 分钟快速了解：
+   [01-product-overview.md](./01-product-overview.md) ->
+   [02-architecture.md](./02-architecture.md) ->
+   [12-changelog.md](./12-changelog.md)。
+2. 半天完整上手：
+   [01-product-overview.md](./01-product-overview.md) ->
+   [02-architecture.md](./02-architecture.md) ->
+   [03-development.md](./03-development.md) ->
+   [00-role-navigation.md](./00-role-navigation.md)。
 
 ## 1. 产品 / 项目负责人
 
@@ -113,9 +137,9 @@ Suggested reading order:
 
 关注重点：
 
-1. 产品边界与路线。
-2. 架构关键决策与权衡。
-3. 发布层面的变化。
+1. 产品范围与路线。
+2. 架构关键决策。
+3. 发布可见变化。
 
 ## 2. 前端工程师
 
@@ -128,7 +152,7 @@ Suggested reading order:
 
 关注重点：
 
-1. `MatchDetail` 与 `sourceContext` 数据流。
+1. `MatchDetail` 和 `sourceContext` 数据流。
 2. 流式分析生命周期与 UI 行为。
 3. i18n 与 UTF-8 质量控制。
 
@@ -158,8 +182,8 @@ Suggested reading order:
 关注重点：
 
 1. API 契约与兼容约束。
-2. 数据库结构、扩展生命周期、Hub 接口。
-3. 服务端下一阶段重构重点。
+2. 数据库结构和扩展生命周期。
+3. Hub 接口和后续重构重点。
 
 ## 5. 测试 / 集成工程师
 
@@ -196,4 +220,4 @@ Suggested reading order:
 1. [01-product-overview.md](./01-product-overview.md)
 2. [02-architecture.md](./02-architecture.md)
 3. [03-development.md](./03-development.md)
-4. 再进入本文件对应角色章节。
+4. 再进入本文对应角色章节。

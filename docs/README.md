@@ -1,16 +1,36 @@
 # MatchFlow Documentation Hub / 文档中心
 
-This folder is the **single source of truth** for project documentation.  
-本目录是项目文档的**唯一标准入口**。
+This folder is the single source of truth for project documentation.  
+本目录是项目文档的唯一入口。
+
+## Start Here / 从这里开始
+
+EN:
+
+1. If you know your role, start with [00-role-navigation.md](./00-role-navigation.md).
+2. If you know your task, start with [15-task-navigation.md](./15-task-navigation.md).
+3. If you are new, read in order:
+   [01-product-overview.md](./01-product-overview.md) ->
+   [02-architecture.md](./02-architecture.md) ->
+   [03-development.md](./03-development.md).
+
+ZH:
+
+1. 按角色查阅，请先看 [00-role-navigation.md](./00-role-navigation.md)。
+2. 按任务查阅，请先看 [15-task-navigation.md](./15-task-navigation.md)。
+3. 新成员建议顺序阅读：
+   [01-product-overview.md](./01-product-overview.md) ->
+   [02-architecture.md](./02-architecture.md) ->
+   [03-development.md](./03-development.md)。
 
 ## Document Index / 文档索引
 
 1. [00-role-navigation.md](./00-role-navigation.md)  
-   Role-based reading paths / 按角色阅读路径
+   Role-based reading paths / 按读者角色导航
 2. [01-product-overview.md](./01-product-overview.md)  
-   Product scope, features, current goals / 产品范围、能力与当前目标
+   Product scope, features, current goals / 产品范围与当前目标
 3. [02-architecture.md](./02-architecture.md)  
-   App/server architecture and runtime flow / 前后端架构与运行流程
+   App/server architecture and runtime flow / 前后端架构与运行流
 4. [03-development.md](./03-development.md)  
    Local development and release workflow / 本地开发与发布流程
 5. [04-ai-agent-framework.md](./04-ai-agent-framework.md)  
@@ -24,7 +44,7 @@ This folder is the **single source of truth** for project documentation.
 9. [08-server-api-guide.md](./08-server-api-guide.md)  
    Match data server API reference / 数据服务端 API 参考
 10. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)  
-   Deployment, PostgreSQL schema, admin workflows / 部署、数据库与运维流程
+    Deployment, PostgreSQL schema, admin workflows / 部署、数据库与运维流程
 11. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)  
     Server evolution roadmap / 服务端重构与演进路线
 12. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)  
@@ -41,11 +61,11 @@ This folder is the **single source of truth** for project documentation.
 ## Writing Rules / 文档规范
 
 1. Every document must contain English + Chinese sections in the same file.  
-   每份文档必须在同一文件内同时包含英文和中文。
+   每份文档必须在同一文件内包含英文和中文。
 2. All docs must be UTF-8 encoded.  
-   所有文档必须为 UTF-8 编码。
+   所有文档必须使用 UTF-8 编码。
 3. Keep docs operational, not only conceptual: include commands, inputs, and expected outputs.  
-   文档必须可操作，不仅讲概念，还要给命令、输入和预期结果。
+   文档要可执行，不仅讲概念，还要给命令、输入和预期结果。
 4. When behavior changes, update docs in this folder in the same PR/commit.  
    功能行为变化时，必须在同一 PR/提交中同步更新本目录文档。
 
