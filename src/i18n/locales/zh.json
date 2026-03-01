@@ -179,6 +179,8 @@
     "ai_failed": "AI 模型连接失败。",
     "data_connected": "数据源连接成功！",
     "data_failed": "数据源连接失败。",
+    "data_failed_unauthorized": "鉴权失败（401）。请检查 Match Data API Key。",
+    "data_failed_network_hint": "网络请求失败。Android 模拟器通常应使用 http://10.0.2.2:3001，然后执行 npx cap sync android 并重新安装 App。",
     "enter_server_url": "请先输入 Server URL",
     "testing": "正在测试连接...",
     "extension_hub": "扩展 Hub",

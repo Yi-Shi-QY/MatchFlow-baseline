@@ -179,6 +179,8 @@
     "ai_failed": "AI Model Connection Failed.",
     "data_connected": "Data Source Connected!",
     "data_failed": "Data Source Connection Failed.",
+    "data_failed_unauthorized": "Authentication failed (401). Please check Match Data API Key.",
+    "data_failed_network_hint": "Network request failed. For Android emulator, use http://10.0.2.2:3001. Then run npx cap sync android and reinstall the app.",
     "enter_server_url": "Please enter Server URL first",
     "testing": "Testing connection...",
     "extension_hub": "Extension Hub",

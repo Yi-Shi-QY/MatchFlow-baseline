@@ -59,11 +59,29 @@ export default function Settings() {
     }
   }, [i18n]);
 
+  const normalizeServerBaseUrl = (rawUrl: string): string => {
+    const trimmed = String(rawUrl || '').trim();
+    if (!trimmed) return '';
+
+    const withProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed)
+      ? trimmed
+      : `http://${trimmed}`;
+
+    return withProtocol.replace(/\/+$/, '');
+  };
+
   const handleSave = () => {
-    saveSettings(settings);
+    const normalizedMatchDataServerUrl = normalizeServerBaseUrl(settings.matchDataServerUrl);
+    const nextSettings = {
+      ...settings,
+      matchDataServerUrl: normalizedMatchDataServerUrl,
+    };
+
+    saveSettings(nextSettings);
+    setLocalSettings(nextSettings);
     // Apply language change immediately
-    if (settings.language !== i18n.language) {
-      i18n.changeLanguage(settings.language);
+    if (nextSettings.language !== i18n.language) {
+      i18n.changeLanguage(nextSettings.language);
     }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -130,7 +148,8 @@ export default function Settings() {
   };
 
   const handleTestDataConnection = async () => {
-    if (!settings.matchDataServerUrl) {
+    const normalizedBaseUrl = normalizeServerBaseUrl(settings.matchDataServerUrl);
+    if (!normalizedBaseUrl) {
       setDataTestStatus('error');
       setDataTestMessage(t('settings.enter_server_url'));
       return;
@@ -143,20 +162,43 @@ export default function Settings() {
       if (settings.matchDataApiKey) {
         headers['Authorization'] = `Bearer ${settings.matchDataApiKey}`;
       }
-      
-      const response = await fetch(`${settings.matchDataServerUrl}/matches?limit=1`, {
+
+      const matchesUrl = new URL('/matches?limit=1', normalizedBaseUrl).toString();
+      const response = await fetch(matchesUrl, {
         headers
       });
-      
+
+      if (response.status === 401) {
+        throw new Error('UNAUTHORIZED');
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP Error: ${response.status}`);
       }
-      
+
+      setLocalSettings((prev) => ({
+        ...prev,
+        matchDataServerUrl: normalizedBaseUrl,
+      }));
       setDataTestStatus('success');
       setDataTestMessage(t('settings.data_connected'));
     } catch (e: any) {
+      const message = String(e?.message || '');
       setDataTestStatus('error');
-      setDataTestMessage(e.message || t('settings.data_failed'));
+      if (message === 'UNAUTHORIZED') {
+        setDataTestMessage(t('settings.data_failed_unauthorized'));
+        return;
+      }
+
+      const isNetworkError =
+        /Failed to fetch|Network request failed|Load failed|TypeError/i.test(message);
+
+      if (isNetworkError) {
+        setDataTestMessage(t('settings.data_failed_network_hint'));
+        return;
+      }
+
+      setDataTestMessage(message || t('settings.data_failed'));
     }
   };
 

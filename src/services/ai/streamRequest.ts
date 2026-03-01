@@ -4,6 +4,15 @@ import { getSettings } from "../settings";
 import { getGeminiAI } from "./geminiClient";
 import { resolveRuntimeModelRoute } from "./runtimeModel";
 
+function normalizeOpenAICompatibleBaseUrl(rawBaseUrl: string): string {
+  const trimmed = String(rawBaseUrl || "").trim();
+  if (!trimmed) return "";
+  const withProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  return withProtocol.replace(/\/+$/, "");
+}
+
 function convertToOpenAITools(declarations: any[]) {
   return declarations.map((decl) => {
     const parameters = JSON.parse(JSON.stringify(decl.parameters));
@@ -54,7 +63,10 @@ export async function* streamAIRequest(
       yield "[ERROR] DeepSeek API Key is not configured in settings.";
       return;
     }
-    if (provider === "openai_compatible" && !settings.openaiCompatibleBaseUrl) {
+    const normalizedOpenAIBaseUrl = normalizeOpenAICompatibleBaseUrl(
+      String(settings.openaiCompatibleBaseUrl || ""),
+    );
+    if (provider === "openai_compatible" && !normalizedOpenAIBaseUrl) {
       yield "[ERROR] OpenAI-compatible base URL is not configured in settings.";
       return;
     }
@@ -69,7 +81,7 @@ export async function* streamAIRequest(
     const endpoint =
       provider === "deepseek"
         ? "https://api.deepseek.com/chat/completions"
-        : `${String(settings.openaiCompatibleBaseUrl).replace(/\/+$/, "")}/chat/completions`;
+        : `${normalizedOpenAIBaseUrl}/chat/completions`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
