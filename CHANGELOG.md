@@ -1,28 +1,17 @@
-# Changelog
+﻿# Legacy Document Notice / 旧文档迁移说明
 
-All notable changes to this project are documented in this file.
+## EN
+This file is kept only for compatibility with historical links.
+The actively maintained content has moved to:
 
-## 2026-03-01
+- ./docs/12-changelog.md
 
-### Added
+Please update bookmarks and references to the unified docs/ directory.
 
-- Added deterministic animation payload normalization and validation in `src/services/remotion/templateParams.ts`.
-- Added template-id-based animation rendering path in `src/components/RemotionPlayer.tsx`.
-- Added architecture inventory document: `ARCHITECTURE_MAP.md`.
+## ZH
+此文件仅为兼容历史链接而保留。
+当前维护中的文档已迁移至：
 
-### Changed
+- ./docs/12-changelog.md
 
-- Consolidated AI runtime toward parameter-first animation flow in `src/services/ai.ts`.
-- Refreshed architecture docs:
-  - `README.md`
-  - `PROJECT_GUIDE.md`
-  - `AI_AGENT_FRAMEWORK.md`
-  - `src/docs/AGENT_GUIDE.md`
-  - `赛事数据源扩展指南.md`
-  - `赛事数据服务端接口指南.md`
-  - `数据分析Agent修改指南.md`
-- Repaired widespread text encoding issues in prompts/UI/docs to ensure UTF-8 compatibility.
-
-### Removed
-
-- Removed legacy dynamic Remotion code-generation path and related unused modules.
+请将书签和引用统一更新到 docs/ 目录。

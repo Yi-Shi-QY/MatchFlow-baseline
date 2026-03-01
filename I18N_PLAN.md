@@ -1,49 +1,17 @@
-# MatchFlow i18n Plan
+﻿# Legacy Document Notice / 旧文档迁移说明
 
-## Goal
+## EN
+This file is kept only for compatibility with historical links.
+The actively maintained content has moved to:
 
-Keep multilingual behavior stable and prevent text encoding regressions.
+- ./docs/05-i18n-and-encoding.md
 
-## Current Baseline
+Please update bookmarks and references to the unified docs/ directory.
 
-- Active i18n entry: `src/i18n/config.ts`
-- Legacy duplicate entry: `src/i18n/index.ts` now re-exports `config.ts`
-- Active locale files:
-  - `src/i18n/locales/en.json`
-  - `src/i18n/locales/zh.json`
+## ZH
+此文件仅为兼容历史链接而保留。
+当前维护中的文档已迁移至：
 
-## Rules
+- ./docs/05-i18n-and-encoding.md
 
-1. Keep a single source of truth for locale loading (`config.ts`).
-2. Do not introduce new locale variants (`en-US`, `zh-CN`) unless required.
-3. All source/docs files must be UTF-8.
-4. No hardcoded user-facing strings in pages/components where i18n key exists.
-
-## Implementation Checklist
-
-1. UI text keys
-- Add/update keys in `en.json` and `zh.json`.
-- Use `t('...')` in page/component code.
-
-2. Agent text
-- Ensure Chinese prompt strings are valid UTF-8.
-- Keep output contracts (`<title>`, `<thought>`, `<summary>`) unchanged.
-
-3. Validation
-- Add CI scan to detect replacement char `U+FFFD`.
-- Add optional mojibake keyword scan for common corruption patterns.
-
-## Suggested CI Checks
-
-- `npm run lint`
-- JSON parse check for `src/i18n/locales/*.json`
-- Encoding check script:
-  - fail if file contains `\uFFFD`
-  - fail if known mojibake patterns detected
-
-## Migration Notes
-
-- If you need new language support:
-  1. Add new locale file.
-  2. Extend `resources` in `src/i18n/config.ts`.
-  3. Add selector in Settings page.
+请将书签和引用统一更新到 docs/ 目录。

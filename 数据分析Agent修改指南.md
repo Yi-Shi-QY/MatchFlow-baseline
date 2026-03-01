@@ -1,15 +1,17 @@
-﻿# Data Analysis Agent Extension Guide
+﻿# Legacy Document Notice / 旧文档迁移说明
 
-This document is kept for compatibility with previous naming.
+## EN
+This file is kept only for compatibility with historical links.
+The actively maintained content has moved to:
 
-Please use:
-- `src/docs/AGENT_GUIDE.md` for agent authoring
-- `AI_AGENT_FRAMEWORK.md` for runtime orchestration
+- ./docs/06-agent-skill-extension-guide.md
 
-## Quick Extension Steps
+Please update bookmarks and references to the unified docs/ directory.
 
-1. Add a new agent file in `src/agents/` implementing `AgentConfig`.
-2. Register the agent in `src/agents/index.ts`.
-3. Add planner output rules so the new `agentType` can be selected.
-4. If needed, add skills in `src/skills/` and register executors.
-5. Run `npm run lint` and verify one full stream in UI.
+## ZH
+此文件仅为兼容历史链接而保留。
+当前维护中的文档已迁移至：
+
+- ./docs/06-agent-skill-extension-guide.md
+
+请将书签和引用统一更新到 docs/ 目录。

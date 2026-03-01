@@ -29,6 +29,10 @@ This folder is the **single source of truth** for project documentation.
     Linux environment validation checklist / Linux 环境联调校验清单
 12. [12-changelog.md](./12-changelog.md)  
     Human-readable project change log / 项目变更记录
+13. [13-cicd-guide.md](./13-cicd-guide.md)  
+    CI/CD workflow and release strategy / CI/CD 工作流与发布策略
+14. [14-extension-hub-spec.md](./14-extension-hub-spec.md)  
+    Manifest schema and hub compatibility / Manifest 结构与 Hub 兼容规范
 
 ## Writing Rules / 文档规范
 
@@ -41,3 +45,7 @@ This folder is the **single source of truth** for project documentation.
 4. When behavior changes, update docs in this folder in the same PR/commit.  
    功能行为变化时，必须在同一 PR/提交中同步更新本目录文档。
 
+## Legacy Entrypoints / 旧文档入口
+
+Legacy markdown files outside `docs/` are now compatibility stubs that point back to this folder.  
+`docs/` 目录外的旧 Markdown 文件已改为兼容入口页，内容维护请仅在本目录进行。

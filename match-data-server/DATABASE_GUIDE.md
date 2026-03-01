@@ -1,91 +1,17 @@
-# Match Data Server Database Guide
+﻿# Legacy Document Notice / 旧文档迁移说明
 
-This document explains how to move from in-memory mock data to PostgreSQL.
+## EN
+This file is kept only for compatibility with historical links.
+The actively maintained content has moved to:
 
-## 1. Why PostgreSQL
+- ../docs/09-server-deploy-and-database-guide.md
 
-- Stable production database
-- Good JSON support (`JSONB`) for flexible fields (`stats`, `odds`)
-- Easy indexing for query performance
+Please update bookmarks and references to the unified docs/ directory.
 
-## 2. Core Schema
+## ZH
+此文件仅为兼容历史链接而保留。
+当前维护中的文档已迁移至：
 
-Main tables:
+- ../docs/09-server-deploy-and-database-guide.md
 
-- `teams`
-- `matches`
-- `extension_manifests`
-
-Schema file:
-
-- `match-data-server/schema.sql`
-
-## 3. Setup
-
-### Option A: Docker
-
-```bash
-cd match-data-server
-docker-compose up -d
-```
-
-### Option B: Existing PostgreSQL
-
-Set `DATABASE_URL` in `.env`:
-
-```env
-DATABASE_URL=postgresql://user:password@host:5432/dbname
-```
-
-## 4. Initialize Schema
-
-You can initialize tables through admin endpoint:
-
-```bash
-curl -X POST http://localhost:3001/admin/init \
-  -H "Authorization: Bearer <API_KEY>"
-```
-
-Or run SQL directly:
-
-```bash
-psql -h <host> -U <user> -d <db> -f schema.sql
-```
-
-## 5. Data Ingestion Pattern
-
-Recommended flow:
-
-1. Upsert teams via `POST /admin/teams`
-2. Upsert matches via `POST /admin/matches`
-3. Update live score/status via `PUT /admin/matches/:id/score`
-4. Upsert hub manifests via `POST /admin/extensions`
-5. Publish specific versions via `POST /admin/extensions/publish`
-
-Example script:
-
-- `match-data-server/scripts/push_data_example.js`
-
-## 6. Production Recommendations
-
-- Keep `API_KEY` strong and private
-- Put server behind HTTPS reverse proxy
-- Add request rate limiting for admin APIs
-- Add periodic DB backup
-- Add read endpoint cache for high traffic (`/matches`)
-
-## 7. Hub Manifest APIs
-
-Read endpoints consumed by app auto-install:
-
-- `GET /hub/agents/:id`
-- `GET /hub/skills/:id`
-- `GET /hub/templates/:id`
-- Alias forms under `/hub/{kind}/:id` and `/extensions/*`
-
-Admin endpoints for version lifecycle:
-
-- `GET /admin/extensions`
-- `POST /admin/extensions`
-- `PUT /admin/extensions/:kind/:id/:version`
-- `POST /admin/extensions/publish`
+请将书签和引用统一更新到 docs/ 目录。

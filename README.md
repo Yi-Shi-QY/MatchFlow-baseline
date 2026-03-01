@@ -1,52 +1,69 @@
 ﻿# MatchFlow
 
+## EN
+
 MatchFlow is a multi-agent football analysis app built with React + Capacitor.
 
-It combines:
-- A planner + specialist agent pipeline
-- Local tool calling (skills)
-- Parameter-based Remotion templates for animation rendering
-- Local-first persistence for history and resume state
+Main capabilities:
 
-## Current Architecture (March 2026)
+1. Planner + specialist agent pipeline.
+2. Local deterministic tool calling (skills).
+3. Parameter-based Remotion animation rendering.
+4. Local-first history and resume persistence.
 
-The runtime flow is:
-1. `MatchDetail` collects selected match data.
-2. `AnalysisContext.startAnalysis` starts and tracks a streaming task.
-3. `streamAgentThoughts` executes: planner -> specialist segments -> animation extraction/validation -> tag extraction -> final summary.
-4. `agentParser` parses `<title>`, `<thought>`, `<animation>`, `<tags>`, `<summary>`.
-5. `RemotionPlayer` renders validated animation payloads by template id.
+Documentation entry:
 
-## Documentation
+1. [docs/README.md](./docs/README.md)
 
-- Unified docs hub: `docs/README.md`
-- Architecture and runtime: `docs/02-architecture.md`
-- Agent framework: `docs/04-ai-agent-framework.md`
-- Extension guides: `docs/06-agent-skill-extension-guide.md` and `docs/07-data-source-extension-guide.md`
-- Server API/deploy/database: `docs/08-server-api-guide.md` and `docs/09-server-deploy-and-database-guide.md`
-- CI/CD guide: `docs/13-cicd-guide.md`
-
-## Quick Start
+Quick start:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Type check:
+Quality check:
 
 ```bash
 npm run lint
 ```
 
-Build:
+Production build:
 
 ```bash
 npm run build
 ```
 
-## Notes
+## ZH
 
-- The app router currently uses `BrowserRouter`.
-- Match list data is fetched from `src/services/matchData.ts` and falls back to mock data when no server is configured.
-- Legacy dynamic Remotion code generation paths were removed. The app now only uses parameterized templates.
+MatchFlow 是一个基于 React + Capacitor 的多 Agent 足球比赛分析应用。
+
+主要能力：
+
+1. 规划器 + 专项 Agent 分段分析流程。
+2. 本地确定性 Skill 工具调用。
+3. 基于参数的 Remotion 动画渲染。
+4. 本地优先的历史记录与中断续跑持久化。
+
+文档入口：
+
+1. [docs/README.md](./docs/README.md)
+
+快速启动：
+
+```bash
+npm install
+npm run dev
+```
+
+质量检查：
+
+```bash
+npm run lint
+```
+
+生产构建：
+
+```bash
+npm run build
+```
