@@ -16,11 +16,11 @@ import { AgentResult } from '@/src/services/agentParser';
 import { RemotionPlayer } from '@/src/components/RemotionPlayer';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
 import { compressToEncodedURIComponent } from 'lz-string';
-import { toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { ensurePdfCjkFont, PDF_CJK_FONT_FAMILY } from '@/src/services/pdfFont';
 import {
   ANALYSIS_DATA_SOURCES,
   FormFieldSchema,
@@ -30,10 +30,15 @@ import {
   resolveSourceSelection
 } from '@/src/services/dataSources';
 
+interface ExportSegmentOption {
+  includeSegment: boolean;
+  includeAnimation: boolean;
+}
+
 export default function MatchDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const importedData = location.state?.importedData;
   const { activeAnalyses, startAnalysis: contextStartAnalysis, setCollapsedSegments: contextSetCollapsedSegments } = useAnalysis();
@@ -106,6 +111,10 @@ export default function MatchDetail() {
   const [showShare, setShowShare] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isPreviewExpanded, setIsPreviewExpanded] = useState(true);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportSegments, setExportSegments] = useState<Record<string, ExportSegmentOption>>({});
+  const [includeSummaryInExport, setIncludeSummaryInExport] = useState(true);
+  const [includeDisclaimerInExport, setIncludeDisclaimerInExport] = useState(true);
 
   useEffect(() => {
     setSelectedSources({});
@@ -130,150 +139,215 @@ export default function MatchDetail() {
     return <FileText className="w-5 h-5 text-zinc-400" />;
   };
 
-  const handleExportPDF = async () => {
+  const normalizeTextForPdf = (input: string) => {
+    return input
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/[*_`>#-]/g, ' ')
+      .replace(/\|/g, ' ')
+      .replace(/\s+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .trim();
+  };
+
+  const flattenObjectEntries = (
+    value: any,
+    prefix: string = '',
+    depth: number = 0,
+    maxDepth: number = 3,
+    maxEntries: number = 30,
+    acc: string[] = []
+  ): string[] => {
+    if (acc.length >= maxEntries || depth > maxDepth) return acc;
+    if (value == null) return acc;
+
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        flattenObjectEntries(item, `${prefix}[${index}]`, depth + 1, maxDepth, maxEntries, acc);
+      });
+      return acc;
+    }
+
+    if (typeof value === 'object') {
+      Object.entries(value).forEach(([k, v]) => {
+        const key = prefix ? `${prefix}.${k}` : k;
+        flattenObjectEntries(v, key, depth + 1, maxDepth, maxEntries, acc);
+      });
+      return acc;
+    }
+
+    acc.push(`${prefix}: ${String(value)}`);
+    return acc;
+  };
+
+  const openExportModal = (stream: AgentResult | null, hasSummary: boolean) => {
+    const segments = stream?.segments || [];
+    const defaults = segments.reduce((acc, seg) => {
+      acc[seg.id] = {
+        includeSegment: true,
+        includeAnimation: !!seg.animation,
+      };
+      return acc;
+    }, {} as Record<string, ExportSegmentOption>);
+
+    setExportSegments(defaults);
+    setIncludeSummaryInExport(hasSummary);
+    setIncludeDisclaimerInExport(true);
+    setShowExportModal(true);
+  };
+
+  const handleExportPDF = async (stream: AgentResult | null, summary: MatchAnalysis | null) => {
     if (!match || isExporting) return;
+
+    const selectedSegments = (stream?.segments || []).filter(
+      seg => exportSegments[seg.id]?.includeSegment
+    );
+
+    if (selectedSegments.length === 0 && !includeSummaryInExport) {
+      alert(t('match.export_validation'));
+      return;
+    }
+
     setIsExporting(true);
+    setShowExportModal(false);
 
     try {
-      // 1. Expand all segments
-      const originalCollapsed = { ...activeAnalysis?.collapsedSegments };
-      const allExpanded: Record<string, boolean> = {};
-      if (activeAnalysis?.parsedStream) {
-        activeAnalysis.parsedStream.segments.forEach(seg => {
-          allExpanded[seg.id] = false;
-        });
-        contextSetCollapsedSegments(match.id, allExpanded);
-      }
-
-      // 2. Wait for expansion animation and DOM update
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const element = document.getElementById('analysis-content');
-      if (!element) throw new Error('Content element not found');
-
-      // 3. Capture with html-to-image
-      const dataUrl = await toJpeg(element, {
-        quality: 0.95,
-        backgroundColor: '#000000',
-        pixelRatio: 2,
-        // Filter out video elements to avoid tainted canvas issues
-        filter: (node) => node.tagName !== 'VIDEO',
-      });
-
-      // 4. Generate PDF
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
-      const imgProps = pdf.getImageProperties(dataUrl);
-      const imgWidth = imgProps.width;
-      const imgHeight = imgProps.height;
-      
-      const ratio = pdfWidth / imgWidth;
-      const scaledHeight = imgHeight * ratio;
-      
-      let heightLeft = scaledHeight;
-      let position = 0;
-      
-      // Helper to add watermark
-      const addWatermark = () => {
-        const timestamp = new Date().toLocaleString();
-        pdf.setFontSize(10);
-        pdf.setTextColor(150, 150, 150);
-        pdf.text(`Generated by MatchFlow at ${timestamp}`, 10, pdfHeight - 10);
+      const canUseCjkFont = await ensurePdfCjkFont(pdf);
+      const pdfFontFamily = canUseCjkFont ? PDF_CJK_FONT_FAMILY : 'helvetica';
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 12;
+      const maxTextWidth = pageWidth - margin * 2;
+      const lineHeight = 5;
+      let cursorY = 14;
+
+      const ensureSpace = (requiredHeight: number) => {
+        if (cursorY + requiredHeight > pageHeight - 12) {
+          pdf.addPage();
+          cursorY = 14;
+        }
       };
 
-      // First page
-      pdf.addImage(dataUrl, 'JPEG', 0, position, pdfWidth, scaledHeight);
-      addWatermark();
-      heightLeft -= pdfHeight;
-      
-      // Subsequent pages
-      while (heightLeft > 0) {
-        position = heightLeft - scaledHeight;
-        pdf.addPage();
-        pdf.addImage(dataUrl, 'JPEG', 0, position, pdfWidth, scaledHeight);
-        addWatermark();
-        heightLeft -= pdfHeight;
-      }
-      
-      // Add Disclaimer Page (Render as image to support Chinese characters)
-      const disclaimerContainer = document.createElement('div');
-      // Set fixed size approximating A4 ratio
-      const containerWidth = 800;
-      const containerHeight = 1132; 
+      const writeParagraph = (
+        text: string,
+        options: { fontSize?: number; bold?: boolean; spacingAfter?: number } = {}
+      ) => {
+        const content = text.trim();
+        if (!content) return;
+        const fontSize = options.fontSize ?? 11;
+        const spacingAfter = options.spacingAfter ?? 1.5;
+        pdf.setFont(pdfFontFamily, options.bold ? 'bold' : 'normal');
+        pdf.setFontSize(fontSize);
+        const lines = pdf.splitTextToSize(content, maxTextWidth);
+        ensureSpace(lines.length * lineHeight + spacingAfter + 1);
+        pdf.text(lines, margin, cursorY);
+        cursorY += lines.length * lineHeight + spacingAfter;
+      };
 
-      disclaimerContainer.style.width = `${containerWidth}px`;
-      disclaimerContainer.style.height = `${containerHeight}px`;
-      disclaimerContainer.style.padding = '60px';
-      disclaimerContainer.style.backgroundColor = '#141414';
-      disclaimerContainer.style.color = '#ffffff';
-      // Use fixed position to ensure it's in the viewport for capture
-      disclaimerContainer.style.position = 'fixed';
-      disclaimerContainer.style.top = '0';
-      disclaimerContainer.style.left = '0';
-      disclaimerContainer.style.zIndex = '10000'; // Ensure it's on top
-      disclaimerContainer.style.fontFamily = '"Inter", "Microsoft YaHei", "PingFang SC", sans-serif';
-      disclaimerContainer.style.boxSizing = 'border-box';
+      const locale = i18n.language.startsWith('zh') ? 'zh-CN' : 'en-US';
+      const timestamp = new Date().toLocaleString(locale);
+      const homeName = match.homeTeam.name;
+      const awayName = match.awayTeam.name;
+      const title = `${homeName} vs ${awayName}`;
+      const statusLabel =
+        match.status === 'live'
+          ? t('home.live')
+          : match.status === 'finished'
+            ? t('home.finished')
+            : match.status === 'upcoming'
+              ? t('home.upcoming')
+              : match.status;
 
-      disclaimerContainer.innerHTML = `
-        <div style="height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
-            <div>
-                <h1 style="font-size: 32px; margin-bottom: 40px; border-bottom: 1px solid #333; padding-bottom: 20px; color: #fff; font-weight: bold;">Disclaimer / 免责声明</h1>
-                <div style="font-size: 16px; line-height: 1.8; color: #cccccc;">
-                <p style="margin-bottom: 15px;">1. 本报告由 MatchFlow AI 自动生成，仅供娱乐和参考。</p>
-                <p style="margin-bottom: 15px;">2. 报告中的分析、预测和数据解读均基于历史数据与算法模型，不代表确定性结果。</p>
-                <p style="margin-bottom: 15px;">3. MatchFlow 不提供任何形式的博彩建议或投资建议，用户应自行承担基于本报告做出决策的风险。</p>
-                <p style="margin-bottom: 15px;">4. 足球比赛存在高度不确定性，AI 模型无法覆盖所有突发情况（如临场伤病、红牌等）。</p>
-                <p style="margin-bottom: 15px;">5. 请理性看待比赛结果，切勿沉迷赌博。</p>
-                <hr style="border: 0; border-top: 1px solid #333; margin: 40px 0;" />
-                <p style="margin-bottom: 15px;">1. This report is automatically generated by MatchFlow AI and is for entertainment and reference purposes only.</p>
-                <p style="margin-bottom: 15px;">2. All analyses, predictions, and data interpretations in this report are based on historical data and algorithmic models and do not represent deterministic results.</p>
-                <p style="margin-bottom: 15px;">3. MatchFlow does not provide any form of gambling or investment advice. Users shall bear the risks of any decisions made based on this report.</p>
-                <p style="margin-bottom: 15px;">4. Football matches are full of uncertainties, and AI models cannot predict all sudden situations (such as last-minute injuries, red cards, etc.).</p>
-                <p style="margin-bottom: 15px;">5. Please view the match results rationally and do not indulge in gambling.</p>
-                </div>
-            </div>
-            <div style="text-align: center; color: #555; font-size: 12px; padding-top: 20px;">
-                Generated by MatchFlow at ${new Date().toLocaleString()}
-            </div>
-        </div>
-      `;
+      writeParagraph(title, { fontSize: 16, bold: true, spacingAfter: 2 });
+      writeParagraph(`${match.league} | ${match.date} | ${statusLabel}`, { fontSize: 10 });
+      writeParagraph(t('match.generated_by', { time: timestamp }), { fontSize: 9, spacingAfter: 3 });
 
-      document.body.appendChild(disclaimerContainer);
-
-      try {
-        // Wait a short moment for rendering
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        const disclaimerUrl = await toJpeg(disclaimerContainer, {
-          quality: 0.95,
-          backgroundColor: '#141414',
-          pixelRatio: 2,
+      selectedSegments.forEach((seg, index) => {
+        ensureSpace(10);
+        writeParagraph(`${index + 1}. ${seg.title || t('match.export_segment_fallback', { index: index + 1 })}`, {
+          fontSize: 13,
+          bold: true,
+          spacingAfter: 1.5,
         });
 
-        pdf.addPage();
-        // Fill page with dark background first
-        pdf.setFillColor(20, 20, 20);
-        pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
-        
-        // Add the full page image
-        pdf.addImage(disclaimerUrl, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-      } catch (e) {
-        console.error("Failed to generate disclaimer page:", e);
-      } finally {
-        document.body.removeChild(disclaimerContainer);
-      }
-      
-      // Note: We don't call addWatermark() for the last page because we included it in the HTML image.
+        const cleanedThoughts = normalizeTextForPdf(seg.thoughts || '');
+        if (cleanedThoughts) {
+          writeParagraph(cleanedThoughts, { fontSize: 10.5, spacingAfter: 1.5 });
+        }
 
-      // 5. Save or Share
-      const fileName = `${match.homeTeam.name}_vs_${match.awayTeam.name}_分析报告.pdf`;
+        if (seg.tags && seg.tags.length > 0) {
+          writeParagraph(`${t('match.pdf_tags')}: ${seg.tags.map(tag => tag.label).join(', ')}`, {
+            fontSize: 9.5,
+            spacingAfter: 1.5,
+          });
+        }
+
+        if (exportSegments[seg.id]?.includeAnimation && seg.animation) {
+          writeParagraph(t('match.pdf_animation_content'), { fontSize: 11, bold: true, spacingAfter: 1 });
+          if (typeof seg.animation.title === 'string' && seg.animation.title.trim()) {
+            writeParagraph(`${t('match.pdf_animation_title')}: ${seg.animation.title}`, { fontSize: 9.5, spacingAfter: 1 });
+          }
+          if (typeof seg.animation.narration === 'string' && seg.animation.narration.trim()) {
+            writeParagraph(`${t('match.pdf_animation_narration')}: ${normalizeTextForPdf(seg.animation.narration)}`, { fontSize: 9.5, spacingAfter: 1 });
+          }
+          const animationData = seg.animation.params || seg.animation.data || {};
+          const entries = flattenObjectEntries(animationData);
+          if (entries.length > 0) {
+            writeParagraph(`${t('match.pdf_animation_data')}:`, { fontSize: 9.5, bold: true, spacingAfter: 0.5 });
+            entries.forEach(entry => writeParagraph(`- ${entry}`, { fontSize: 9, spacingAfter: 0.5 }));
+            if (entries.length >= 30) {
+              writeParagraph(`- ${t('match.pdf_data_truncated')}`, { fontSize: 9, spacingAfter: 1 });
+            }
+          }
+          cursorY += 1;
+        }
+
+        cursorY += 1;
+      });
+
+      if (includeSummaryInExport && summary) {
+        ensureSpace(14);
+        writeParagraph(t('match.final_summary'), { fontSize: 13, bold: true, spacingAfter: 1.5 });
+        if (summary.prediction) {
+          writeParagraph(`${t('match.pdf_prediction')}: ${normalizeTextForPdf(summary.prediction)}`, { fontSize: 10.5 });
+        }
+        if (summary.winProbability) {
+          writeParagraph(t('match.pdf_win_probability', {
+            home: summary.winProbability.home,
+            draw: summary.winProbability.draw,
+            away: summary.winProbability.away,
+          }), { fontSize: 10 });
+        }
+        if (summary.expectedGoals) {
+          writeParagraph(t('match.pdf_expected_goals', {
+            home: summary.expectedGoals.home,
+            away: summary.expectedGoals.away,
+          }), { fontSize: 10 });
+        }
+        if (Array.isArray(summary.keyFactors) && summary.keyFactors.length > 0) {
+          writeParagraph(`${t('match.pdf_key_factors')}: ${summary.keyFactors.join(' / ')}`, { fontSize: 10 });
+        }
+      }
+
+      if (includeDisclaimerInExport) {
+        pdf.addPage();
+        cursorY = 16;
+        writeParagraph(t('match.disclaimer_title'), { fontSize: 14, bold: true, spacingAfter: 3 });
+        [1, 2, 3, 4, 5].forEach((index) => {
+          writeParagraph(t(`match.disclaimer_${index}`), { fontSize: 10 });
+        });
+      }
+
+      const safeFilePart = (value: string) =>
+        value.replace(/[\\/:*?"<>|]/g, '_').trim() || 'match';
+      const fileName = t('match.export_file_name', {
+        home: safeFilePart(homeName),
+        away: safeFilePart(awayName),
+      }).replace(/[\\/:*?"<>|]/g, '_');
 
       if (Capacitor.isNativePlatform()) {
-        // Native: Save to cache and share
         const pdfBase64 = pdf.output('datauristring').split(',')[1];
-        
         const fileResult = await Filesystem.writeFile({
           path: fileName,
           data: pdfBase64,
@@ -281,23 +355,17 @@ export default function MatchDetail() {
         });
 
         await Share.share({
-          title: '比赛分析报告',
-          text: `查看 ${match.homeTeam.name} vs ${match.awayTeam.name} 的分析报告`,
+          title: t('match.share_report'),
+          text: t('match.share_text', { home: homeName, away: awayName }),
           url: fileResult.uri,
-          dialogTitle: '分享分析报告'
+          dialogTitle: t('match.share_report')
         });
       } else {
-        // Web: Download directly
         pdf.save(fileName);
-      }
-
-      // 5. Restore state
-      if (activeAnalysis?.parsedStream) {
-        contextSetCollapsedSegments(match.id, originalCollapsed);
       }
     } catch (error: any) {
       console.error('Failed to export PDF:', error);
-      alert(`导出 PDF 失败: ${error.message || '未知错误'}`);
+      alert(`${t('match.export_failed')}: ${error?.message || t('match.export_unknown_error')}`);
     } finally {
       setIsExporting(false);
     }
@@ -580,7 +648,7 @@ export default function MatchDetail() {
     try {
       dataToAnalyze = JSON.parse(editableData);
     } catch (e) {
-      alert("Invalid JSON format in preview");
+      alert(t('match.invalid_json_preview'));
       return;
     }
 
@@ -682,7 +750,7 @@ export default function MatchDetail() {
               <Button 
                 variant="outline" 
                 size="icon"
-                onClick={handleExportPDF}
+                onClick={() => openExportModal(parsedStream, !!analysis)}
                 disabled={isExporting}
                 className="h-8 w-8 rounded-full border-blue-500/50 text-blue-400 hover:bg-blue-500/10 transition-colors"
               >
@@ -1054,6 +1122,127 @@ export default function MatchDetail() {
           )}
         </main>
       )}
+
+      {/* Export Modal */}
+      <AnimatePresence>
+        {showExportModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setShowExportModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.96, y: 14 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.96, y: 14 }}
+              className="bg-zinc-900 border border-white/10 rounded-2xl p-5 max-w-md w-full shadow-2xl max-h-[80vh] overflow-hidden flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="text-base font-bold text-white mb-1">{t('match.export_modal_title')}</h3>
+              <p className="text-[11px] text-zinc-500 mb-4">
+                {t('match.export_modal_desc')}
+              </p>
+
+              <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+                {(parsedStream?.segments || []).map((seg, index) => {
+                  const selected = exportSegments[seg.id];
+                  const hasAnimation = !!seg.animation;
+                  return (
+                    <div key={seg.id} className="border border-white/10 rounded-xl p-3 bg-black/30">
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!selected?.includeSegment}
+                          onChange={(e) =>
+                            setExportSegments(prev => ({
+                              ...prev,
+                              [seg.id]: {
+                                includeSegment: e.target.checked,
+                                includeAnimation: e.target.checked
+                                  ? prev[seg.id]?.includeAnimation ?? hasAnimation
+                                  : false,
+                              },
+                            }))
+                          }
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0">
+                          <div className="text-xs text-zinc-300 font-medium line-clamp-1">
+                            {index + 1}. {seg.title || t('match.export_segment_fallback', { index: index + 1 })}
+                          </div>
+                          <div className="text-[10px] text-zinc-500 mt-0.5 line-clamp-2">
+                            {(seg.thoughts || '').replace(/\s+/g, ' ').slice(0, 90) || t('match.export_segment_empty')}
+                          </div>
+                        </div>
+                      </label>
+
+                      {hasAnimation && (
+                        <label className="mt-2 ml-5 flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!selected?.includeAnimation}
+                            disabled={!selected?.includeSegment}
+                            onChange={(e) =>
+                              setExportSegments(prev => ({
+                                ...prev,
+                                [seg.id]: {
+                                  includeSegment: prev[seg.id]?.includeSegment ?? true,
+                                  includeAnimation: e.target.checked,
+                                },
+                              }))
+                            }
+                          />
+                          {t('match.export_include_animation')}
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 space-y-2 border-t border-white/10 pt-3">
+                <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeSummaryInExport}
+                    onChange={(e) => setIncludeSummaryInExport(e.target.checked)}
+                  />
+                  {t('match.export_include_summary')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeDisclaimerInExport}
+                    onChange={(e) => setIncludeDisclaimerInExport(e.target.checked)}
+                  />
+                  {t('match.export_include_disclaimer')}
+                </label>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
+                  onClick={() => setShowExportModal(false)}
+                  disabled={isExporting}
+                >
+                  {t('home.cancel')}
+                </Button>
+                <Button
+                  className="flex-1 gap-2"
+                  onClick={() => handleExportPDF(parsedStream, analysis)}
+                  disabled={isExporting}
+                >
+                  {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  {t('match.export_share')}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Share Modal */}
       <AnimatePresence>
