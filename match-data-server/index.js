@@ -66,6 +66,432 @@ function withSourceMeta(match, source) {
   };
 }
 
+function hasNonEmptyObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0;
+}
+
+function parseBooleanEnv(value, fallback) {
+  if (value == null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+function normalizeStringArray(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter(item => typeof item === 'string')
+    .map(item => item.trim())
+    .filter(item => item.length > 0);
+}
+
+function uniqueStrings(values) {
+  return Array.from(new Set(normalizeStringArray(values)));
+}
+
+function compareSemver(a, b) {
+  const parse = (value) => {
+    const [core, pre = ''] = String(value || '').split('-', 2);
+    const [major, minor, patch] = core.split('.').map(n => Number(n) || 0);
+    return { major, minor, patch, pre };
+  };
+
+  const av = parse(a);
+  const bv = parse(b);
+
+  if (av.major !== bv.major) return av.major > bv.major ? 1 : -1;
+  if (av.minor !== bv.minor) return av.minor > bv.minor ? 1 : -1;
+  if (av.patch !== bv.patch) return av.patch > bv.patch ? 1 : -1;
+  if (av.pre === bv.pre) return 0;
+  if (!av.pre) return 1;
+  if (!bv.pre) return -1;
+  return av.pre > bv.pre ? 1 : -1;
+}
+
+const HUB_MANIFESTS = {
+  agent: {
+    momentum_agent: [
+      {
+        kind: 'agent',
+        id: 'momentum_agent',
+        version: '1.0.0',
+        name: 'Momentum Agent',
+        description: 'Analyzes momentum swings for live matches using stats and market signals.',
+        updatedAt: '2026-03-01T00:00:00.000Z',
+        rolePrompt: {
+          en: 'You are a momentum analyst. Track pressure swings, rhythm changes, and turning points.',
+          zh: 'Use concise Chinese analysis tone when user language is Chinese.'
+        },
+        skills: ['calculator'],
+        contextDependencies: ['overview', 'odds', 'stats']
+      }
+    ]
+  },
+  skill: {
+    select_plan_template_v2: [
+      {
+        kind: 'skill',
+        id: 'select_plan_template_v2',
+        version: '1.0.0',
+        name: 'Template Selector V2',
+        description: 'Alias skill that reuses built-in template selector.',
+        updatedAt: '2026-03-01T00:00:00.000Z',
+        declaration: {
+          name: 'select_plan_template_v2',
+          description: 'Select analysis template by source profile.',
+          parameters: {
+            type: 'object',
+            properties: {
+              templateType: { type: 'string', description: 'Template type or identifier.' },
+              language: { type: 'string', enum: ['en', 'zh'] },
+              includeAnimations: { type: 'boolean' }
+            },
+            required: ['templateType']
+          }
+        },
+        runtime: {
+          mode: 'builtin_alias',
+          targetSkill: 'select_plan_template'
+        }
+      }
+    ]
+  },
+  template: {
+    live_market_pro: [
+      {
+        kind: 'template',
+        id: 'live_market_pro',
+        version: '1.0.0',
+        name: 'Live Market Pro',
+        description: 'Live match workflow with momentum and odds reaction focus.',
+        updatedAt: '2026-03-01T00:00:00.000Z',
+        rule: 'Use for live matches with both rich stats and odds updates.',
+        requiredAgents: ['overview', 'odds', 'momentum_agent', 'prediction'],
+        requiredSkills: ['select_plan_template_v2'],
+        segments: [
+          {
+            title: { en: 'Live Overview', zh: 'Sai Shi Gai Kuang' },
+            focus: { en: 'Summarize game state and key turning points.', zh: 'Zongjie dangqian ju shi he guanjian zhuan zhe' },
+            animationType: 'scoreboard',
+            agentType: 'overview',
+            contextMode: 'independent'
+          },
+          {
+            title: { en: 'Momentum Lens', zh: 'Jie Zou Dong Liang' },
+            focus: { en: 'Track pressure waves and control shifts.', zh: 'Genzong yali bo dong yu kongzhi zhuanyi' },
+            animationType: 'heatmap',
+            agentType: 'momentum_agent',
+            contextMode: 'build_upon'
+          },
+          {
+            title: { en: 'Market Reaction', zh: 'Pan Kou Fan Ying' },
+            focus: { en: 'Interpret implied probability movement from odds.', zh: 'Jieshi pei lv yinhan gai lv de bianhua' },
+            animationType: 'odds_shift',
+            agentType: 'odds',
+            contextMode: 'build_upon'
+          },
+          {
+            title: { en: 'Final Projection', zh: 'Zui Zhong Yu Ce' },
+            focus: { en: 'Provide final probabilities and risk notes.', zh: 'Geichu jieguo gailv yu fengxian tishi' },
+            animationType: 'none',
+            agentType: 'prediction',
+            contextMode: 'all'
+          }
+        ]
+      }
+    ]
+  }
+};
+
+function getHubManifest(kind, id, version) {
+  const kindBucket = HUB_MANIFESTS[kind];
+  if (!kindBucket) return null;
+
+  const normalizedId = typeof id === 'string' ? id.trim() : '';
+  if (!normalizedId) return null;
+
+  const versions = kindBucket[normalizedId];
+  if (!Array.isArray(versions) || versions.length === 0) return null;
+
+  const normalizedVersion = typeof version === 'string' ? version.trim() : '';
+  if (normalizedVersion) {
+    return versions.find(item => item.version === normalizedVersion) || null;
+  }
+
+  return versions.reduce((best, current) => {
+    if (!best) return current;
+    return compareSemver(current.version, best.version) > 0 ? current : best;
+  }, null);
+}
+
+function buildDefaultHubBaseUrl(req) {
+  const envBase = typeof process.env.HUB_BASE_URL === 'string' ? process.env.HUB_BASE_URL.trim() : '';
+  if (envBase) return envBase.replace(/\/+$/, '');
+  if (!req) return '';
+  return `${req.protocol}://${req.get('host')}`.replace(/\/+$/, '');
+}
+
+function resolveHubHint(req, overrideHub) {
+  const fallbackAutoInstall = parseBooleanEnv(process.env.HUB_AUTO_INSTALL, true);
+  const includeApiKeyByDefault = parseBooleanEnv(process.env.HUB_INCLUDE_API_KEY_HINT, false);
+  const envApiKeyHint = typeof process.env.HUB_API_KEY_HINT === 'string' && process.env.HUB_API_KEY_HINT.trim().length > 0
+    ? process.env.HUB_API_KEY_HINT.trim()
+    : undefined;
+
+  const baseUrl = typeof overrideHub?.baseUrl === 'string' && overrideHub.baseUrl.trim().length > 0
+    ? overrideHub.baseUrl.trim().replace(/\/+$/, '')
+    : buildDefaultHubBaseUrl(req);
+  const autoInstall = typeof overrideHub?.autoInstall === 'boolean'
+    ? overrideHub.autoInstall
+    : fallbackAutoInstall;
+  const apiKey = typeof overrideHub?.apiKey === 'string' && overrideHub.apiKey.trim().length > 0
+    ? overrideHub.apiKey.trim()
+    : (envApiKeyHint || (includeApiKeyByDefault ? API_KEY : undefined));
+
+  const hint = { baseUrl, autoInstall };
+  if (apiKey) {
+    hint.apiKey = apiKey;
+  }
+  return hint;
+}
+
+function deriveSourceSignals(matchData) {
+  const selected = matchData?.sourceContext?.selectedSources;
+  const selectedIds = Array.isArray(matchData?.sourceContext?.selectedSourceIds)
+    ? new Set(matchData.sourceContext.selectedSourceIds.filter(id => typeof id === 'string'))
+    : new Set();
+  const sourceCapabilities = matchData?.sourceContext?.capabilities || matchData?.capabilities || {};
+
+  const hasStats = typeof sourceCapabilities.hasStats === 'boolean'
+    ? sourceCapabilities.hasStats
+    : hasNonEmptyObject(matchData?.stats);
+  const hasOdds = typeof sourceCapabilities.hasOdds === 'boolean'
+    ? sourceCapabilities.hasOdds
+    : hasNonEmptyObject(matchData?.odds);
+  const hasCustom = typeof sourceCapabilities.hasCustom === 'boolean'
+    ? sourceCapabilities.hasCustom
+    : (typeof matchData?.customInfo === 'string'
+      ? matchData.customInfo.trim().length > 0
+      : matchData?.customInfo != null);
+  const hasFundamental = typeof sourceCapabilities.hasFundamental === 'boolean'
+    ? sourceCapabilities.hasFundamental
+    : true;
+
+  const wantsFundamental = typeof selected?.fundamental === 'boolean'
+    ? selected.fundamental
+    : (selectedIds.has('fundamental') ? true : hasFundamental);
+  const wantsMarket = typeof selected?.market === 'boolean'
+    ? selected.market
+    : (selectedIds.has('market') ? true : hasOdds);
+  const wantsCustom = typeof selected?.custom === 'boolean'
+    ? selected.custom
+    : (selectedIds.has('custom') ? true : hasCustom);
+
+  const status = typeof matchData?.status === 'string'
+    ? matchData.status.toLowerCase()
+    : (typeof matchData?.sourceContext?.matchStatus === 'string'
+      ? matchData.sourceContext.matchStatus.toLowerCase()
+      : 'unknown');
+
+  return {
+    wantsFundamental,
+    wantsMarket,
+    wantsCustom,
+    hasStats,
+    hasOdds,
+    hasCustom,
+    status
+  };
+}
+
+function getTemplateRequirements(templateId) {
+  const manifest = getHubManifest('template', templateId);
+  if (!manifest) {
+    return { requiredAgents: [], requiredSkills: [] };
+  }
+  return {
+    requiredAgents: normalizeStringArray(manifest.requiredAgents),
+    requiredSkills: normalizeStringArray(manifest.requiredSkills)
+  };
+}
+
+function recommendPlanning(matchData, req) {
+  const planningInput = matchData?.sourceContext?.planning || matchData?.analysisConfig?.planning || {};
+  const overrideHub = planningInput?.hub && typeof planningInput.hub === 'object' ? planningInput.hub : undefined;
+  const hub = resolveHubHint(req, overrideHub);
+
+  const inputRequiredAgents = normalizeStringArray(planningInput?.requiredAgents);
+  const inputRequiredSkills = normalizeStringArray(planningInput?.requiredSkills);
+
+  const forcedMode = planningInput?.mode === 'autonomous' || planningInput?.mode === 'template'
+    ? planningInput.mode
+    : null;
+  const forcedTemplateId = typeof planningInput?.templateId === 'string' && planningInput.templateId.trim().length > 0
+    ? planningInput.templateId.trim()
+    : (typeof planningInput?.templateType === 'string' && planningInput.templateType.trim().length > 0
+      ? planningInput.templateType.trim()
+      : null);
+
+  if (forcedMode === 'autonomous' && !forcedTemplateId) {
+    return {
+      mode: 'autonomous',
+      requiredAgents: uniqueStrings(inputRequiredAgents),
+      requiredSkills: uniqueStrings(inputRequiredSkills),
+      hub,
+      reason: 'forced_autonomous'
+    };
+  }
+
+  if (forcedTemplateId) {
+    const templateRequirements = getTemplateRequirements(forcedTemplateId);
+    return {
+      mode: 'template',
+      templateId: forcedTemplateId,
+      requiredAgents: uniqueStrings([...templateRequirements.requiredAgents, ...inputRequiredAgents]),
+      requiredSkills: uniqueStrings([...templateRequirements.requiredSkills, ...inputRequiredSkills]),
+      hub,
+      reason: 'forced_template'
+    };
+  }
+
+  const signals = deriveSourceSignals(matchData);
+
+  if (signals.wantsCustom && !signals.wantsFundamental && !signals.wantsMarket) {
+    return {
+      mode: 'autonomous',
+      requiredAgents: uniqueStrings(inputRequiredAgents),
+      requiredSkills: uniqueStrings(inputRequiredSkills),
+      hub,
+      reason: 'custom_only'
+    };
+  }
+
+  let templateId = 'basic';
+  let reason = 'minimal_data';
+
+  if (signals.status === 'live' && signals.hasStats && signals.hasOdds) {
+    templateId = 'live_market_pro';
+    reason = 'live_stats_odds';
+  } else if (signals.wantsMarket && !signals.wantsFundamental) {
+    templateId = 'odds_focused';
+    reason = 'market_only';
+  } else if (signals.hasStats && signals.hasOdds) {
+    templateId = 'comprehensive';
+    reason = 'stats_and_odds';
+  } else if (signals.hasOdds && !signals.hasStats) {
+    templateId = 'odds_focused';
+    reason = 'odds_without_stats';
+  } else if (signals.hasStats) {
+    templateId = 'standard';
+    reason = signals.status === 'live' ? 'live_stats' : 'stats_only';
+  }
+
+  const templateRequirements = getTemplateRequirements(templateId);
+  return {
+    mode: 'template',
+    templateId,
+    requiredAgents: uniqueStrings([...templateRequirements.requiredAgents, ...inputRequiredAgents]),
+    requiredSkills: uniqueStrings([...templateRequirements.requiredSkills, ...inputRequiredSkills]),
+    hub,
+    reason
+  };
+}
+
+function buildAnalysisConfigPayload(matchData, req) {
+  const planning = recommendPlanning(matchData, req);
+  const signals = deriveSourceSignals(matchData);
+  const selectedSources = {
+    fundamental: signals.wantsFundamental,
+    market: signals.wantsMarket,
+    custom: signals.wantsCustom
+  };
+  const selectedSourceIds = Object.entries(selectedSources)
+    .filter(([, enabled]) => !!enabled)
+    .map(([sourceId]) => sourceId);
+
+  return {
+    sourceContext: {
+      selectedSources,
+      selectedSourceIds,
+      capabilities: {
+        hasFundamental: signals.wantsFundamental,
+        hasStats: signals.hasStats,
+        hasOdds: signals.hasOdds,
+        hasCustom: signals.hasCustom
+      },
+      matchStatus: signals.status,
+      planning
+    }
+  };
+}
+
+function withAnalysisConfig(match, source, req) {
+  const enriched = withSourceMeta(match, source);
+  return {
+    ...enriched,
+    analysisConfig: {
+      planning: recommendPlanning(enriched, req)
+    }
+  };
+}
+
+function mapDbRowToMatch(row) {
+  const homeTeam = row?.homeTeam || row?.hometeam || {};
+  const awayTeam = row?.awayTeam || row?.awayteam || {};
+
+  return {
+    id: row.id,
+    league: row.league_name,
+    date: row.match_date,
+    status: row.status,
+    score: { home: row.home_score, away: row.away_score },
+    stats: row.match_stats,
+    odds: row.odds,
+    homeTeam: {
+      id: homeTeam.id,
+      name: homeTeam.name,
+      logo: homeTeam.logo_url,
+      form: homeTeam.recent_form
+    },
+    awayTeam: {
+      id: awayTeam.id,
+      name: awayTeam.name,
+      logo: awayTeam.logo_url,
+      form: awayTeam.recent_form
+    }
+  };
+}
+
+async function getMatchSnapshotById(id) {
+  if (db.isConnected()) {
+    const query = `
+      SELECT m.*, 
+             row_to_json(ht.*) as homeTeam, 
+             row_to_json(at.*) as awayTeam 
+      FROM matches m
+      JOIN teams ht ON m.home_team_id = ht.id
+      JOIN teams at ON m.away_team_id = at.id
+      WHERE m.id = $1
+    `;
+    const result = await db.query(query, [id]);
+    if (result.rows.length === 0) {
+      return null;
+    }
+    return {
+      match: mapDbRowToMatch(result.rows[0]),
+      source: 'server-db'
+    };
+  }
+
+  const match = MOCK_MATCHES.find(item => item.id === id);
+  if (!match) {
+    return null;
+  }
+
+  return { match, source: 'server-mock' };
+}
+
 // Authentication Middleware
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -127,27 +553,7 @@ app.get('/matches', authenticate, async (req, res) => {
 
       const result = await db.query(query, params);
       
-      const formatted = result.rows.map(row => withSourceMeta({
-        id: row.id,
-        league: row.league_name,
-        date: row.match_date,
-        status: row.status,
-        score: { home: row.home_score, away: row.away_score },
-        stats: row.match_stats,
-        odds: row.odds,
-        homeTeam: {
-          id: row.homeTeam.id,
-          name: row.homeTeam.name,
-          logo: row.homeTeam.logo_url,
-          form: row.homeTeam.recent_form
-        },
-        awayTeam: {
-          id: row.awayTeam.id,
-          name: row.awayTeam.name,
-          logo: row.awayTeam.logo_url,
-          form: row.awayTeam.recent_form
-        }
-      }, 'server-db'));
+      const formatted = result.rows.map(row => withAnalysisConfig(mapDbRowToMatch(row), 'server-db', req));
       
       return res.json({ data: formatted, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: formatted.length } });
     } catch (err) {
@@ -178,7 +584,7 @@ app.get('/matches', authenticate, async (req, res) => {
 
   const paginated = filtered
     .slice(parseInt(offset, 10), parseInt(offset, 10) + parseInt(limit, 10))
-    .map(match => withSourceMeta(match, 'server-mock'));
+    .map(match => withAnalysisConfig(match, 'server-mock', req));
 
   res.json({ data: paginated, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: paginated.length, total: filtered.length } });
 });
@@ -199,27 +605,7 @@ app.get('/matches/live', authenticate, async (req, res) => {
       `;
       const result = await db.query(query);
       
-      const formatted = result.rows.map(row => withSourceMeta({
-        id: row.id,
-        league: row.league_name,
-        date: row.match_date,
-        status: row.status,
-        score: { home: row.home_score, away: row.away_score },
-        stats: row.match_stats,
-        odds: row.odds,
-        homeTeam: {
-          id: row.homeTeam.id,
-          name: row.homeTeam.name,
-          logo: row.homeTeam.logo_url,
-          form: row.homeTeam.recent_form
-        },
-        awayTeam: {
-          id: row.awayTeam.id,
-          name: row.awayTeam.name,
-          logo: row.awayTeam.logo_url,
-          form: row.awayTeam.recent_form
-        }
-      }, 'server-db'));
+      const formatted = result.rows.map(row => withAnalysisConfig(mapDbRowToMatch(row), 'server-db', req));
       
       return res.json({ data: formatted, count: formatted.length });
     } catch (err) {
@@ -231,7 +617,7 @@ app.get('/matches/live', authenticate, async (req, res) => {
   // Fallback to Mock Data
   const liveMatches = MOCK_MATCHES
     .filter(m => m.status === 'live')
-    .map(match => withSourceMeta(match, 'server-mock'));
+    .map(match => withAnalysisConfig(match, 'server-mock', req));
   res.json({ data: liveMatches, count: liveMatches.length });
 });
 
@@ -321,27 +707,7 @@ app.get('/teams/:id/matches', authenticate, async (req, res) => {
       `;
       const result = await db.query(query, [id, parseInt(limit, 10), parseInt(offset, 10)]);
       
-      const formatted = result.rows.map(row => withSourceMeta({
-        id: row.id,
-        league: row.league_name,
-        date: row.match_date,
-        status: row.status,
-        score: { home: row.home_score, away: row.away_score },
-        stats: row.match_stats,
-        odds: row.odds,
-        homeTeam: {
-          id: row.homeTeam.id,
-          name: row.homeTeam.name,
-          logo: row.homeTeam.logo_url,
-          form: row.homeTeam.recent_form
-        },
-        awayTeam: {
-          id: row.awayTeam.id,
-          name: row.awayTeam.name,
-          logo: row.awayTeam.logo_url,
-          form: row.awayTeam.recent_form
-        }
-      }, 'server-db'));
+      const formatted = result.rows.map(row => withAnalysisConfig(mapDbRowToMatch(row), 'server-db', req));
       
       return res.json({ data: formatted, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: formatted.length } });
     } catch (err) {
@@ -356,7 +722,7 @@ app.get('/teams/:id/matches', authenticate, async (req, res) => {
   
   const paginated = teamMatches
     .slice(parseInt(offset, 10), parseInt(offset, 10) + parseInt(limit, 10))
-    .map(match => withSourceMeta(match, 'server-mock'));
+    .map(match => withAnalysisConfig(match, 'server-mock', req));
   res.json({ data: paginated, pagination: { limit: parseInt(limit, 10), offset: parseInt(offset, 10), count: paginated.length, total: teamMatches.length } });
 });
 
@@ -382,27 +748,7 @@ app.get('/matches/:id', authenticate, async (req, res) => {
       }
 
       const row = result.rows[0];
-      const formatted = withSourceMeta({
-        id: row.id,
-        league: row.league_name,
-        date: row.match_date,
-        status: row.status,
-        score: { home: row.home_score, away: row.away_score },
-        stats: row.match_stats,
-        odds: row.odds,
-        homeTeam: {
-          id: row.homeTeam.id,
-          name: row.homeTeam.name,
-          logo: row.homeTeam.logo_url,
-          form: row.homeTeam.recent_form
-        },
-        awayTeam: {
-          id: row.awayTeam.id,
-          name: row.awayTeam.name,
-          logo: row.awayTeam.logo_url,
-          form: row.awayTeam.recent_form
-        }
-      }, 'server-db');
+      const formatted = withAnalysisConfig(mapDbRowToMatch(row), 'server-db', req);
       
       return res.json({ data: formatted });
     } catch (err) {
@@ -416,7 +762,111 @@ app.get('/matches/:id', authenticate, async (req, res) => {
     return res.status(404).json({ error: { message: 'Match not found' } });
   }
 
-  res.json({ data: withSourceMeta(match, 'server-mock') });
+  res.json({ data: withAnalysisConfig(match, 'server-mock', req) });
+});
+
+// 2.5 Resolve Analysis Config by Match ID
+app.get('/analysis/config/match/:id', authenticate, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const snapshot = await getMatchSnapshotById(id);
+    if (!snapshot) {
+      return res.status(404).json({ error: { message: 'Match not found' } });
+    }
+
+    const enriched = withSourceMeta(snapshot.match, snapshot.source);
+    const config = buildAnalysisConfigPayload(enriched, req);
+    return res.json({
+      data: {
+        matchId: id,
+        ...config
+      }
+    });
+  } catch (err) {
+    console.error('Analysis config error:', err);
+    return res.status(500).json({ error: { message: 'Failed to resolve analysis config' } });
+  }
+});
+
+// 2.6 Resolve Analysis Config from Input Snapshot
+app.post('/analysis/config/resolve', authenticate, async (req, res) => {
+  const body = req.body;
+  if (!body || typeof body !== 'object') {
+    return res.status(400).json({ error: { message: 'Request body must be an object' } });
+  }
+
+  const rawMatch = body.match || body.matchData || body.data || body;
+  if (!rawMatch || typeof rawMatch !== 'object') {
+    return res.status(400).json({ error: { message: 'Missing match snapshot in request body' } });
+  }
+
+  const mergedMatch = { ...rawMatch };
+  const mergedSourceContext = {
+    ...(rawMatch.sourceContext && typeof rawMatch.sourceContext === 'object' ? rawMatch.sourceContext : {}),
+    ...(body.sourceContext && typeof body.sourceContext === 'object' ? body.sourceContext : {})
+  };
+
+  if (body.selectedSources && typeof body.selectedSources === 'object') {
+    mergedSourceContext.selectedSources = {
+      ...(mergedSourceContext.selectedSources && typeof mergedSourceContext.selectedSources === 'object'
+        ? mergedSourceContext.selectedSources
+        : {}),
+      ...body.selectedSources
+    };
+  }
+
+  if (Array.isArray(body.selectedSourceIds)) {
+    mergedSourceContext.selectedSourceIds = body.selectedSourceIds;
+  }
+
+  if (body.capabilities && typeof body.capabilities === 'object') {
+    mergedSourceContext.capabilities = {
+      ...(mergedSourceContext.capabilities && typeof mergedSourceContext.capabilities === 'object'
+        ? mergedSourceContext.capabilities
+        : {}),
+      ...body.capabilities
+    };
+  }
+
+  if (Object.keys(mergedSourceContext).length > 0) {
+    mergedMatch.sourceContext = mergedSourceContext;
+  }
+
+  const config = buildAnalysisConfigPayload(mergedMatch, req);
+  const data = {
+    ...config
+  };
+  if (typeof mergedMatch.id === 'string' && mergedMatch.id.trim().length > 0) {
+    data.matchId = mergedMatch.id.trim();
+  }
+
+  return res.json({ data });
+});
+
+function sendHubManifest(kind, req, res) {
+  const version = Array.isArray(req.query.version)
+    ? req.query.version[0]
+    : req.query.version;
+  const manifest = getHubManifest(kind, req.params.id, version);
+  if (!manifest) {
+    return res.status(404).json({ error: { message: `${kind} manifest not found` } });
+  }
+  return res.json({ data: manifest });
+}
+
+['agent', 'skill', 'template'].forEach((kind) => {
+  const plural = `${kind}s`;
+  const paths = [
+    `/hub/${plural}/:id`,
+    `/hub/${kind}/:id`,
+    `/extensions/${plural}/:id`,
+    `/extensions/${kind}/:id`
+  ];
+
+  paths.forEach((routePath) => {
+    app.get(routePath, authenticate, (req, res) => sendHubManifest(kind, req, res));
+  });
 });
 
 // --- Admin Routes (For Data Injection) ---
