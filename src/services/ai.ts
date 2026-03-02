@@ -220,6 +220,8 @@ export async function generateAnalysisPlan(
           includeAnimations,
           route.allowedAgentTypes,
           language,
+          matchData,
+          settings,
         );
         await ensurePlanAgentRequirements(normalized, hubHint);
         return normalized;
@@ -263,6 +265,8 @@ export async function generateAnalysisPlan(
               includeAnimations,
               route.allowedAgentTypes,
               language,
+              matchData,
+              settings,
             );
             await ensurePlanAgentRequirements(normalized, hubHint);
             return normalized;
@@ -283,7 +287,14 @@ export async function generateAnalysisPlan(
 
     const jsonMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(cleanText);
-    const normalized = normalizePlan(parsed, includeAnimations, route.allowedAgentTypes, language);
+    const normalized = normalizePlan(
+      parsed,
+      includeAnimations,
+      route.allowedAgentTypes,
+      language,
+      matchData,
+      settings,
+    );
     await ensurePlanAgentRequirements(normalized, hubHint);
     return normalized;
   } catch (e) {
@@ -292,10 +303,12 @@ export async function generateAnalysisPlan(
     }
     console.error("Failed to parse plan JSON", e, "route:", route.reason);
     const normalized = normalizePlan(
-      buildFallbackPlan(language),
+      buildFallbackPlan(language, matchData, settings),
       includeAnimations,
       route.allowedAgentTypes,
       language,
+      matchData,
+      settings,
     );
     await ensurePlanAgentRequirements(normalized, hubHint);
     return normalized;

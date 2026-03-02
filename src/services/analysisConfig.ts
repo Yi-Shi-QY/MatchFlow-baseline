@@ -1,6 +1,7 @@
 import { getSettings } from './settings';
 
 interface SourceContextPayload {
+  domainId?: string;
   selectedSources?: Record<string, boolean>;
   selectedSourceIds?: string[];
   capabilities?: Record<string, any>;

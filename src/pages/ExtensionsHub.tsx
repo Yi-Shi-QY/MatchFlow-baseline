@@ -31,6 +31,12 @@ import {
   validateSkillManifest,
   validateTemplateManifest,
 } from "@/src/services/extensions/validation";
+import { installDomainPackFromHub } from "@/src/services/domains/packHub";
+import {
+  clearInstalledDomainPacks,
+  listInstalledDomainPackRecords,
+  removeInstalledDomainPackManifest,
+} from "@/src/services/domains/packStore";
 
 type HubStatus = "idle" | "success" | "error" | "loading";
 
@@ -44,6 +50,16 @@ interface ExtensionViewRecord {
   sourceUrl?: string;
   valid: boolean;
   validationErrors: string[];
+}
+
+interface DomainPackViewRecord {
+  id: string;
+  version: string;
+  name: string;
+  description: string;
+  baseDomainId?: string;
+  installedAt: number;
+  sourceUrl?: string;
 }
 
 function extensionKindLabel(kind: ExtensionKind, t: (key: string) => string) {
@@ -93,11 +109,14 @@ export default function ExtensionsHub() {
   const settings = useMemo(() => getSettings(), []);
 
   const [records, setRecords] = useState<ExtensionViewRecord[]>([]);
+  const [domainPacks, setDomainPacks] = useState<DomainPackViewRecord[]>([]);
   const [installKind, setInstallKind] = useState<ExtensionKind>("template");
   const [installId, setInstallId] = useState("");
+  const [domainPackId, setDomainPackId] = useState("");
   const [status, setStatus] = useState<HubStatus>("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [isInstalling, setIsInstalling] = useState(false);
+  const [isInstallingDomainPack, setIsInstallingDomainPack] = useState(false);
   const [isUpdatingAll, setIsUpdatingAll] = useState(false);
 
   const refreshRecords = React.useCallback(() => {
@@ -118,9 +137,23 @@ export default function ExtensionsHub() {
     setRecords(list);
   }, []);
 
+  const refreshDomainPacks = React.useCallback(() => {
+    const list = listInstalledDomainPackRecords().map((record) => ({
+      id: record.manifest.id,
+      version: record.manifest.version,
+      name: record.manifest.name,
+      description: record.manifest.description,
+      baseDomainId: record.manifest.baseDomainId,
+      installedAt: record.installedAt,
+      sourceUrl: record.sourceUrl,
+    }));
+    setDomainPacks(list);
+  }, []);
+
   useEffect(() => {
     refreshRecords();
-  }, [refreshRecords]);
+    refreshDomainPacks();
+  }, [refreshRecords, refreshDomainPacks]);
 
   const installOne = async () => {
     const id = installId.trim();
@@ -255,6 +288,87 @@ export default function ExtensionsHub() {
     refreshRecords();
     setStatus("success");
     setStatusMessage(t("extensions.clear_success"));
+  };
+
+  const installDomainPack = async () => {
+    const id = domainPackId.trim();
+    if (!id) {
+      setStatus("error");
+      setStatusMessage(t("extensions.enter_domain_pack_id"));
+      return;
+    }
+
+    setIsInstallingDomainPack(true);
+    setStatus("loading");
+    setStatusMessage(t("extensions.installing_domain_pack"));
+    try {
+      const installed = await installDomainPackFromHub(id);
+      if (!installed) {
+        setStatus("error");
+        setStatusMessage(t("extensions.install_domain_pack_failed"));
+        return;
+      }
+      refreshDomainPacks();
+      setStatus("success");
+      setStatusMessage(t("extensions.install_domain_pack_success"));
+    } catch (error: any) {
+      setStatus("error");
+      setStatusMessage(
+        `${t("extensions.install_domain_pack_failed")}: ${error?.message || t("extensions.unknown_error")}`,
+      );
+    } finally {
+      setIsInstallingDomainPack(false);
+    }
+  };
+
+  const updateDomainPack = async (id: string) => {
+    setStatus("loading");
+    setStatusMessage(t("extensions.updating_domain_pack"));
+    try {
+      const before = domainPacks.find((record) => record.id === id)?.version || null;
+      const installed = await installDomainPackFromHub(id);
+      refreshDomainPacks();
+      if (!installed) {
+        setStatus("error");
+        setStatusMessage(t("extensions.update_domain_pack_failed"));
+        return;
+      }
+      const after =
+        listInstalledDomainPackRecords().find((record) => record.manifest.id === id)?.manifest
+          .version || null;
+      if (before && after && compareSemver(after, before) > 0) {
+        setStatus("success");
+        setStatusMessage(t("extensions.update_success"));
+      } else {
+        setStatus("success");
+        setStatusMessage(t("extensions.no_update"));
+      }
+    } catch (error: any) {
+      setStatus("error");
+      setStatusMessage(
+        `${t("extensions.update_domain_pack_failed")}: ${error?.message || t("extensions.unknown_error")}`,
+      );
+    }
+  };
+
+  const uninstallDomainPack = (id: string) => {
+    const confirmed = window.confirm(t("extensions.confirm_uninstall_domain_pack", { id }));
+    if (!confirmed) return;
+    const removed = removeInstalledDomainPackManifest(id);
+    if (removed) {
+      refreshDomainPacks();
+      setStatus("success");
+      setStatusMessage(t("extensions.uninstall_domain_pack_success"));
+    }
+  };
+
+  const clearAllDomainPacks = () => {
+    const confirmed = window.confirm(t("extensions.confirm_clear_all_domain_packs"));
+    if (!confirmed) return;
+    clearInstalledDomainPacks();
+    refreshDomainPacks();
+    setStatus("success");
+    setStatusMessage(t("extensions.clear_domain_pack_success"));
   };
 
   return (
@@ -418,6 +532,100 @@ export default function ExtensionsHub() {
                     variant="outline"
                     className="flex-1 h-8 text-xs border-red-500/40 text-red-400 hover:bg-red-500/10"
                     onClick={() => uninstallOne(record.kind, record.id)}
+                  >
+                    <Trash2 className="w-3 h-3 mr-1" />
+                    {t("extensions.uninstall")}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-950">
+          <CardContent className="p-4 space-y-3">
+            <h2 className="text-sm font-bold text-white">
+              {t("extensions.domain_pack_title")} ({domainPacks.length})
+            </h2>
+            <div className="text-[11px] text-zinc-500">
+              {t("extensions.domain_pack_desc")}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                {t("extensions.domain_pack_id")}
+              </label>
+              <input
+                type="text"
+                value={domainPackId}
+                onChange={(e) => setDomainPackId(e.target.value)}
+                placeholder={t("extensions.domain_pack_id_placeholder")}
+                className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={installDomainPack}
+                className="flex-1 gap-2"
+                disabled={isInstallingDomainPack}
+              >
+                {isInstallingDomainPack ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                {t("extensions.install_domain_pack")}
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 gap-2 border-red-500/40 text-red-400 hover:bg-red-500/10"
+                onClick={clearAllDomainPacks}
+                disabled={domainPacks.length === 0}
+              >
+                <Trash2 className="w-4 h-4" />
+                {t("extensions.clear_all_domain_packs")}
+              </Button>
+            </div>
+
+            {domainPacks.length === 0 && (
+              <div className="text-xs text-zinc-500">{t("extensions.domain_pack_empty")}</div>
+            )}
+
+            {domainPacks.map((pack) => (
+              <div key={`domain_pack:${pack.id}`} className="border border-white/10 rounded-lg p-3 bg-zinc-900/40 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs text-zinc-300 font-medium truncate">{pack.name}</div>
+                    <div className="text-[10px] text-zinc-500 font-mono truncate">
+                      domain_pack:{pack.id} @ {pack.version}
+                    </div>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 shrink-0">
+                    {t("extensions.kind_domain_pack")}
+                  </span>
+                </div>
+                <div className="text-[11px] text-zinc-400">{pack.description}</div>
+                <div className="text-[10px] text-zinc-500">
+                  {t("extensions.base_domain")}:{" "}
+                  <span className="text-zinc-300">{pack.baseDomainId || "football"}</span>
+                </div>
+                <div className="text-[10px] text-zinc-500">
+                  {t("extensions.installed_at")}: {new Date(pack.installedAt).toLocaleString()}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-8 text-xs border-zinc-700 bg-zinc-900 hover:bg-zinc-800"
+                    onClick={() => updateDomainPack(pack.id)}
+                  >
+                    <RefreshCw className="w-3 h-3 mr-1" />
+                    {t("extensions.update")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-8 text-xs border-red-500/40 text-red-400 hover:bg-red-500/10"
+                    onClick={() => uninstallDomainPack(pack.id)}
                   >
                     <Trash2 className="w-3 h-3 mr-1" />
                     {t("extensions.uninstall")}

@@ -1,6 +1,7 @@
 import {
   AgentExtensionManifest,
   ExtensionValidationResult,
+  SkillRuntime,
   SkillExtensionManifest,
   TemplateExtensionManifest,
 } from "./types";
@@ -11,6 +12,39 @@ const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 function normalizeStringArray(input: any): string[] {
   if (!Array.isArray(input)) return [];
   return input.filter((v) => typeof v === "string" && v.trim().length > 0);
+}
+
+function isPlainObject(input: any): input is Record<string, any> {
+  return !!input && typeof input === "object" && !Array.isArray(input);
+}
+
+function normalizeStringRecord(input: any): Record<string, string> {
+  if (!isPlainObject(input)) return {};
+  const output: Record<string, string> = {};
+  Object.entries(input).forEach(([key, value]) => {
+    if (typeof value === "string" && key.trim().length > 0) {
+      output[key] = value;
+    }
+  });
+  return output;
+}
+
+function normalizePrimitiveRecord(
+  input: any,
+): Record<string, string | number | boolean> {
+  if (!isPlainObject(input)) return {};
+  const output: Record<string, string | number | boolean> = {};
+  Object.entries(input).forEach(([key, value]) => {
+    if (key.trim().length === 0) return;
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      output[key] = value;
+    }
+  });
+  return output;
 }
 
 function validateBaseCommon(input: any, expectedKind: string, errors: string[]) {
@@ -138,16 +172,183 @@ export function validateSkillManifest(input: any): ExtensionValidationResult {
 
   if (!input?.runtime || typeof input.runtime !== "object") {
     errors.push("skill.runtime is required");
-  } else if (input.runtime.mode !== "builtin_alias") {
-    errors.push("skill.runtime.mode must be 'builtin_alias'");
-  } else if (
-    typeof input.runtime.targetSkill !== "string" ||
-    input.runtime.targetSkill.trim().length === 0
-  ) {
-    errors.push("skill.runtime.targetSkill is required");
+  } else {
+    const mode = input.runtime.mode;
+    if (mode === "builtin_alias") {
+      if (
+        typeof input.runtime.targetSkill !== "string" ||
+        input.runtime.targetSkill.trim().length === 0
+      ) {
+        errors.push("skill.runtime.targetSkill is required");
+      }
+    } else if (mode === "http_json") {
+      const request = input.runtime.request;
+      if (!request || typeof request !== "object") {
+        errors.push("skill.runtime.request is required for mode=http_json");
+      } else {
+        if (typeof request.url !== "string" || request.url.trim().length === 0) {
+          errors.push("skill.runtime.request.url is required");
+        }
+        if (request.method !== undefined) {
+          const method = String(request.method).toUpperCase();
+          const validMethod =
+            method === "GET" ||
+            method === "POST" ||
+            method === "PUT" ||
+            method === "PATCH" ||
+            method === "DELETE";
+          if (!validMethod) {
+            errors.push(
+              "skill.runtime.request.method must be GET|POST|PUT|PATCH|DELETE",
+            );
+          }
+        }
+        if (request.headers !== undefined) {
+          if (!isPlainObject(request.headers)) {
+            errors.push("skill.runtime.request.headers must be an object");
+          } else {
+            const hasInvalidHeaderValue = Object.values(request.headers).some(
+              (value) => typeof value !== "string",
+            );
+            if (hasInvalidHeaderValue) {
+              errors.push("skill.runtime.request.headers values must be strings");
+            }
+          }
+        }
+        if (request.query !== undefined) {
+          if (!isPlainObject(request.query)) {
+            errors.push("skill.runtime.request.query must be an object");
+          } else {
+            const hasInvalidQueryValue = Object.values(request.query).some(
+              (value) =>
+                !(
+                  typeof value === "string" ||
+                  typeof value === "number" ||
+                  typeof value === "boolean"
+                ),
+            );
+            if (hasInvalidQueryValue) {
+              errors.push(
+                "skill.runtime.request.query values must be string|number|boolean",
+              );
+            }
+          }
+        }
+        if (request.timeoutMs !== undefined) {
+          if (
+            typeof request.timeoutMs !== "number" ||
+            !Number.isFinite(request.timeoutMs) ||
+            request.timeoutMs <= 0
+          ) {
+            errors.push("skill.runtime.request.timeoutMs must be a positive number");
+          }
+        }
+        if (request.auth !== undefined) {
+          if (
+            request.auth !== "none" &&
+            request.auth !== "match_data_api_key"
+          ) {
+            errors.push(
+              "skill.runtime.request.auth must be 'none' | 'match_data_api_key'",
+            );
+          }
+        }
+      }
+
+      const response = input.runtime.response;
+      if (response !== undefined && !isPlainObject(response)) {
+        errors.push("skill.runtime.response must be an object when provided");
+      } else if (
+        response &&
+        response.pickPath !== undefined &&
+        (typeof response.pickPath !== "string" || response.pickPath.trim().length === 0)
+      ) {
+        errors.push("skill.runtime.response.pickPath must be a non-empty string");
+      }
+    } else if (mode === "static_result") {
+      // No extra validation for static_result payload.
+    } else {
+      errors.push(
+        "skill.runtime.mode must be 'builtin_alias' | 'http_json' | 'static_result'",
+      );
+    }
   }
 
   return { ok: errors.length === 0, errors };
+}
+
+function sanitizeSkillRuntime(input: any): SkillRuntime {
+  if (input?.mode === "builtin_alias") {
+    return {
+      mode: "builtin_alias",
+      targetSkill: String(input.targetSkill || "").trim(),
+    };
+  }
+
+  if (input?.mode === "http_json") {
+    const requestInput = isPlainObject(input.request) ? input.request : {};
+    const methodRaw =
+      typeof requestInput.method === "string"
+        ? requestInput.method.toUpperCase()
+        : undefined;
+    const method =
+      methodRaw === "GET" ||
+      methodRaw === "POST" ||
+      methodRaw === "PUT" ||
+      methodRaw === "PATCH" ||
+      methodRaw === "DELETE"
+        ? (methodRaw as "GET" | "POST" | "PUT" | "PATCH" | "DELETE")
+        : undefined;
+    const timeout =
+      typeof requestInput.timeoutMs === "number" &&
+      Number.isFinite(requestInput.timeoutMs) &&
+      requestInput.timeoutMs > 0
+        ? requestInput.timeoutMs
+        : undefined;
+    const auth =
+      requestInput.auth === "match_data_api_key" ||
+      requestInput.auth === "none"
+        ? requestInput.auth
+        : undefined;
+    const responseInput = isPlainObject(input.response) ? input.response : undefined;
+    const pickPath =
+      typeof responseInput?.pickPath === "string" && responseInput.pickPath.trim().length > 0
+        ? responseInput.pickPath.trim()
+        : undefined;
+
+    return {
+      mode: "http_json",
+      request: {
+        method,
+        url: String(requestInput.url || "").trim(),
+        headers: normalizeStringRecord(requestInput.headers),
+        query: normalizePrimitiveRecord(requestInput.query),
+        body: requestInput.body,
+        auth,
+        timeoutMs: timeout,
+      },
+      ...((pickPath || responseInput?.defaultValue !== undefined) && {
+        response: {
+          ...(pickPath ? { pickPath } : {}),
+          ...(responseInput?.defaultValue !== undefined
+            ? { defaultValue: responseInput.defaultValue }
+            : {}),
+        },
+      }),
+    } as SkillRuntime;
+  }
+
+  if (input?.mode === "static_result") {
+    return {
+      mode: "static_result",
+      value: input.value,
+    };
+  }
+
+  return {
+    mode: "builtin_alias",
+    targetSkill: "",
+  };
 }
 
 export function sanitizeSkillManifest(input: any): SkillExtensionManifest {
@@ -161,10 +362,7 @@ export function sanitizeSkillManifest(input: any): SkillExtensionManifest {
       typeof input.minAppVersion === "string" ? input.minAppVersion.trim() : undefined,
     updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : undefined,
     declaration: input.declaration,
-    runtime: {
-      mode: "builtin_alias",
-      targetSkill: String(input.runtime?.targetSkill || "").trim(),
-    },
+    runtime: sanitizeSkillRuntime(input.runtime),
   };
 }
 

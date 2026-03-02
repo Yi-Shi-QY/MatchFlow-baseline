@@ -1,71 +1,11 @@
 import type { HubEndpointHint } from "../extensions/types";
 import type { AppSettings } from "../settings";
+import type { TemplateType as FootballTemplateType } from "../domains/planning/football";
+import { getPlanningStrategyForAnalysis } from "../domains/planning/registry";
+import type { PlanningRouteDecision } from "../domains/planning/types";
 
-export type TemplateType = "basic" | "standard" | "odds_focused" | "comprehensive";
-
-export interface PlanningRouteDecision {
-  mode: "template" | "autonomous";
-  templateType?: string;
-  allowedAgentTypes: string[] | null;
-  reason: string;
-  requiredAgentIds?: string[];
-  requiredSkillIds?: string[];
-  hub?: HubEndpointHint;
-}
-
-function hasNonEmptyObject(value: any): boolean {
-  return !!value && typeof value === "object" && Object.keys(value).length > 0;
-}
-
-function deriveSourceSignals(matchData: any) {
-  const selected = matchData?.sourceContext?.selectedSources;
-  const selectedIds = Array.isArray(matchData?.sourceContext?.selectedSourceIds)
-    ? new Set(
-        matchData.sourceContext.selectedSourceIds.filter(
-          (id: any) => typeof id === "string",
-        ),
-      )
-    : null;
-  const sourceCapabilities = matchData?.sourceContext?.capabilities || {};
-
-  const wantsFundamental =
-    typeof selected?.fundamental === "boolean"
-      ? !!selected.fundamental
-      : selectedIds?.has("fundamental") ?? sourceCapabilities.hasFundamental ?? true;
-
-  const wantsMarket =
-    typeof selected?.market === "boolean"
-      ? !!selected.market
-      : selectedIds?.has("market") ?? hasNonEmptyObject(matchData?.odds);
-
-  const wantsCustom =
-    typeof selected?.custom === "boolean"
-      ? !!selected.custom
-      : selectedIds?.has("custom") ??
-        (typeof matchData?.customInfo === "string"
-          ? matchData.customInfo.trim().length > 0
-          : matchData?.customInfo != null);
-
-  const hasStats =
-    typeof sourceCapabilities.hasStats === "boolean"
-      ? sourceCapabilities.hasStats
-      : hasNonEmptyObject(matchData?.stats);
-  const hasOdds =
-    typeof sourceCapabilities.hasOdds === "boolean"
-      ? sourceCapabilities.hasOdds
-      : hasNonEmptyObject(matchData?.odds);
-  const status =
-    typeof matchData?.status === "string" ? matchData.status.toLowerCase() : "unknown";
-
-  return {
-    wantsFundamental,
-    wantsMarket,
-    wantsCustom,
-    hasStats,
-    hasOdds,
-    status,
-  };
-}
+export type TemplateType = FootballTemplateType;
+export type { PlanningRouteDecision };
 
 function parsePlanningRequirements(planningContext: any) {
   const requiredAgentIds = Array.isArray(planningContext?.requiredAgents)
@@ -95,9 +35,20 @@ function parsePlanningRequirements(planningContext: any) {
   return { requiredAgentIds, requiredSkillIds, hub };
 }
 
+function resolveDomainSettings(
+  settings?: Pick<AppSettings, "activeDomainId">,
+): Pick<AppSettings, "activeDomainId"> {
+  return {
+    activeDomainId:
+      typeof settings?.activeDomainId === "string" && settings.activeDomainId.trim().length > 0
+        ? settings.activeDomainId
+        : "football",
+  };
+}
+
 export function resolvePlanningRoute(
   matchData: any,
-  settings: Pick<AppSettings, "enableAutonomousPlanning">,
+  settings: Pick<AppSettings, "enableAutonomousPlanning" | "activeDomainId">,
 ): PlanningRouteDecision {
   const planningContext = matchData?.sourceContext?.planning || {};
   const requirements = parsePlanningRequirements(planningContext);
@@ -139,102 +90,24 @@ export function resolvePlanningRoute(
     };
   }
 
-  const signals = deriveSourceSignals(matchData);
-
-  if (signals.wantsCustom && !signals.wantsFundamental && !signals.wantsMarket) {
-    return {
-      mode: "autonomous",
-      allowedAgentTypes: null,
-      reason: "custom-only input",
-      ...requirements,
-    };
-  }
-
-  if (signals.wantsMarket && !signals.wantsFundamental) {
-    return {
-      mode: "template",
-      templateType: "odds_focused",
-      allowedAgentTypes: ["overview", "odds", "prediction", "general"],
-      reason: "market-only input",
-      ...requirements,
-    };
-  }
-
-  if (signals.hasOdds && signals.hasStats) {
-    return {
-      mode: "template",
-      templateType: "comprehensive",
-      allowedAgentTypes: null,
-      reason: signals.status === "live" ? "live match with stats+odds" : "stats+odds",
-      ...requirements,
-    };
-  }
-
-  if (signals.hasOdds && !signals.hasStats) {
-    return {
-      mode: "template",
-      templateType: "odds_focused",
-      allowedAgentTypes: ["overview", "odds", "prediction", "general"],
-      reason: "odds without stats",
-      ...requirements,
-    };
-  }
-
-  if (signals.hasStats) {
-    return {
-      mode: "template",
-      templateType: "standard",
-      allowedAgentTypes: null,
-      reason: signals.status === "live" ? "live match with stats" : "stats only",
-      ...requirements,
-    };
-  }
-
+  const strategy = getPlanningStrategyForAnalysis(
+    matchData,
+    resolveDomainSettings({ activeDomainId: settings.activeDomainId }),
+  );
+  const domainRoute = strategy.resolveRoute(matchData);
   return {
-    mode: "template",
-    templateType: "basic",
-    allowedAgentTypes: ["overview", "prediction", "general"],
-    reason: "minimal data",
+    ...domainRoute,
     ...requirements,
   };
 }
 
-export function buildFallbackPlan(language: "en" | "zh") {
-  if (language === "zh") {
-    return [
-      {
-        title: "比赛概览",
-        focus: "整体背景与关键线索",
-        animationType: "none",
-        agentType: "overview",
-        contextMode: "independent",
-      },
-      {
-        title: "赛前预测",
-        focus: "最终预测与结论",
-        animationType: "none",
-        agentType: "prediction",
-        contextMode: "all",
-      },
-    ];
-  }
-
-  return [
-    {
-      title: "Match Overview",
-      focus: "General context",
-      animationType: "none",
-      agentType: "overview",
-      contextMode: "independent",
-    },
-    {
-      title: "Match Prediction",
-      focus: "Main talking points",
-      animationType: "none",
-      agentType: "prediction",
-      contextMode: "all",
-    },
-  ];
+export function buildFallbackPlan(
+  language: "en" | "zh",
+  matchData?: any,
+  settings?: Pick<AppSettings, "activeDomainId">,
+) {
+  const strategy = getPlanningStrategyForAnalysis(matchData, resolveDomainSettings(settings));
+  return strategy.buildFallbackPlan(language);
 }
 
 export function normalizePlan(
@@ -242,7 +115,10 @@ export function normalizePlan(
   includeAnimations: boolean,
   allowedAgentTypes: string[] | null,
   language: "en" | "zh",
+  matchData?: any,
+  settings?: Pick<AppSettings, "activeDomainId">,
 ) {
+  const strategy = getPlanningStrategyForAnalysis(matchData, resolveDomainSettings(settings));
   let plan = Array.isArray(rawPlan) ? [...rawPlan] : [];
 
   if (allowedAgentTypes && allowedAgentTypes.length > 0) {
@@ -253,29 +129,29 @@ export function normalizePlan(
   }
 
   if (plan.length === 0) {
-    plan = buildFallbackPlan(language);
+    plan = strategy.buildFallbackPlan(language);
   }
 
-  const hasPrediction = plan.some(
-    (segment) => (segment?.agentType || "general") === "prediction",
-  );
-  if (!hasPrediction) {
-    if (language === "zh") {
-      plan.push({
-        title: "赛前预测",
-        focus: "最终预测与结论",
-        animationType: "none",
-        agentType: "prediction",
-        contextMode: "all",
-      });
-    } else {
-      plan.push({
-        title: "Match Prediction",
-        focus: "Final prediction and conclusion",
-        animationType: "none",
-        agentType: "prediction",
-        contextMode: "all",
-      });
+  const requiredTerminalAgentType = strategy.requiredTerminalAgentType;
+  if (requiredTerminalAgentType) {
+    const hasTerminalAgent = plan.some(
+      (segment) => (segment?.agentType || "general") === requiredTerminalAgentType,
+    );
+    const canAppendTerminalAgent =
+      !allowedAgentTypes || allowedAgentTypes.includes(requiredTerminalAgentType);
+
+    if (!hasTerminalAgent && canAppendTerminalAgent) {
+      if (strategy.buildRequiredTerminalSegment) {
+        plan.push(strategy.buildRequiredTerminalSegment(language));
+      } else {
+        plan.push({
+          title: "Final Segment",
+          focus: "Final output",
+          animationType: "none",
+          agentType: requiredTerminalAgentType,
+          contextMode: "all",
+        });
+      }
     }
   }
 
@@ -286,4 +162,3 @@ export function normalizePlan(
     contextMode: segment?.contextMode || "build_upon",
   }));
 }
-

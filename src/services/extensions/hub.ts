@@ -1,4 +1,5 @@
 import { getSettings } from "../settings";
+import { APP_VERSION, isMinAppVersionSatisfied } from "../appMeta";
 import {
   AgentExtensionManifest,
   HubEndpointHint,
@@ -23,6 +24,22 @@ interface ResolvedHubConfig {
   baseUrl: string;
   apiKey: string;
   autoInstall: boolean;
+}
+
+function ensureMinAppVersionCompatible(
+  kind: "agent" | "skill" | "template",
+  id: string,
+  minAppVersion?: string,
+): boolean {
+  if (!minAppVersion) return true;
+  if (!isMinAppVersionSatisfied(minAppVersion)) {
+    console.warn(
+      `Hub ${kind} manifest requires minAppVersion ${minAppVersion}, current app version is ${APP_VERSION}`,
+      id,
+    );
+    return false;
+  }
+  return true;
 }
 
 function resolveHubConfig(hint?: HubEndpointHint): ResolvedHubConfig | null {
@@ -96,6 +113,9 @@ export async function installAgentFromHub(
     console.warn("Hub agent manifest id mismatch", { requested: id, returned: manifest.id });
     return null;
   }
+  if (!ensureMinAppVersionCompatible("agent", id, manifest.minAppVersion)) {
+    return null;
+  }
 
   saveInstalledAgentManifest(manifest, downloaded.sourceUrl);
   return manifest;
@@ -119,6 +139,9 @@ export async function installSkillFromHub(
     console.warn("Hub skill manifest id mismatch", { requested: id, returned: manifest.id });
     return null;
   }
+  if (!ensureMinAppVersionCompatible("skill", id, manifest.minAppVersion)) {
+    return null;
+  }
 
   saveInstalledSkillManifest(manifest, downloaded.sourceUrl);
   return manifest;
@@ -140,6 +163,9 @@ export async function installTemplateFromHub(
   const manifest = sanitizeTemplateManifest(downloaded.manifest);
   if (manifest.id !== id) {
     console.warn("Hub template manifest id mismatch", { requested: id, returned: manifest.id });
+    return null;
+  }
+  if (!ensureMinAppVersionCompatible("template", id, manifest.minAppVersion)) {
     return null;
   }
 

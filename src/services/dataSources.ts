@@ -1,6 +1,7 @@
 import { Match } from "@/src/data/matches";
 
-export type SourceId = "fundamental" | "market" | "custom";
+// Source ids are intentionally open-ended so each domain can define its own set.
+export type SourceId = string;
 export type SourceSelection = Record<SourceId, boolean>;
 
 export type SourceIconKey = "layout" | "trending" | "file";
@@ -315,7 +316,7 @@ export const ANALYSIS_DATA_SOURCES: DataSourceDefinition[] = [
 export function resolveSourceSelection(
   match: Match,
   importedData: any,
-  previousSelection?: Partial<Record<SourceId, boolean>>,
+  previousSelection?: Partial<SourceSelection>,
 ): SourceSelection {
   const ctx: SourceContext = { match, importedData };
   const defaults = ANALYSIS_DATA_SOURCES.reduce((acc, source) => {

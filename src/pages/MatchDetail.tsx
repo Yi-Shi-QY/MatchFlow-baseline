@@ -27,13 +27,11 @@ import {
   resolveAnalysisConfig,
 } from '@/src/services/analysisConfig';
 import {
-  ANALYSIS_DATA_SOURCES,
   FormFieldSchema,
   SourceIconKey,
-  SourceSelection,
-  buildSourceCapabilities,
-  resolveSourceSelection
+  SourceSelection
 } from '@/src/services/dataSources';
+import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
 
 interface ExportSegmentOption {
   includeSegment: boolean;
@@ -113,6 +111,8 @@ export default function MatchDetail() {
   const [step, setStep] = useState<'selection' | 'analyzing' | 'result'>('selection');
   const [includeAnimations, setIncludeAnimations] = useState(true);
   const [selectedSources, setSelectedSources] = useState<Partial<SourceSelection>>({});
+  const activeDomain = React.useMemo(() => getActiveAnalysisDomain(), []);
+  const domainSourceCatalog = activeDomain.dataSources;
 
   const [editableData, setEditableData] = useState("");
   const [showJson, setShowJson] = useState(false);
@@ -130,16 +130,20 @@ export default function MatchDetail() {
 
   const resolvedSelectedSources = React.useMemo<SourceSelection>(() => {
     if (!match) {
-      return { fundamental: false, market: false, custom: false };
+      const emptySelection: SourceSelection = {};
+      domainSourceCatalog.forEach((source) => {
+        emptySelection[source.id] = false;
+      });
+      return emptySelection;
     }
-    return resolveSourceSelection(match as Match, importedData, selectedSources);
-  }, [match, importedData, selectedSources]);
+    return activeDomain.resolveSourceSelection(match as Match, importedData, selectedSources);
+  }, [match, importedData, selectedSources, activeDomain, domainSourceCatalog]);
 
   const availableSources = React.useMemo(() => {
-    if (!match) return ANALYSIS_DATA_SOURCES;
+    if (!match) return domainSourceCatalog;
     const ctx = { match: match as Match, importedData };
-    return ANALYSIS_DATA_SOURCES.filter(source => source.isAvailable(ctx));
-  }, [match, importedData]);
+    return activeDomain.getAvailableDataSources(ctx);
+  }, [match, importedData, activeDomain, domainSourceCatalog]);
 
   const renderSourceIcon = (icon: SourceIconKey) => {
     if (icon === 'layout') return <LayoutTemplate className="w-5 h-5 text-zinc-400" />;
@@ -380,7 +384,7 @@ export default function MatchDetail() {
     const newData: any = { ...currentData };
     const sourceContext = { match: m, importedData };
 
-    ANALYSIS_DATA_SOURCES.forEach((source) => {
+    domainSourceCatalog.forEach((source) => {
       if (resolvedSelectedSources[source.id]) {
         source.applyToData(newData, sourceContext);
       } else {
@@ -388,13 +392,17 @@ export default function MatchDetail() {
       }
     });
 
-    const capabilities = buildSourceCapabilities(newData, resolvedSelectedSources);
+    const capabilities = activeDomain.buildSourceCapabilities(
+      newData,
+      resolvedSelectedSources,
+    );
 
     // Explicit source context helps deterministic planning routing in ai.ts.
     newData.sourceContext = {
       origin: m.source || (importedData ? 'imported' : 'local'),
+      domainId: activeDomain.id,
       selectedSources: { ...resolvedSelectedSources },
-      selectedSourceIds: ANALYSIS_DATA_SOURCES
+      selectedSourceIds: domainSourceCatalog
         .filter(source => resolvedSelectedSources[source.id])
         .map(source => source.id),
       capabilities,
@@ -405,7 +413,7 @@ export default function MatchDetail() {
     if (newJson !== editableDataRef.current) {
       setEditableData(newJson);
     }
-  }, [match, step, importedData, resolvedSelectedSources]);
+  }, [match, step, importedData, resolvedSelectedSources, activeDomain, domainSourceCatalog]);
 
   const handleDataChange = (path: string[], value: any) => {
     try {

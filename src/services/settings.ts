@@ -5,6 +5,8 @@ export interface AppSettings {
   provider: AIProvider;
   model: string;
   agentModelMode: AgentModelMode;
+  activeDomainId: string;
+  skillHttpAllowedHosts: string[];
   deepseekApiKey: string;
   geminiApiKey: string;
   openaiCompatibleBaseUrl: string;
@@ -22,6 +24,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'gemini',
   model: 'gemini-3-flash-preview',
   agentModelMode: 'global',
+  activeDomainId: 'football',
+  skillHttpAllowedHosts: [],
   deepseekApiKey: '',
   geminiApiKey: '',
   openaiCompatibleBaseUrl: 'https://api.openai.com/v1',

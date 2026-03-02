@@ -1,6 +1,8 @@
 import { hasAgent } from "@/src/agents";
 import { hasSkill } from "@/src/skills";
 import { getTemplateRequirements, hasPlanTemplate } from "@/src/skills/planner";
+import { getActiveAnalysisDomain } from "@/src/services/domains/registry";
+import { getInstalledDomainPackManifest } from "@/src/services/domains/packStore";
 import { getSettings } from "@/src/services/settings";
 import { installAgentFromHub, installSkillFromHub, installTemplateFromHub } from "./hub";
 import { HubEndpointHint } from "./types";
@@ -149,6 +151,26 @@ export async function syncRecommendedExtensions(
   const agentHints = new Map<string, HubEndpointHint | undefined>();
   const skillHints = new Map<string, HubEndpointHint | undefined>();
 
+  const activeDomain = getActiveAnalysisDomain();
+  const activeDomainPack = getInstalledDomainPackManifest(activeDomain.id);
+  const activeDomainHubHint = normalizeHubHint(activeDomainPack?.hub);
+  const resourceTemplates = normalizeStringArray(activeDomain.resources?.templates);
+  const resourceAgents = normalizeStringArray(activeDomain.resources?.agents);
+  const resourceSkills = normalizeStringArray(activeDomain.resources?.skills);
+
+  resourceTemplates.forEach((templateId) => {
+    templateIds.add(templateId);
+    assignHubHint(templateId, activeDomainHubHint, templateHints);
+  });
+  resourceAgents.forEach((agentId) => {
+    requiredAgentIds.add(agentId);
+    assignHubHint(agentId, activeDomainHubHint, agentHints);
+  });
+  resourceSkills.forEach((skillId) => {
+    requiredSkillIds.add(skillId);
+    assignHubHint(skillId, activeDomainHubHint, skillHints);
+  });
+
   let planningSnapshotCount = 0;
 
   for (const match of matches) {
@@ -181,13 +203,17 @@ export async function syncRecommendedExtensions(
   const errors: string[] = [];
 
   for (const templateId of toSortedArray(templateIds)) {
-    try {
-      const installed = await installTemplateFromHub(templateId, templateHints.get(templateId));
-      if (installed) {
-        syncedTemplates.push(templateId);
+    const hasTemplateBeforeInstall = hasPlanTemplate(templateId);
+
+    if (!hasTemplateBeforeInstall) {
+      try {
+        const installed = await installTemplateFromHub(templateId, templateHints.get(templateId));
+        if (installed) {
+          syncedTemplates.push(templateId);
+        }
+      } catch (error: any) {
+        errors.push(`template:${templateId}: ${error?.message || "unknown error"}`);
       }
-    } catch (error: any) {
-      errors.push(`template:${templateId}: ${error?.message || "unknown error"}`);
     }
 
     if (!hasPlanTemplate(templateId)) {
@@ -207,13 +233,17 @@ export async function syncRecommendedExtensions(
   }
 
   for (const agentId of toSortedArray(requiredAgentIds)) {
-    try {
-      const installed = await installAgentFromHub(agentId, agentHints.get(agentId));
-      if (installed) {
-        syncedAgents.push(agentId);
+    const hasAgentBeforeInstall = hasAgent(agentId);
+
+    if (!hasAgentBeforeInstall) {
+      try {
+        const installed = await installAgentFromHub(agentId, agentHints.get(agentId));
+        if (installed) {
+          syncedAgents.push(agentId);
+        }
+      } catch (error: any) {
+        errors.push(`agent:${agentId}: ${error?.message || "unknown error"}`);
       }
-    } catch (error: any) {
-      errors.push(`agent:${agentId}: ${error?.message || "unknown error"}`);
     }
 
     if (!hasAgent(agentId)) {
@@ -222,13 +252,17 @@ export async function syncRecommendedExtensions(
   }
 
   for (const skillId of toSortedArray(requiredSkillIds)) {
-    try {
-      const installed = await installSkillFromHub(skillId, skillHints.get(skillId));
-      if (installed) {
-        syncedSkills.push(skillId);
+    const hasSkillBeforeInstall = hasSkill(skillId);
+
+    if (!hasSkillBeforeInstall) {
+      try {
+        const installed = await installSkillFromHub(skillId, skillHints.get(skillId));
+        if (installed) {
+          syncedSkills.push(skillId);
+        }
+      } catch (error: any) {
+        errors.push(`skill:${skillId}: ${error?.message || "unknown error"}`);
       }
-    } catch (error: any) {
-      errors.push(`skill:${skillId}: ${error?.message || "unknown error"}`);
     }
 
     if (!hasSkill(skillId)) {

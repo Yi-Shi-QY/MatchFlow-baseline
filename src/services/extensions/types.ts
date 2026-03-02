@@ -22,11 +22,39 @@ export interface AgentExtensionManifest extends BaseExtensionManifest {
   contextDependencies?: string[] | "all" | "none";
 }
 
+export interface SkillRuntimeBuiltinAlias {
+  mode: "builtin_alias";
+  targetSkill: string;
+}
+
+export interface SkillRuntimeHttpJsonRequest {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  url: string;
+  headers?: Record<string, string>;
+  query?: Record<string, string | number | boolean>;
+  body?: any;
+  auth?: "none" | "match_data_api_key";
+  timeoutMs?: number;
+}
+
+export interface SkillRuntimeHttpJson {
+  mode: "http_json";
+  request: SkillRuntimeHttpJsonRequest;
+  response?: {
+    pickPath?: string;
+    defaultValue?: any;
+  };
+}
+
+export interface SkillRuntimeStaticResult {
+  mode: "static_result";
+  value: any;
+}
+
 export type SkillRuntime =
-  | {
-      mode: "builtin_alias";
-      targetSkill: string;
-    };
+  | SkillRuntimeBuiltinAlias
+  | SkillRuntimeHttpJson
+  | SkillRuntimeStaticResult;
 
 export interface SkillExtensionManifest extends BaseExtensionManifest {
   kind: "skill";

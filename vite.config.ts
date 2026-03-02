@@ -5,10 +5,12 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
+  const appVersion = process.env.npm_package_version || '0.0.0';
   return {
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      __APP_VERSION__: JSON.stringify(appVersion),
     },
     resolve: {
       alias: {

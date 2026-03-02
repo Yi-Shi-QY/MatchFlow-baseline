@@ -11,6 +11,19 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { AGENT_MODEL_CONFIG, ALL_AGENT_IDS } from '@/src/config/agentModelConfig';
 import { syncRecommendedExtensions } from '@/src/services/extensions/recommendedSync';
+import { listAnalysisDomains } from '@/src/services/domains/registry';
+
+function formatHostAllowlist(hosts: string[]): string {
+  if (!Array.isArray(hosts) || hosts.length === 0) return '';
+  return hosts.join('\n');
+}
+
+function parseHostAllowlist(input: string): string[] {
+  return input
+    .split(/[\n,]/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -19,6 +32,8 @@ export default function Settings() {
     provider: 'gemini',
     model: 'gemini-3-flash-preview',
     agentModelMode: 'global',
+    activeDomainId: 'football',
+    skillHttpAllowedHosts: [],
     deepseekApiKey: '',
     geminiApiKey: '',
     openaiCompatibleBaseUrl: 'https://api.openai.com/v1',
@@ -36,6 +51,7 @@ export default function Settings() {
   const [dataTestMessage, setDataTestMessage] = useState('');
   const [extensionSyncStatus, setExtensionSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [extensionSyncMessage, setExtensionSyncMessage] = useState('');
+  const [skillHostAllowlistText, setSkillHostAllowlistText] = useState('');
 
   const [isBehaviorCollapsed, setIsBehaviorCollapsed] = useState(true);
   const [isAiConfigCollapsed, setIsAiConfigCollapsed] = useState(true);
@@ -53,6 +69,7 @@ export default function Settings() {
 
     const loadedSettings = getSettings();
     setLocalSettings(loadedSettings);
+    setSkillHostAllowlistText(formatHostAllowlist(loadedSettings.skillHttpAllowedHosts || []));
     // Sync i18n language with settings
     if (loadedSettings.language && loadedSettings.language !== i18n.language) {
       i18n.changeLanguage(loadedSettings.language);
@@ -255,6 +272,28 @@ export default function Settings() {
     [configEntries]
   );
 
+  const domainOptions = (() => {
+    const installed = listAnalysisDomains().map((domain) => ({
+      value: domain.id,
+      label: domain.name,
+    }));
+
+    if (
+      settings.activeDomainId &&
+      !installed.some((option) => option.value === settings.activeDomainId)
+    ) {
+      return [
+        {
+          value: settings.activeDomainId,
+          label: `${settings.activeDomainId} (Unknown Domain)`,
+        },
+        ...installed,
+      ];
+    }
+
+    return installed;
+  })();
+
   const showGeminiKeyInput = settings.agentModelMode === 'global'
     ? settings.provider === 'gemini'
     : configProviders.has('gemini') || settings.provider === 'gemini';
@@ -416,6 +455,22 @@ export default function Settings() {
                     >
                       <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${settings.enableAutonomousPlanning ? 'translate-x-4' : 'translate-x-0'}`} />
                     </div>
+                  </div>
+
+                  <div className="space-y-2 p-3 bg-zinc-900 rounded-lg border border-white/5">
+                    <label className="text-xs font-medium text-zinc-200 block">
+                      {settings.language === 'zh' ? '分析领域' : 'Analysis Domain'}
+                    </label>
+                    <p className="text-[10px] text-zinc-500">
+                      {settings.language === 'zh'
+                        ? '决定客户端默认使用的领域数据源和规划策略。'
+                        : 'Controls the default domain data source and planning strategy on client.'}
+                    </p>
+                    <Select
+                      value={settings.activeDomainId || 'football'}
+                      onChange={(value) => setLocalSettings({ ...settings, activeDomainId: value })}
+                      options={domainOptions}
+                    />
                   </div>
                 </div>
               )}
@@ -646,6 +701,35 @@ export default function Settings() {
                     />
                     <p className="text-[10px] text-zinc-500 mt-1">
                       {t('settings.match_data_hint')}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                      {settings.language === 'zh' ? 'Skill HTTP 白名单' : 'Skill HTTP Allowed Hosts'}
+                    </label>
+                    <textarea
+                      value={skillHostAllowlistText}
+                      onChange={(e) => {
+                        const nextText = e.target.value;
+                        setSkillHostAllowlistText(nextText);
+                        setLocalSettings({
+                          ...settings,
+                          skillHttpAllowedHosts: parseHostAllowlist(nextText),
+                        });
+                      }}
+                      placeholder={
+                        settings.language === 'zh'
+                          ? '每行或逗号分隔：api.example.com\n*.trusted.com'
+                          : 'One per line or comma-separated: api.example.com\n*.trusted.com'
+                      }
+                      rows={3}
+                      className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    />
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      {settings.language === 'zh'
+                        ? '用于允许 http_json 类型 Skill 访问额外主机。默认已允许 Match Data Server 主机。'
+                        : 'Allows additional hosts for http_json Skill runtime. Match Data Server host is allowed by default.'}
                     </p>
                   </div>
 
