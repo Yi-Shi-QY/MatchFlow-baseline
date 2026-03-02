@@ -471,8 +471,299 @@ function validatePlanningTemplateManifestCompatibility(manifest) {
   return errors;
 }
 
+function validateAnimationTemplateManifestSchema(manifest) {
+  const errors = [];
+  const templateId = normalizeString(manifest?.id || manifest?.templateId);
+  if (!templateId) {
+    errors.push('animation_template.id (or templateId) is required');
+  } else if (!SOURCE_ID_PATTERN.test(templateId)) {
+    errors.push('animation_template.id must match pattern [a-z0-9_][a-z0-9_-]{1,63}');
+  }
+
+  if (!normalizeString(manifest?.name)) {
+    errors.push('animation_template.name is required');
+  }
+  if (!normalizeString(manifest?.description)) {
+    errors.push('animation_template.description is required');
+  }
+  if (!normalizeString(manifest?.animationType)) {
+    errors.push('animation_template.animationType is required');
+  }
+  if (!normalizeString(manifest?.templateId)) {
+    errors.push('animation_template.templateId is required');
+  }
+
+  if (manifest?.requiredParams !== undefined && !Array.isArray(manifest.requiredParams)) {
+    errors.push('animation_template.requiredParams must be an array when provided');
+  }
+  if (Array.isArray(manifest?.requiredParams)) {
+    manifest.requiredParams.forEach((param, index) => {
+      if (!normalizeString(param)) {
+        errors.push(`animation_template.requiredParams[${index}] must be a non-empty string`);
+      }
+    });
+  }
+
+  if (!isPlainObject(manifest?.schema)) {
+    errors.push('animation_template.schema must be an object');
+  }
+  if (manifest?.example !== undefined && !isPlainObject(manifest.example)) {
+    errors.push('animation_template.example must be an object when provided');
+  }
+
+  return errors;
+}
+
+function validateAnimationTemplateManifestDependencies(manifest) {
+  const errors = [];
+  const requiredParams = uniqueStrings(manifest?.requiredParams);
+  const schema = isPlainObject(manifest?.schema) ? manifest.schema : {};
+  const schemaProperties = isPlainObject(schema?.properties) ? schema.properties : {};
+  const example = isPlainObject(manifest?.example) ? manifest.example : null;
+
+  requiredParams.forEach((param) => {
+    if (!Object.prototype.hasOwnProperty.call(schemaProperties, param)) {
+      errors.push(`animation_template.requiredParams references missing schema property: ${param}`);
+    }
+    if (example && !Object.prototype.hasOwnProperty.call(example, param)) {
+      errors.push(`animation_template.requiredParams references missing example field: ${param}`);
+    }
+  });
+
+  return errors;
+}
+
+function validateAnimationTemplateManifestCompatibility(manifest) {
+  const errors = [];
+  const requiredParamsRaw = normalizeStringArray(manifest?.requiredParams);
+  const requiredParamsSet = new Set();
+  requiredParamsRaw.forEach((param) => {
+    if (requiredParamsSet.has(param)) {
+      errors.push(`animation_template.requiredParams duplicated: ${param}`);
+    } else {
+      requiredParamsSet.add(param);
+    }
+  });
+
+  if (isPlainObject(manifest?.schema) && manifest.schema.type !== undefined && manifest.schema.type !== 'object') {
+    errors.push('animation_template.schema.type must be "object" when provided');
+  }
+
+  if (requiredParamsRaw.length > 30) {
+    errors.push('animation_template.requiredParams cannot exceed 30 items');
+  }
+
+  return errors;
+}
+
+function validateAgentManifestSchema(manifest) {
+  const errors = [];
+  const agentId = normalizeString(manifest?.id);
+  if (!agentId) {
+    errors.push('agent.id is required');
+  } else if (!SOURCE_ID_PATTERN.test(agentId)) {
+    errors.push('agent.id must match pattern [a-z0-9_][a-z0-9_-]{1,63}');
+  }
+
+  if (manifest?.kind !== undefined && manifest.kind !== 'agent') {
+    errors.push('agent.kind must be "agent" when provided');
+  }
+  if (!normalizeString(manifest?.name)) {
+    errors.push('agent.name is required');
+  }
+  if (!normalizeString(manifest?.description)) {
+    errors.push('agent.description is required');
+  }
+
+  if (!isPlainObject(manifest?.rolePrompt)) {
+    errors.push('agent.rolePrompt must be an object');
+  } else {
+    if (!normalizeString(manifest.rolePrompt.en)) {
+      errors.push('agent.rolePrompt.en is required');
+    }
+    if (!normalizeString(manifest.rolePrompt.zh)) {
+      errors.push('agent.rolePrompt.zh is required');
+    }
+  }
+
+  if (manifest?.skills !== undefined && !Array.isArray(manifest.skills)) {
+    errors.push('agent.skills must be an array when provided');
+  }
+  if (Array.isArray(manifest?.skills)) {
+    manifest.skills.forEach((skill, index) => {
+      if (!normalizeString(skill)) {
+        errors.push(`agent.skills[${index}] must be a non-empty string`);
+      }
+    });
+  }
+
+  const contextDependencies = manifest?.contextDependencies;
+  if (
+    contextDependencies !== undefined
+    && contextDependencies !== 'all'
+    && contextDependencies !== 'none'
+    && !Array.isArray(contextDependencies)
+  ) {
+    errors.push(`agent.contextDependencies must be 'all' | 'none' | string[]`);
+  }
+  if (Array.isArray(contextDependencies)) {
+    contextDependencies.forEach((dependency, index) => {
+      if (!normalizeString(dependency)) {
+        errors.push(`agent.contextDependencies[${index}] must be a non-empty string`);
+      }
+    });
+  }
+
+  if (manifest?.minAppVersion !== undefined && !normalizeString(manifest.minAppVersion)) {
+    errors.push('agent.minAppVersion must be a non-empty string when provided');
+  }
+
+  return errors;
+}
+
+function validateAgentManifestDependencies(manifest) {
+  const errors = [];
+  if (Array.isArray(manifest?.contextDependencies) && manifest.contextDependencies.length === 0) {
+    errors.push('agent.contextDependencies cannot be an empty array');
+  }
+  return errors;
+}
+
+function validateAgentManifestCompatibility(manifest) {
+  const errors = [];
+
+  const skills = normalizeStringArray(manifest?.skills);
+  const skillSet = new Set();
+  skills.forEach((skill) => {
+    if (skillSet.has(skill)) {
+      errors.push(`agent.skills duplicated: ${skill}`);
+    } else {
+      skillSet.add(skill);
+    }
+  });
+
+  if (Array.isArray(manifest?.contextDependencies)) {
+    const dependencySet = new Set();
+    normalizeStringArray(manifest.contextDependencies).forEach((dependency) => {
+      if (dependencySet.has(dependency)) {
+        errors.push(`agent.contextDependencies duplicated: ${dependency}`);
+      } else {
+        dependencySet.add(dependency);
+      }
+    });
+  }
+
+  return errors;
+}
+
+function validateSkillManifestSchema(manifest) {
+  const errors = [];
+  const skillId = normalizeString(manifest?.id);
+  if (!skillId) {
+    errors.push('skill.id is required');
+  } else if (!SOURCE_ID_PATTERN.test(skillId)) {
+    errors.push('skill.id must match pattern [a-z0-9_][a-z0-9_-]{1,63}');
+  }
+
+  if (manifest?.kind !== undefined && manifest.kind !== 'skill') {
+    errors.push('skill.kind must be "skill" when provided');
+  }
+  if (!normalizeString(manifest?.name)) {
+    errors.push('skill.name is required');
+  }
+  if (!normalizeString(manifest?.description)) {
+    errors.push('skill.description is required');
+  }
+  if (manifest?.minAppVersion !== undefined && !normalizeString(manifest.minAppVersion)) {
+    errors.push('skill.minAppVersion must be a non-empty string when provided');
+  }
+
+  if (!isPlainObject(manifest?.declaration)) {
+    errors.push('skill.declaration must be an object');
+  } else {
+    if (!normalizeString(manifest.declaration.name)) {
+      errors.push('skill.declaration.name is required');
+    }
+    if (!normalizeString(manifest.declaration.description)) {
+      errors.push('skill.declaration.description is required');
+    }
+    if (
+      manifest.declaration.parameters !== undefined
+      && !isPlainObject(manifest.declaration.parameters)
+    ) {
+      errors.push('skill.declaration.parameters must be an object when provided');
+    }
+  }
+
+  if (!isPlainObject(manifest?.runtime)) {
+    errors.push('skill.runtime must be an object');
+  } else {
+    if (manifest.runtime.mode !== 'builtin_alias') {
+      errors.push(`skill.runtime.mode must be 'builtin_alias'`);
+    }
+    if (!normalizeString(manifest.runtime.targetSkill)) {
+      errors.push('skill.runtime.targetSkill is required');
+    }
+  }
+
+  return errors;
+}
+
+function validateSkillManifestDependencies(manifest) {
+  const errors = [];
+  const declaration = isPlainObject(manifest?.declaration) ? manifest.declaration : {};
+  const parameters = isPlainObject(declaration?.parameters) ? declaration.parameters : null;
+  if (parameters) {
+    const required = Array.isArray(parameters.required) ? parameters.required : [];
+    const properties = isPlainObject(parameters.properties) ? parameters.properties : {};
+    required.forEach((requiredField, index) => {
+      const normalized = normalizeString(requiredField);
+      if (!normalized) {
+        errors.push(`skill.declaration.parameters.required[${index}] must be a non-empty string`);
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(properties, normalized)) {
+        errors.push(
+          `skill.declaration.parameters.required references missing property: ${normalized}`,
+        );
+      }
+    });
+  }
+  return errors;
+}
+
+function validateSkillManifestCompatibility(manifest) {
+  const errors = [];
+  const declaration = isPlainObject(manifest?.declaration) ? manifest.declaration : {};
+  const runtime = isPlainObject(manifest?.runtime) ? manifest.runtime : {};
+  const manifestId = normalizeString(manifest?.id);
+  const declarationName = normalizeString(declaration?.name);
+  const targetSkill = normalizeString(runtime?.targetSkill);
+
+  if (manifestId && declarationName && manifestId !== declarationName) {
+    errors.push('skill.declaration.name must match skill.id');
+  }
+
+  if (manifestId && targetSkill && targetSkill === manifestId) {
+    errors.push('skill.runtime.targetSkill cannot reference skill.id itself');
+  }
+
+  const parameters = isPlainObject(declaration?.parameters) ? declaration.parameters : null;
+  if (parameters && parameters.type !== undefined && parameters.type !== 'object') {
+    errors.push('skill.declaration.parameters.type must be "object" when provided');
+  }
+
+  return errors;
+}
+
 function supportsStrictDomainValidation(domain) {
-  return domain === 'datasource' || domain === 'planning_template';
+  return (
+    domain === 'datasource'
+    || domain === 'planning_template'
+    || domain === 'animation_template'
+    || domain === 'agent'
+    || domain === 'skill'
+  );
 }
 
 function buildDomainValidationChecks(domain, manifest) {
@@ -512,6 +803,66 @@ function buildDomainValidationChecks(domain, manifest) {
         'compatibility',
         validatePlanningTemplateManifestCompatibility(manifest),
         'Planning template compatibility check passed',
+      ),
+    ];
+  }
+
+  if (domain === 'animation_template') {
+    return [
+      buildValidationCheck(
+        'schema',
+        validateAnimationTemplateManifestSchema(manifest),
+        'Animation template schema check passed',
+      ),
+      buildValidationCheck(
+        'dependency',
+        validateAnimationTemplateManifestDependencies(manifest),
+        'Animation template dependency check passed',
+      ),
+      buildValidationCheck(
+        'compatibility',
+        validateAnimationTemplateManifestCompatibility(manifest),
+        'Animation template compatibility check passed',
+      ),
+    ];
+  }
+
+  if (domain === 'agent') {
+    return [
+      buildValidationCheck(
+        'schema',
+        validateAgentManifestSchema(manifest),
+        'Agent schema check passed',
+      ),
+      buildValidationCheck(
+        'dependency',
+        validateAgentManifestDependencies(manifest),
+        'Agent dependency check passed',
+      ),
+      buildValidationCheck(
+        'compatibility',
+        validateAgentManifestCompatibility(manifest),
+        'Agent compatibility check passed',
+      ),
+    ];
+  }
+
+  if (domain === 'skill') {
+    return [
+      buildValidationCheck(
+        'schema',
+        validateSkillManifestSchema(manifest),
+        'Skill schema check passed',
+      ),
+      buildValidationCheck(
+        'dependency',
+        validateSkillManifestDependencies(manifest),
+        'Skill dependency check passed',
+      ),
+      buildValidationCheck(
+        'compatibility',
+        validateSkillManifestCompatibility(manifest),
+        'Skill compatibility check passed',
       ),
     ];
   }

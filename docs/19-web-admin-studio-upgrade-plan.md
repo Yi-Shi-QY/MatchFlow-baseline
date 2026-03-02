@@ -238,9 +238,11 @@ Phase C backend kickoff items (started):
 
 1. `PUT /admin/catalog/:domain/:itemId/revisions/:version` for draft save.
 2. `GET /admin/catalog/:domain/:itemId/diff` for manifest diff.
-3. Next slice for Phase C:
-   - Add editor-oriented contract tests for draft-save/diff payloads.
-   - Expand strict validators to `animation_template`, `agent`, `skill`.
+3. Delivered in latest backend slice:
+   - Expanded strict validators to `animation_template`, `agent`, and `skill`.
+   - Added integration coverage for invalid-manifest pre-write rejections in no-DB mode.
+   - Added DB phase-gate coverage for create + validate success across these three domains.
+4. Next slice for Phase C backend:
    - Add API-level examples for admin-web form engine integration.
 
 ## 7.2 Progress Update (as of 2026-03-02)
@@ -301,9 +303,19 @@ Phase C second slice + Phase D first slice delivered:
 9. Datasource form/rule builder enhancement:
    - Added visual editing for `labelKey`, `formSections[]` layout, and section-to-field binding (`fieldIds` mapping).
    - Added visual editing for `applyRules[]` and `removeRules[]` with target path/target fallback support.
-10. Verification:
+10. Backend strict validation enhancement:
+   - Expanded strict domain validators in `match-data-server/src/services/studioCatalogService.js` to:
+     - `animation_template`
+     - `agent`
+     - `skill`
+   - Added test coverage:
+     - `match-data-server/test/runAuthzIntegration.js` invalid-manifest pre-write checks
+     - `match-data-server/test/runDbPhaseGate.js` create+validate checks for the three domains
+11. Verification:
    - `npm run lint` passed after this slice.
    - `npm run build` passed after this slice.
+   - `cd match-data-server && npm test` passed after this slice.
+   - `cd match-data-server && npm run test:db-phase` passed after this slice.
 
 ## 8. Definition of Done
 
