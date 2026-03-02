@@ -64,6 +64,7 @@
     "handicap": "Handicap",
     "custom_placeholder": "Enter injuries, weather, referee, motivation, etc...",
     "start_analysis": "Start Analysis",
+    "stop_analysis": "Stop Analysis",
     "continue_analysis": "Continue Analysis",
     "analyzing": "Analyzing...",
     "analysis_complete": "Analysis Complete",

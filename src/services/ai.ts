@@ -54,21 +54,43 @@ function resolvePlanningHubHint(
   };
 }
 
-export async function generateAnalysisPlan(matchData: any, includeAnimations: boolean = true): Promise<any[]> {
+function createAbortError() {
+  const err = new Error("Analysis aborted");
+  (err as any).name = "AbortError";
+  return err;
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+  throw createAbortError();
+}
+
+export function isAbortError(error: any): boolean {
+  return error?.name === "AbortError";
+}
+
+export async function generateAnalysisPlan(
+  matchData: any,
+  includeAnimations: boolean = true,
+  abortSignal?: AbortSignal,
+): Promise<any[]> {
   const settings = getSettings();
   const route = resolvePlanningRoute(matchData, settings);
   const language = settings.language === "zh" ? "zh" : "en";
   const hubHint = resolvePlanningHubHint(matchData, route.hub);
 
   try {
+    throwIfAborted(abortSignal);
     if (Array.isArray(route.requiredAgentIds) && route.requiredAgentIds.length > 0) {
       for (const agentId of route.requiredAgentIds) {
+        throwIfAborted(abortSignal);
         await ensureAgentAvailable(agentId, hubHint);
       }
     }
 
     if (Array.isArray(route.requiredSkillIds) && route.requiredSkillIds.length > 0) {
       for (const skillId of route.requiredSkillIds) {
+        throwIfAborted(abortSignal);
         await ensureSkillAvailable(skillId, hubHint);
       }
     }
@@ -112,9 +134,11 @@ export async function generateAnalysisPlan(matchData: any, includeAnimations: bo
       agent.skills,
       stopAfterToolCall,
       agent.id,
+      abortSignal,
     );
 
     for await (const chunk of stream) {
+      throwIfAborted(abortSignal);
       responseText += chunk;
     }
 
@@ -153,6 +177,9 @@ export async function generateAnalysisPlan(matchData: any, includeAnimations: bo
     await ensurePlanAgentRequirements(normalized, hubHint);
     return normalized;
   } catch (e) {
+    if (isAbortError(e)) {
+      throw e;
+    }
     console.error("Failed to parse plan JSON", e, "route:", route.reason);
     const normalized = normalizePlan(
       buildFallbackPlan(language),
@@ -165,7 +192,13 @@ export async function generateAnalysisPlan(matchData: any, includeAnimations: bo
   }
 }
 
-export async function* streamAnalysisAgent(matchData: any, segmentPlan: any, previousAnalysis: string = "") {
+export async function* streamAnalysisAgent(
+  matchData: any,
+  segmentPlan: any,
+  previousAnalysis: string = "",
+  abortSignal?: AbortSignal,
+) {
+  throwIfAborted(abortSignal);
   const settings = getSettings();
   const hubHint = resolvePlanningHubHint(matchData);
   const agentId = segmentPlan.agentType || 'general';
@@ -174,23 +207,29 @@ export async function* streamAnalysisAgent(matchData: any, segmentPlan: any, pre
   // No animation schema passed here anymore
   const prompt = agent.systemPrompt({ matchData, segmentPlan, language: settings.language, previousAnalysis });
 
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id);
+  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
 }
 
-export async function* streamTagAgent(analysisText: string) {
+export async function* streamTagAgent(analysisText: string, abortSignal?: AbortSignal) {
+  throwIfAborted(abortSignal);
   const settings = getSettings();
   const agent = getAgent('tag');
   const prompt = agent.systemPrompt({ analysisText, language: settings.language });
 
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id);
+  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
 }
 
-export async function* streamSummaryAgent(matchData: any, previousAnalysis: string) {
+export async function* streamSummaryAgent(
+  matchData: any,
+  previousAnalysis: string,
+  abortSignal?: AbortSignal,
+) {
+  throwIfAborted(abortSignal);
   const settings = getSettings();
   const agent = getAgent('summary');
   const prompt = agent.systemPrompt({ matchData, previousAnalysis, language: settings.language });
 
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id);
+  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
 }
 
 export interface SegmentResult {
@@ -210,8 +249,10 @@ export async function* streamAgentThoughts(
   matchData: any, 
   includeAnimations: boolean = true,
   resumeState?: AnalysisResumeState,
-  onStateUpdate?: (state: AnalysisResumeState) => void
+  onStateUpdate?: (state: AnalysisResumeState) => void,
+  abortSignal?: AbortSignal,
 ) {
+  throwIfAborted(abortSignal);
   const hubHint = resolvePlanningHubHint(matchData);
   // 1. Planning Phase (Hidden)
   let plan = resumeState?.plan || [];
@@ -221,15 +262,20 @@ export async function* streamAgentThoughts(
 
   if (!resumeState) {
     try {
-      plan = await generateAnalysisPlan(matchData, includeAnimations);
+      plan = await generateAnalysisPlan(matchData, includeAnimations, abortSignal);
     } catch (e) {
+      if (isAbortError(e)) {
+        throw e;
+      }
       plan = [{ title: "Analysis", focus: "General analysis", animationType: "none", agentType: "general" }];
     }
+    throwIfAborted(abortSignal);
     onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText, segmentResults });
   }
 
   // 2. Analysis Phase (Iterative)
   for (let i = 0; i < plan.length; i++) {
+    throwIfAborted(abortSignal);
     if (completedSegmentIndices.includes(i)) {
       continue;
     }
@@ -258,8 +304,9 @@ export async function* streamAgentThoughts(
 
     // A. Run Analysis Agent
     let segmentText = "";
-    const segmentStream = streamAnalysisAgent(matchData, segment, filteredContext);
+    const segmentStream = streamAnalysisAgent(matchData, segment, filteredContext, abortSignal);
     for await (const chunk of segmentStream) {
+      throwIfAborted(abortSignal);
       segmentText += chunk;
       fullAnalysisText += chunk;
       yield chunk;
@@ -271,7 +318,13 @@ export async function* streamAgentThoughts(
       // 1) LLM extracts template params JSON
       // 2) System validates and retries if invalid
       // 3) System emits normalized <animation> block
-      const animationOutput = await generateValidatedAnimationBlock(matchData, segment, segmentText);
+      const animationOutput = await generateValidatedAnimationBlock(
+        matchData,
+        segment,
+        segmentText,
+        abortSignal,
+      );
+      throwIfAborted(abortSignal);
       yield animationOutput;
 
       // Append animation output to the text tracking variables
@@ -283,8 +336,9 @@ export async function* streamAgentThoughts(
     // We need to extract the pure text content from the segment output to feed the tag agent
     // Simple regex to strip tags for the prompt
     const cleanText = segmentText.replace(/<[^>]+>/g, ' ').trim();
-    const tagStream = streamTagAgent(cleanText);
+    const tagStream = streamTagAgent(cleanText, abortSignal);
     for await (const chunk of tagStream) {
+      throwIfAborted(abortSignal);
       segmentText += chunk;
       yield chunk;
     }
@@ -299,8 +353,10 @@ export async function* streamAgentThoughts(
   }
 
   // 3. Summary Phase
-  const summaryStream = streamSummaryAgent(matchData, fullAnalysisText);
+  throwIfAborted(abortSignal);
+  const summaryStream = streamSummaryAgent(matchData, fullAnalysisText, abortSignal);
   for await (const chunk of summaryStream) {
+    throwIfAborted(abortSignal);
     yield chunk;
   }
 }

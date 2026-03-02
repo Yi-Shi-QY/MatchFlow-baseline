@@ -2,7 +2,13 @@ export function extractJson(text: string): any {
   if (!text) return null;
   
   // Strip reasoning tags if they exist (DeepSeek R1)
-  let clean = text.replace(/<think>[\s\S]*?<\/think>/g, '');
+  let clean = text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*$/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<thinking>[\s\S]*$/gi, '')
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+    .replace(/<reasoning>[\s\S]*$/gi, '');
   
   // Try direct parse first
   try {

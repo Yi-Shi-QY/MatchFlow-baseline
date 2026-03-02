@@ -64,6 +64,7 @@
     "handicap": "让球数",
     "custom_placeholder": "输入伤停信息、天气、裁判、战意等其他因素...",
     "start_analysis": "开始分析",
+    "stop_analysis": "停止分析",
     "continue_analysis": "继续分析",
     "analyzing": "分析中...",
     "analysis_complete": "分析完成",

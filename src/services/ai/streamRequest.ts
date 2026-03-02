@@ -39,6 +39,7 @@ export async function* streamAIRequest(
   allowedSkills?: string[],
   stopAfterToolCall: boolean = false,
   agentId?: string,
+  abortSignal?: AbortSignal,
 ) {
   const settings = getSettings();
   const runtimeModel = resolveRuntimeModelRoute(settings, agentId);
@@ -86,6 +87,9 @@ export async function* streamAIRequest(
     }
 
     while (true) {
+      if (abortSignal?.aborted) {
+        return;
+      }
       try {
         const requestBody: any = {
           model,
@@ -101,6 +105,7 @@ export async function* streamAIRequest(
           method: "POST",
           headers,
           body: JSON.stringify(requestBody),
+          signal: abortSignal,
         });
 
         if (!response.ok) {
@@ -149,6 +154,7 @@ export async function* streamAIRequest(
         let toolCalls: any[] = [];
 
         while (true) {
+          if (abortSignal?.aborted) return;
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -265,6 +271,9 @@ export async function* streamAIRequest(
           break; // No tool calls, we are done
         }
       } catch (e: any) {
+        if (abortSignal?.aborted || e?.name === "AbortError") {
+          return;
+        }
         const label = provider === "deepseek" ? "DeepSeek" : "OpenAI-compatible";
         yield `\n[ERROR] ${label} API error: ${
           e.message === "Failed to fetch" ? "Network or CORS error" : e.message
@@ -276,6 +285,9 @@ export async function* streamAIRequest(
     // Gemini
     const ai = getGeminiAI();
     try {
+      if (abortSignal?.aborted) {
+        return;
+      }
       const config: any = {};
       if (activeSkills.length > 0) {
         config.tools = [{ functionDeclarations: activeSkills }];
@@ -289,6 +301,9 @@ export async function* streamAIRequest(
       const response = await chat.sendMessageStream({ message: prompt });
 
       for await (const chunk of response) {
+        if (abortSignal?.aborted) {
+          return;
+        }
         const c = chunk as GenerateContentResponse;
         if (c.text) {
           yield c.text;
@@ -315,6 +330,9 @@ export async function* streamAIRequest(
               });
 
               for await (const followUpChunk of followUpResponse) {
+                if (abortSignal?.aborted) {
+                  return;
+                }
                 const fc = followUpChunk as GenerateContentResponse;
                 if (fc.text) {
                   yield fc.text;
@@ -335,6 +353,9 @@ export async function* streamAIRequest(
                 ] as any,
               });
               for await (const errChunk of errorResponse) {
+                if (abortSignal?.aborted) {
+                  return;
+                }
                 const ec = errChunk as GenerateContentResponse;
                 if (ec.text) {
                   yield ec.text;

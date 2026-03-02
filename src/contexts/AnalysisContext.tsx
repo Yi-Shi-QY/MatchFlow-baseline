@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
 import { Match } from '@/src/data/matches';
-import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState } from '@/src/services/ai';
+import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState, isAbortError } from '@/src/services/ai';
 import { saveHistory, saveResumeState, clearResumeState, getResumeState } from '@/src/services/history';
 import { deleteSavedMatch } from '@/src/services/savedMatches';
 import { AgentResult, parseAgentStream } from '@/src/services/agentParser';
@@ -26,18 +26,27 @@ export interface ActiveAnalysis {
 interface AnalysisContextType {
   activeAnalyses: Record<string, ActiveAnalysis>;
   startAnalysis: (match: Match, dataToAnalyze: any, includeAnimations: boolean, isResume?: boolean) => void;
+  stopAnalysis: (matchId: string) => void;
   clearActiveAnalysis: (matchId: string) => void;
   setCollapsedSegments: (matchId: string, segments: Record<string, boolean>) => void;
 }
 
 const RESUME_SNAPSHOT_INTERVAL_MS = 3000;
+const STREAM_UI_UPDATE_INTERVAL_MS = 80;
 
 const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined);
 
 export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [activeAnalyses, setActiveAnalyses] = useState<Record<string, ActiveAnalysis>>({});
+  const analysisAbortControllersRef = useRef<Record<string, AbortController>>({});
   const lastNotificationKeyRef = useRef<string>('');
   const lastNotificationAtRef = useRef<number>(0);
+
+  const createAbortError = () => {
+    const err = new Error("Analysis aborted");
+    (err as any).name = "AbortError";
+    return err;
+  };
 
   // Background Notification Effect
   useEffect(() => {
@@ -143,10 +152,44 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearActiveAnalysis = useCallback((matchId: string) => {
+    const controller = analysisAbortControllersRef.current[matchId];
+    if (controller && !controller.signal.aborted) {
+      controller.abort();
+    }
+    delete analysisAbortControllersRef.current[matchId];
+
     setActiveAnalyses(prev => {
       const next = { ...prev };
       delete next[matchId];
       return next;
+    });
+  }, []);
+
+  const stopAnalysis = useCallback((matchId: string) => {
+    const controller = analysisAbortControllersRef.current[matchId];
+    if (controller && !controller.signal.aborted) {
+      controller.abort();
+    }
+
+    const stopNote = "\n\n[SYSTEM] Analysis stopped by user.";
+
+    setActiveAnalyses(prev => {
+      const target = prev[matchId];
+      if (!target || !target.isAnalyzing) return prev;
+
+      const nextThoughts = target.thoughts.includes(stopNote.trim())
+        ? target.thoughts
+        : target.thoughts + stopNote;
+
+      return {
+        ...prev,
+        [matchId]: {
+          ...target,
+          thoughts: nextThoughts,
+          isAnalyzing: false,
+          error: null,
+        }
+      };
     });
   }, []);
 
@@ -156,6 +199,13 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
   const startAnalysis = useCallback(async (match: Match, dataToAnalyze: any, includeAnimations: boolean, isResume: boolean = false) => {
     const matchId = match.id;
+    const previousController = analysisAbortControllersRef.current[matchId];
+    if (previousController && !previousController.signal.aborted) {
+      previousController.abort();
+    }
+
+    const abortController = new AbortController();
+    analysisAbortControllersRef.current[matchId] = abortController;
     
     // Initialize state
     let initialThoughts = '';
@@ -209,6 +259,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     let currentThoughts = initialThoughts;
     let latestResumeState: AnalysisResumeState | undefined = resumeStateData;
     let lastSnapshotAt = 0;
+    let lastUiRenderAt = 0;
     let dropStaleDraftOnFirstChunk =
       isResume && (!resumeStateData?.segmentResults || resumeStateData.segmentResults.length === 0);
 
@@ -220,6 +271,31 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       }
       lastSnapshotAt = now;
       void saveResumeState(matchId, latestResumeState, currentThoughts);
+    };
+
+    const commitLivePreview = (
+      parsedStream: AgentResult | null,
+      collapsedSegments: Record<string, boolean>,
+      force: boolean = false,
+    ) => {
+      const now = Date.now();
+      if (!force && now - lastUiRenderAt < STREAM_UI_UPDATE_INTERVAL_MS) {
+        return;
+      }
+      lastUiRenderAt = now;
+
+      setActiveAnalyses(prev => {
+        if (!prev[matchId]) return prev;
+        return {
+          ...prev,
+          [matchId]: {
+            ...prev[matchId],
+            thoughts: currentThoughts,
+            parsedStream,
+            collapsedSegments
+          }
+        };
+      });
     };
 
     try {
@@ -250,10 +326,14 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
           latestResumeState = state;
           persistResumeSnapshot(true);
-        }
+        },
+        abortController.signal,
       );
       
       for await (const chunk of stream) {
+        if (abortController.signal.aborted) {
+          throw createAbortError();
+        }
         if (dropStaleDraftOnFirstChunk) {
           // Avoid duplicated content when resuming from a draft-only snapshot.
           currentThoughts = '';
@@ -271,20 +351,12 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         });
         currentCollapsed = newCollapsed;
 
-        setActiveAnalyses(prev => {
-          if (!prev[matchId]) return prev;
-          return {
-            ...prev,
-            [matchId]: {
-              ...prev[matchId],
-              thoughts: currentThoughts,
-              parsedStream: currentParsedStream,
-              collapsedSegments: currentCollapsed
-            }
-          };
-        });
+        commitLivePreview(currentParsedStream, currentCollapsed, false);
 
         persistResumeSnapshot();
+      }
+      if (abortController.signal.aborted) {
+        throw createAbortError();
       }
 
       // Final parse after stream completes
@@ -296,7 +368,9 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           ...prev,
           [matchId]: {
             ...prev[matchId],
-            parsedStream: finalParsed
+            thoughts: currentThoughts,
+            parsedStream: finalParsed,
+            collapsedSegments: currentCollapsed
           }
         };
       });
@@ -348,6 +422,22 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       }
 
     } catch (error: any) {
+      if (isAbortError(error) || abortController.signal.aborted) {
+        persistResumeSnapshot(true);
+        setActiveAnalyses(prev => {
+          if (!prev[matchId]) return prev;
+          return {
+            ...prev,
+            [matchId]: {
+              ...prev[matchId],
+              isAnalyzing: false,
+              error: null,
+            }
+          };
+        });
+        return;
+      }
+
       console.error("Analysis failed:", error);
       persistResumeSnapshot(true);
       setActiveAnalyses(prev => {
@@ -362,11 +452,15 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           }
         };
       });
+    } finally {
+      if (analysisAbortControllersRef.current[matchId] === abortController) {
+        delete analysisAbortControllersRef.current[matchId];
+      }
     }
   }, []);
 
   return (
-    <AnalysisContext.Provider value={{ activeAnalyses, startAnalysis, clearActiveAnalysis, setCollapsedSegments }}>
+    <AnalysisContext.Provider value={{ activeAnalyses, startAnalysis, stopAnalysis, clearActiveAnalysis, setCollapsedSegments }}>
       {children}
     </AnalysisContext.Provider>
   );

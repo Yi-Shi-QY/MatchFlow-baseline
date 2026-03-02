@@ -45,7 +45,12 @@ export default function MatchDetail() {
   const { t, i18n } = useTranslation();
   const location = useLocation();
   const importedData = location.state?.importedData;
-  const { activeAnalyses, startAnalysis: contextStartAnalysis, setCollapsedSegments: contextSetCollapsedSegments } = useAnalysis();
+  const {
+    activeAnalyses,
+    startAnalysis: contextStartAnalysis,
+    stopAnalysis: contextStopAnalysis,
+    setCollapsedSegments: contextSetCollapsedSegments
+  } = useAnalysis();
   
   const isCustom = id === 'custom';
   const customMatch = React.useMemo(() => {
@@ -328,6 +333,8 @@ export default function MatchDetail() {
         setStep('analyzing');
       } else if (activeAnalysis.analysis) {
         setStep('result');
+      } else {
+        setStep('selection');
       }
     }
   }, [activeAnalysis]);
@@ -335,10 +342,13 @@ export default function MatchDetail() {
   useEffect(() => {
     if (!match) return;
 
+    const shouldLoadResume =
+      !activeAnalysis || (!activeAnalysis.isAnalyzing && !activeAnalysis.analysis);
+
     if (historyRecord && !activeAnalysis) {
       setStep('result');
       setSavedResumeState(null);
-    } else if (!activeAnalysis) {
+    } else if (shouldLoadResume) {
       // Check for resume state if no completed history exists
       getResumeState(match.id).then(resumeState => {
         setSavedResumeState(resumeState || null);
@@ -710,6 +720,18 @@ export default function MatchDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {isAnalyzing && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => contextStopAnalysis(match.id)}
+              title={t('match.stop_analysis')}
+              aria-label={t('match.stop_analysis')}
+              className="h-8 w-8 rounded-full border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              <Pause className="w-4 h-4" />
+            </Button>
+          )}
           {step === 'result' && (
             <>
               <Button 

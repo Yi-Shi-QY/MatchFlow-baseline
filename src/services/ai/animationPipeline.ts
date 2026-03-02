@@ -10,11 +10,24 @@ import {
 } from "../remotion/templateParams";
 import { streamAIRequest } from "./streamRequest";
 
-async function collectStreamText(stream: AsyncGenerator<string>): Promise<string> {
+function throwIfAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+  const err = new Error("Analysis aborted");
+  (err as any).name = "AbortError";
+  throw err;
+}
+
+async function collectStreamText(
+  stream: AsyncGenerator<string>,
+  abortSignal?: AbortSignal,
+): Promise<string> {
   let output = "";
+  throwIfAborted(abortSignal);
   for await (const chunk of stream) {
+    throwIfAborted(abortSignal);
     output += chunk;
   }
+  throwIfAborted(abortSignal);
   return output;
 }
 
@@ -24,7 +37,13 @@ function extractAnimationPayload(outputText: string): any {
   return extractJson(raw);
 }
 
-export async function* streamAnimationAgent(matchData: any, segmentPlan: any, analysisText: string) {
+export async function* streamAnimationAgent(
+  matchData: any,
+  segmentPlan: any,
+  analysisText: string,
+  abortSignal?: AbortSignal,
+) {
+  throwIfAborted(abortSignal);
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
   const declaration = getTemplateDeclaration(segmentPlan.animationType || "stats");
@@ -66,7 +85,7 @@ export async function* streamAnimationAgent(matchData: any, segmentPlan: any, an
     language: settings.language,
   });
 
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id);
+  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
 }
 
 export async function* streamFixAnimationParams(
@@ -75,7 +94,9 @@ export async function* streamFixAnimationParams(
   analysisText: string,
   wrongOutput: string,
   errors: string[],
+  abortSignal?: AbortSignal,
 ) {
+  throwIfAborted(abortSignal);
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
   const declaration = getTemplateDeclaration(segmentPlan.animationType || "stats");
@@ -116,22 +137,28 @@ export async function* streamFixAnimationParams(
   </animation>
   `;
 
-  yield* streamAIRequest(prompt, false, undefined, false, "animation");
+  yield* streamAIRequest(prompt, false, undefined, false, "animation", abortSignal);
 }
 
 export async function generateValidatedAnimationBlock(
   matchData: any,
   segmentPlan: any,
   analysisText: string,
+  abortSignal?: AbortSignal,
 ): Promise<string> {
+  throwIfAborted(abortSignal);
   const homeName = matchData?.homeTeam?.name || "Home Team";
   const awayName = matchData?.awayTeam?.name || "Away Team";
   const expectedType = segmentPlan.animationType || "stats";
   const maxFixAttempts = 2;
 
-  let candidateText = await collectStreamText(streamAnimationAgent(matchData, segmentPlan, analysisText));
+  let candidateText = await collectStreamText(
+    streamAnimationAgent(matchData, segmentPlan, analysisText, abortSignal),
+    abortSignal,
+  );
 
   for (let attempt = 0; attempt <= maxFixAttempts; attempt++) {
+    throwIfAborted(abortSignal);
     const rawPayload = extractAnimationPayload(candidateText);
     const validation = validateAndNormalizeAnimationPayload(rawPayload, expectedType);
 
@@ -154,7 +181,9 @@ export async function generateValidatedAnimationBlock(
           analysisText,
           candidateText,
           validation.errors,
+          abortSignal,
         ),
+        abortSignal,
       );
     }
   }
