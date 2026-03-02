@@ -38,14 +38,39 @@ npm run dev
 
 ```bash
 cd match-data-server
+docker compose -f docker-compose.db.yml up -d
+```
+
+Bootstrap behavior:
+
+1. On first startup (new volume), DB auto-applies:
+   - `schema.sql`
+   - all `migrations/*.sql` in lexical order
+2. If you need to re-run bootstrap, reset volume first:
+
+```bash
+cd match-data-server
+docker compose -f docker-compose.db.yml down -v
+docker compose -f docker-compose.db.yml up -d
+```
+
+Optional full stack (app + db):
+
+```bash
+cd match-data-server
 docker compose up -d
 ```
 
-Then initialize schema:
+If app runs outside Docker, set:
 
-```bash
-curl -X POST http://127.0.0.1:3001/admin/init \
-  -H "Authorization: Bearer <API_KEY>"
+```env
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/matchflow
+```
+
+If Docker Hub is not reachable, override DB image via env:
+
+```env
+POSTGRES_IMAGE=<your-private-or-mirror-registry>/postgres:15-alpine
 ```
 
 ## 5. Database Schema
@@ -73,7 +98,7 @@ Key indexes:
 
 ## 6. Operational Lifecycle
 
-1. Initialize schema (`/admin/init`)
+1. Start DB container (first startup auto-initializes schema + migrations)
 2. Load teams and matches
 3. Publish extension manifests
 4. Verify hub read endpoints
@@ -171,4 +196,3 @@ curl -X POST http://127.0.0.1:3001/admin/init \
 2. 生产环境使用 HTTPS。
 3. 限制管理接口暴露范围。
 4. 增加限流与审计日志。
-

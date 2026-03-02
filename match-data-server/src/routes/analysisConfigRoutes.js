@@ -1,12 +1,34 @@
 const matchRepository = require('../repositories/matchRepository');
 const { withSourceMeta, buildAnalysisConfigPayload } = require('../services/planningService');
+const { hasPermission, sanitizeMatchForPermissions } = require('../services/permissionService');
 
 function isPlainObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function forbidden(res, message) {
+  return res.status(403).json({
+    error: {
+      code: 'AUTH_FORBIDDEN',
+      message,
+    },
+  });
+}
+
+function ensureFundamentalDataAccess(req, res) {
+  if (hasPermission(req.authContext, 'datasource:use:fundamental')) {
+    return true;
+  }
+  forbidden(res, 'Missing datasource permission: datasource:use:fundamental');
+  return false;
+}
+
 function registerAnalysisConfigRoutes(app, authenticate) {
   app.get('/analysis/config/match/:id', authenticate, async (req, res) => {
+    if (!ensureFundamentalDataAccess(req, res)) {
+      return;
+    }
+
     const { id } = req.params;
 
     try {
@@ -15,7 +37,12 @@ function registerAnalysisConfigRoutes(app, authenticate) {
         return res.status(404).json({ error: { message: 'Match not found' } });
       }
 
-      const enriched = withSourceMeta(snapshot.match, snapshot.source);
+      const visibleMatch = sanitizeMatchForPermissions(snapshot.match, req.authContext);
+      if (!visibleMatch) {
+        return forbidden(res, 'Match is not accessible for current datasource permissions');
+      }
+
+      const enriched = withSourceMeta(visibleMatch, snapshot.source);
       const config = await buildAnalysisConfigPayload(enriched, req);
       return res.json({
         data: {
@@ -30,6 +57,10 @@ function registerAnalysisConfigRoutes(app, authenticate) {
   });
 
   app.post('/analysis/config/resolve', authenticate, async (req, res) => {
+    if (!ensureFundamentalDataAccess(req, res)) {
+      return;
+    }
+
     const body = req.body;
     if (!isPlainObject(body)) {
       return res.status(400).json({ error: { message: 'Request body must be an object' } });
@@ -71,10 +102,15 @@ function registerAnalysisConfigRoutes(app, authenticate) {
     }
 
     try {
-      const config = await buildAnalysisConfigPayload(mergedMatch, req);
+      const visibleMatch = sanitizeMatchForPermissions(mergedMatch, req.authContext);
+      if (!visibleMatch) {
+        return forbidden(res, 'Match is not accessible for current datasource permissions');
+      }
+
+      const config = await buildAnalysisConfigPayload(visibleMatch, req);
       const data = { ...config };
-      if (typeof mergedMatch.id === 'string' && mergedMatch.id.trim().length > 0) {
-        data.matchId = mergedMatch.id.trim();
+      if (typeof visibleMatch.id === 'string' && visibleMatch.id.trim().length > 0) {
+        data.matchId = visibleMatch.id.trim();
       }
       return res.json({ data });
     } catch (err) {
@@ -87,4 +123,3 @@ function registerAnalysisConfigRoutes(app, authenticate) {
 module.exports = {
   registerAnalysisConfigRoutes,
 };
-

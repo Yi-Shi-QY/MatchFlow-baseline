@@ -5,7 +5,14 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "test": "node test/runAuthzIntegration.js",
+    "test:db-phase": "node test/runDbPhaseGate.js",
+    "hash-password": "node scripts/hashPassword.js",
+    "db:up": "docker compose -f docker-compose.db.yml up -d",
+    "db:down": "docker compose -f docker-compose.db.yml down",
+    "db:reset": "docker compose -f docker-compose.db.yml down -v",
+    "db:logs": "docker compose -f docker-compose.db.yml logs -f db"
   },
   "dependencies": {
     "cors": "^2.8.5",

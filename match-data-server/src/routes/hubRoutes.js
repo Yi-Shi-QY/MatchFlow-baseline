@@ -1,11 +1,26 @@
 const { getManifest } = require('../services/hubManifestService');
+const { canAccessHubManifest } = require('../services/permissionService');
+
+function forbidden(res, message) {
+  return res.status(403).json({
+    error: {
+      code: 'AUTH_FORBIDDEN',
+      message,
+    },
+  });
+}
 
 async function sendHubManifest(kind, req, res) {
+  const extensionId = req.params.id;
+  if (!canAccessHubManifest(req.authContext, kind, extensionId)) {
+    return forbidden(res, `Missing permission to access ${kind} manifest: ${extensionId}`);
+  }
+
   const version = Array.isArray(req.query.version) ? req.query.version[0] : req.query.version;
   const channel = Array.isArray(req.query.channel) ? req.query.channel[0] : req.query.channel;
 
   try {
-    const record = await getManifest(kind, req.params.id, {
+    const record = await getManifest(kind, extensionId, {
       version,
       channel: channel || 'stable',
       statuses: ['published'],
@@ -39,4 +54,3 @@ function registerHubRoutes(app, authenticate) {
 module.exports = {
   registerHubRoutes,
 };
-

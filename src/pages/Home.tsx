@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MOCK_MATCHES } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
-import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Plus, Loader2, RefreshCw } from 'lucide-react';
+import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Plus, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
 import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord, clearResumeState } from '@/src/services/history';
 import { getSavedMatches, deleteSavedMatch, SavedMatchRecord } from '@/src/services/savedMatches';
 import { fetchMatches } from '@/src/services/matchData';
@@ -151,6 +151,12 @@ export default function Home() {
               className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center border border-white/10 text-emerald-400 hover:bg-zinc-700 transition-colors"
             >
               <QrCode className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => navigate('/admin-studio')}
+              className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center border border-white/10 text-sky-400 hover:bg-zinc-700 transition-colors"
+            >
+              <ShieldCheck className="w-4 h-4" />
             </button>
             <button 
               onClick={() => navigate('/settings')}
