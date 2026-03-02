@@ -2,161 +2,204 @@
 
 ## EN
 
-## 1. Repository Layout
+## 1. System Context
+
+MatchFlow is now split into three independent but connected runtimes:
+
+1. Client App (`/src`, React + Capacitor):
+   - end-user match analysis experience
+   - no embedded admin/governance UI
+2. Server 2.0 (`/match-data-server`, Node.js + Express + PostgreSQL):
+   - data collection, governance, validation, release, distribution
+   - auth, permission, catalog, release, audit
+3. Admin Studio Web (`/match-data-server/admin-studio-web`, standalone React + Vite app):
+   - server governance console and design tool
+   - visual editing for datasource/planning/animation/agent/skill
+
+## 2. Repository Layout (Current)
 
 ```text
 /
-|- src/                       # App source (React + Capacitor runtime logic)
-|  |- agents/                 # Agent registry and prompts
-|  |- skills/                 # Local deterministic tools
-|  |- services/               # AI, storage, data-source orchestration
-|  |- pages/                  # Home, MatchDetail, Settings, etc.
-|  |- contexts/               # Analysis lifecycle state
-|  |- docs/                   # Legacy doc entry points (migrated to /docs)
-|- match-data-server/         # Optional backend service
-|  |- src/routes              # API route modules
-|  |- src/services            # Planning and manifest business logic
-|  |- src/repositories        # DB/mock persistence logic
-|  |- schema.sql              # PostgreSQL schema
-|- docs/                      # Canonical documentation hub
+|- src/                                 # MatchFlow client app
+|- match-data-server/                   # Server 2.0
+|  |- src/routes                        # auth, match, analysis, hub, admin APIs
+|  |- src/services                      # auth/catalog/validation/release business logic
+|  |- src/repositories                  # persistence layer (DB-backed)
+|  |- test/                             # integration and phase-gate test suites
+|  |- admin-studio-web/                 # standalone admin web app
+|- docs/                                # canonical project documentation
 ```
 
-## 2. Runtime Flow (App)
+## 3. Runtime Responsibilities
 
-1. `MatchDetail` builds editable analysis payload.
-2. Selected data sources produce `sourceContext`.
-3. Before analysis start, app fetches server planning config and merges into payload.
-4. `AnalysisContext.startAnalysis` starts stream pipeline.
-5. `streamAgentThoughts` executes:
-   - Plan generation.
-   - Per-segment agent execution.
-   - Optional animation extraction and validation.
-   - Tag extraction.
-   - Final summary generation.
-6. Parser reads tagged stream blocks and UI renders incremental output.
+## 3.1 Client App
 
-## 3. Source -> Planning -> Agent Boundaries
+1. Reads match list and match details.
+2. Builds analysis payload and `sourceContext`.
+3. Calls server planning/config endpoints.
+4. Streams analysis output and renders UI incrementally.
+5. Uses user-facing extension/runtime features only.
 
-1. Source layer:
-   - Declarative source definitions in `src/services/dataSources.ts`.
-2. Planning layer:
-   - Route decided from settings + `sourceContext` + optional forced planning.
-3. Agent layer:
-   - Agent type selected per segment.
-   - Context dependency applied (`none`, `all`, or explicit list).
-4. Skill layer:
-   - Tool calls are deterministic and locally executed.
+## 3.2 Server 2.0
 
-## 4. Model Routing
+1. AuthN/AuthZ:
+   - access token + refresh token
+   - role/permission enforcement
+2. Data + governance APIs:
+   - `/matches*`
+   - `/analysis/config/*`
+   - `/hub/*`
+   - `/admin/catalog/*`
+   - `/admin/validate/*`
+   - `/admin/release/*`
+3. Validation + release:
+   - strict manifest checks
+   - publish/rollback gates
+4. Operational controls:
+   - `/livez`, `/readyz`, `/health`
+   - graceful shutdown
+   - audit records
 
-1. `global` mode: one provider/model for all agents.
-2. `config` mode: per-agent provider/model from config map.
-3. Providers:
-   - Gemini
-   - DeepSeek (V3 / R1)
-   - OpenAI-compatible endpoints
-4. Tool-call compatibility fallback:
-   - Native tool calls first.
-   - Manual protocol fallback when model endpoint rejects tool calls.
+## 3.3 Admin Studio Web (Standalone)
 
-## 5. Server Architecture
+1. Uses server admin APIs only.
+2. Provides visual governance workflow:
+   - create/edit draft
+   - create revision + diff
+   - run validation
+   - publish/rollback
+   - release history lookup
+3. Stores only admin-web local connection settings:
+   - server URL
+   - API key (or future auth token path)
 
-1. Route modules:
-   - match routes
-   - analysis config routes
-   - hub routes
-   - admin routes
-2. Services:
-   - planning recommendation service
-   - hub manifest service
-3. Repositories:
-   - match repository (DB + mock fallback)
-   - extension repository (versioned manifests)
+## 4. Core Data Flow
 
-## 6. Maintainability Priorities
+1. Governance authoring flow:
+   - Admin Studio Web -> `/admin/catalog/*`
+   - Admin Studio Web -> `/admin/validate/run`
+   - Admin Studio Web -> `/admin/catalog/:domain/:itemId/publish|rollback`
+2. Runtime distribution flow:
+   - Client App -> Server planning/config/hub APIs
+   - Server resolves policy + latest published artifacts
+3. Traceability flow:
+   - validation run -> release record -> audit log linkage
 
-1. Keep `MatchDetail` and `ai` orchestration logic modular.
-2. Keep extension schema strictly validated.
-3. Keep docs and runtime contracts synchronized.
-4. Add more contract tests for planning decisions and manifest loading.
+## 5. Deployment Topology (Recommended)
+
+1. Client App:
+   - distributed as mobile/web client
+2. Server API:
+   - containerized service with PostgreSQL
+3. Admin Studio Web:
+   - independent static deployment
+   - can be hosted behind same auth domain as server admin APIs
+
+## 6. Architecture Constraints
+
+1. Admin Studio must remain independent from client app runtime.
+2. Server is final authority for validation/publish policy.
+3. No publish without successful validation gate.
+4. All write operations must be auditable.
 
 ## ZH
 
-## 1. 仓库结构
+## 1. 系统边界
+
+MatchFlow 当前已拆分为三个相互协作、独立运行的运行时：
+
+1. 客户端 App（`/src`，React + Capacitor）：
+   - 面向终端用户的比赛分析体验
+   - 不再内嵌管理治理端
+2. 服务端 2.0（`/match-data-server`，Node.js + Express + PostgreSQL）：
+   - 数据采集、治理、验证、发布、分发
+   - 认证鉴权、目录管理、发布与审计
+3. Admin Studio Web（`/match-data-server/admin-studio-web`，独立 React + Vite）：
+   - 服务端治理后台与设计器
+   - 可视化编辑 datasource/planning/animation/agent/skill
+
+## 2. 当前仓库结构
 
 ```text
 /
-|- src/                       # 前端主应用代码（React + Capacitor）
-|  |- agents/                 # Agent 注册与提示词
-|  |- skills/                 # 本地确定性工具
-|  |- services/               # AI、存储、数据源编排
-|  |- pages/                  # Home、MatchDetail、Settings 等页面
-|  |- contexts/               # 分析生命周期状态
-|  |- docs/                   # 旧文档入口（已迁移到 /docs）
-|- match-data-server/         # 可选服务端
-|  |- src/routes              # API 路由模块
-|  |- src/services            # 规划与扩展清单业务逻辑
-|  |- src/repositories        # DB/Mock 数据持久层
-|  |- schema.sql              # PostgreSQL 表结构
-|- docs/                      # 当前唯一文档中心
+|- src/                                 # MatchFlow 客户端应用
+|- match-data-server/                   # 服务端 2.0
+|  |- src/routes                        # auth、match、analysis、hub、admin API
+|  |- src/services                      # auth/catalog/validation/release 业务逻辑
+|  |- src/repositories                  # 持久层（DB）
+|  |- test/                             # 集成与阶段门禁测试
+|  |- admin-studio-web/                 # 独立管理端 Web 应用
+|- docs/                                # 项目文档中心
 ```
 
-## 2. 应用运行流程
+## 3. 运行时职责
 
-1. `MatchDetail` 组装可编辑分析数据。
-2. 根据数据源选择生成 `sourceContext`。
-3. 开始分析前请求服务端规划配置并合并到 payload。
-4. `AnalysisContext.startAnalysis` 启动流式分析。
-5. `streamAgentThoughts` 执行：
-   - 生成计划。
-   - 按分段调用不同 Agent。
-   - 可选动画参数提取与校验。
-   - 标签提取。
-   - 最终总结。
-6. 解析器持续解析结构化标签，UI 增量渲染。
+## 3.1 客户端 App
 
-## 3. 数据源 -> 规划 -> Agent 边界
+1. 获取比赛列表和比赛详情。
+2. 组装分析请求与 `sourceContext`。
+3. 调用服务端规划/配置接口。
+4. 处理流式分析结果并增量渲染。
+5. 仅使用用户侧功能，不包含治理写操作。
 
-1. 数据源层：
-   - `src/services/dataSources.ts` 声明式定义。
-2. 规划层：
-   - 由设置、`sourceContext` 和强制配置共同决定路由。
-3. Agent 层：
-   - 每个 segment 指定 `agentType`。
-   - 应用上下文依赖策略（`none`、`all` 或指定依赖）。
-4. Skill 层：
-   - 工具调用本地执行，确保可控与可复现。
+## 3.2 服务端 2.0
 
-## 4. 模型路由
+1. 认证与权限：
+   - access token + refresh token
+   - 角色权限强制校验
+2. 数据与治理 API：
+   - `/matches*`
+   - `/analysis/config/*`
+   - `/hub/*`
+   - `/admin/catalog/*`
+   - `/admin/validate/*`
+   - `/admin/release/*`
+3. 验证与发布：
+   - 严格 manifest 校验
+   - 发布/回滚门禁
+4. 运维能力：
+   - `/livez`、`/readyz`、`/health`
+   - 优雅停机
+   - 审计记录
 
-1. `global`：所有 Agent 使用同一 provider/model。
-2. `config`：每个 Agent 使用独立 provider/model 配置。
-3. 支持提供方：
-   - Gemini
-   - DeepSeek（V3 / R1）
-   - OpenAI 兼容接口
-4. 工具调用兼容回退：
-   - 优先原生 tool call。
-   - 不支持时回退手动协议。
+## 3.3 Admin Studio Web（独立）
 
-## 5. 服务端架构
+1. 仅调用服务端 Admin API。
+2. 提供可视化治理闭环：
+   - 草稿编辑
+   - 版本创建与 diff
+   - 运行验证
+   - 发布/回滚
+   - 发布历史检索
+3. 仅持久化管理端连接配置：
+   - server URL
+   - API key（后续可替换为账号 token）
 
-1. 路由模块：
-   - 比赛查询路由
-   - 分析配置路由
-   - Hub 路由
-   - Admin 路由
-2. 服务层：
-   - 规划推荐服务
-   - Manifest 服务
-3. 仓储层：
-   - Match 仓储（DB + Mock）
-   - Extension 仓储（版本化 Manifest）
+## 4. 核心数据流
 
-## 6. 可维护性重点
+1. 治理设计流：
+   - Admin Studio Web -> `/admin/catalog/*`
+   - Admin Studio Web -> `/admin/validate/run`
+   - Admin Studio Web -> `/admin/catalog/:domain/:itemId/publish|rollback`
+2. 运行时分发流：
+   - Client App -> 服务端规划/配置/Hub API
+   - 服务端按权限与已发布版本分发能力
+3. 可追踪流：
+   - validation run -> release record -> audit log
 
-1. 持续拆分 `MatchDetail` 与 AI 编排代码。
-2. 严格执行扩展清单校验。
-3. 文档与运行时契约同步更新。
-4. 增强规划决策与 Manifest 加载的契约测试。
+## 5. 推荐部署拓扑
 
+1. 客户端 App：
+   - 作为移动端/网页端分发
+2. 服务端 API：
+   - 容器化运行，配套 PostgreSQL
+3. Admin Studio Web：
+   - 独立静态部署
+   - 建议与服务端管理 API 位于同一受控安全域
+
+## 6. 架构约束
+
+1. Admin Studio 必须保持与客户端运行时解耦。
+2. 发布策略以服务端校验结果为最终权威。
+3. 无成功验证结果不得发布。
+4. 所有治理写操作必须可审计。

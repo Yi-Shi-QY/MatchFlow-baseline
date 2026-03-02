@@ -79,13 +79,13 @@ Focus:
 Start here:
 
 1. [08-server-api-guide.md](./08-server-api-guide.md)
-2. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)
+2. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
 3. [13-cicd-guide.md](./13-cicd-guide.md)
 
 Focus:
 
 1. Endpoint contract and auth checks.
-2. Linux validation checklist.
+2. Production readiness gate checklist.
 3. CI/CD execution signals and release artifacts.
 
 ## 6. DevOps / Release Engineer
@@ -190,7 +190,7 @@ Suggested reading order:
 建议先读：
 
 1. [08-server-api-guide.md](./08-server-api-guide.md)
-2. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)
+2. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
 3. [13-cicd-guide.md](./13-cicd-guide.md)
 
 关注重点：

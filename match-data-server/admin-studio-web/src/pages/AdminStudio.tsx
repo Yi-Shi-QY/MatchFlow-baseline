@@ -43,6 +43,7 @@ import {
   runCatalogValidation,
   updateCatalogDraftRevision,
 } from '@/src/services/adminStudio';
+import { getSettings, saveSettings } from '@/src/services/settings';
 
 const DOMAIN_OPTIONS: Array<{ value: AdminCatalogDomain; label: string }> = [
   { value: 'datasource', label: 'Datasource' },
@@ -1086,6 +1087,9 @@ function parseManifest(text: string) {
 
 export default function AdminStudio() {
   const navigate = useNavigate();
+  const initialSettings = getSettings();
+  const [serverUrlInput, setServerUrlInput] = useState(initialSettings.matchDataServerUrl);
+  const [apiKeyInput, setApiKeyInput] = useState(initialSettings.matchDataApiKey);
   const [domain, setDomain] = useState<AdminCatalogDomain>('datasource');
   const [entrySearch, setEntrySearch] = useState('');
   const [entries, setEntries] = useState<Array<{
@@ -1141,6 +1145,21 @@ export default function AdminStudio() {
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   const [feedback, setFeedback] = useState<{ tone: FeedbackTone; message: string } | null>(null);
+
+  function handleSaveConnectionSettings() {
+    const serverUrl = serverUrlInput.trim();
+    const apiKey = apiKeyInput.trim();
+
+    saveSettings({
+      matchDataServerUrl: serverUrl,
+      matchDataApiKey: apiKey,
+    });
+
+    setFeedback({
+      tone: 'success',
+      message: 'Admin Studio connection settings saved.',
+    });
+  }
 
   const selectedRevision = useMemo(
     () => revisions.find((revision) => revision.version === selectedVersion) || null,
@@ -2081,31 +2100,54 @@ export default function AdminStudio() {
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans pb-10">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-black/85 px-4 pb-4 pt-4 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-full border border-white/10 bg-zinc-900"
-              onClick={() => navigate('/')}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h1 className="text-base font-bold tracking-tight text-white">Admin Studio 2.0</h1>
-              <p className="text-xs text-zinc-500">Catalog editor + validation + release workflow</p>
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-full border border-white/10 bg-zinc-900"
+                onClick={() => navigate('/')}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div>
+                <h1 className="text-base font-bold tracking-tight text-white">Admin Studio 2.0</h1>
+                <p className="text-xs text-zinc-500">
+                  Standalone server admin web: catalog + validation + release workflow
+                </p>
+              </div>
+            </div>
+            <div className="min-w-[220px] sm:w-72">
+              <Select
+                value={domain}
+                onChange={(value) => {
+                  const nextDomain = value as AdminCatalogDomain;
+                  setDomain(nextDomain);
+                  resetEditorForDomain(nextDomain);
+                }}
+                options={DOMAIN_OPTIONS}
+              />
             </div>
           </div>
-          <div className="min-w-[220px] sm:w-72">
-            <Select
-              value={domain}
-              onChange={(value) => {
-                const nextDomain = value as AdminCatalogDomain;
-                setDomain(nextDomain);
-                resetEditorForDomain(nextDomain);
-              }}
-              options={DOMAIN_OPTIONS}
+          <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_auto]">
+            <input
+              type="text"
+              value={serverUrlInput}
+              onChange={(event) => setServerUrlInput(event.target.value)}
+              placeholder="Server URL (e.g. http://127.0.0.1:3001)"
+              className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
             />
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(event) => setApiKeyInput(event.target.value)}
+              placeholder="API Key"
+              className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+            />
+            <Button variant="secondary" size="sm" onClick={handleSaveConnectionSettings}>
+              Save Connection
+            </Button>
           </div>
         </div>
       </header>

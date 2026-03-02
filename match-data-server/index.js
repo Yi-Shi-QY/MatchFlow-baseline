@@ -1,7 +1,15 @@
 require('dotenv').config();
 const express = require('express');
 const db = require('./db');
-const { PORT, API_KEY } = require('./src/config');
+const {
+  PORT,
+  NODE_ENV,
+  API_KEY,
+  JSON_BODY_LIMIT,
+  SHUTDOWN_TIMEOUT_MS,
+  CORS_ALLOWED_ORIGINS,
+  assertStartupConfig,
+} = require('./src/config');
 const { createAuthenticateMiddleware } = require('./src/middlewares/authenticate');
 const authService = require('./src/services/authService');
 const { registerAuthRoutes } = require('./src/routes/authRoutes');
@@ -25,6 +33,81 @@ try {
   };
 }
 
+const CORS_FORBIDDEN_MESSAGE = 'CORS_ORIGIN_FORBIDDEN';
+
+function applySecurityHeaders(req, res, next) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+}
+
+function createFallbackCorsMiddleware() {
+  const allowsAnyOrigin = CORS_ALLOWED_ORIGINS.includes('*');
+  const allowedOrigins = new Set(CORS_ALLOWED_ORIGINS);
+
+  return (req, res, next) => {
+    const requestOrigin = req.headers.origin;
+    if (allowsAnyOrigin) {
+      res.header('Access-Control-Allow-Origin', '*');
+    } else if (!requestOrigin || allowedOrigins.has(requestOrigin)) {
+      res.header('Access-Control-Allow-Origin', requestOrigin || 'null');
+      res.header('Vary', 'Origin');
+    } else {
+      return res.status(403).json({
+        error: {
+          code: 'CORS_FORBIDDEN',
+          message: 'Origin is not allowed',
+        },
+      });
+    }
+
+    res.header(
+      'Access-Control-Allow-Headers',
+      'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+    );
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    return next();
+  };
+}
+
+function createCorsMiddleware() {
+  if (typeof cors !== 'function') {
+    return createFallbackCorsMiddleware();
+  }
+
+  if (CORS_ALLOWED_ORIGINS.includes('*')) {
+    return cors();
+  }
+
+  const allowedOrigins = new Set(CORS_ALLOWED_ORIGINS);
+  return cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(CORS_FORBIDDEN_MESSAGE));
+    },
+    credentials: true,
+  });
+}
+
+async function buildReadinessPayload() {
+  const dbState = await db.ping();
+  return {
+    status: dbState.ok ? 'ready' : 'not_ready',
+    timestamp: new Date().toISOString(),
+    nodeEnv: NODE_ENV,
+    checks: {
+      database: dbState,
+    },
+  };
+}
+
 function createApp() {
   const app = express();
   const authenticate = createAuthenticateMiddleware({
@@ -32,8 +115,9 @@ function createApp() {
     authService,
   });
 
-  app.use(cors());
-  app.use(express.json());
+  app.use(applySecurityHeaders);
+  app.use(createCorsMiddleware());
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
   registerAuthRoutes(app, { authService });
   registerMatchRoutes(app, authenticate);
@@ -41,18 +125,93 @@ function createApp() {
   registerHubRoutes(app, authenticate);
   registerAdminRoutes(app, authenticate);
 
-  app.get('/health', (req, res) => {
+  app.get('/health', async (req, res) => {
+    const readiness = await buildReadinessPayload();
     res.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
       db_connected: db.isConnected(),
+      db_ready: readiness.checks.database.ok,
     });
+  });
+
+  app.get('/livez', (req, res) => {
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      nodeEnv: NODE_ENV,
+    });
+  });
+
+  app.get('/readyz', async (req, res) => {
+    const payload = await buildReadinessPayload();
+    return res.status(payload.status === 'ready' ? 200 : 503).json(payload);
+  });
+
+  app.use((error, req, res, next) => {
+    if (error && error.message === CORS_FORBIDDEN_MESSAGE) {
+      return res.status(403).json({
+        error: {
+          code: 'CORS_FORBIDDEN',
+          message: 'Origin is not allowed',
+        },
+      });
+    }
+    return next(error);
   });
 
   return app;
 }
 
-function startServer(port = PORT) {
+function installGracefulShutdown(server, timeoutMs = SHUTDOWN_TIMEOUT_MS) {
+  let shuttingDown = false;
+
+  const shutdown = (signal) => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+
+    console.log(`[shutdown] received ${signal}, closing http server`);
+
+    const forceExitTimer = setTimeout(() => {
+      console.error('[shutdown] timeout exceeded, forcing exit');
+      process.exit(1);
+    }, timeoutMs);
+    forceExitTimer.unref();
+
+    server.close(async (error) => {
+      clearTimeout(forceExitTimer);
+
+      try {
+        await db.close();
+      } catch (closeError) {
+        console.error('[shutdown] failed to close database pool', closeError.message);
+        process.exit(1);
+        return;
+      }
+
+      if (error) {
+        console.error('[shutdown] server close failed', error.message);
+        process.exit(1);
+        return;
+      }
+
+      console.log('[shutdown] graceful shutdown complete');
+      process.exit(0);
+    });
+  };
+
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('SIGINT', () => shutdown('SIGINT'));
+}
+
+function startServer(port = PORT, options = {}) {
+  const startupReport = assertStartupConfig();
+  startupReport.warnings.forEach((warning) => {
+    console.warn(`[startup-warning] ${warning}`);
+  });
+
   const app = createApp();
   const server = app.listen(port, () => {
     const address = server.address();
@@ -65,14 +224,19 @@ function startServer(port = PORT) {
     );
   });
 
-  return { app, server };
+  if (options.installSignalHandlers === true) {
+    installGracefulShutdown(server);
+  }
+
+  return { app, server, startupReport };
 }
 
 if (require.main === module) {
-  startServer(PORT);
+  startServer(PORT, { installSignalHandlers: true });
 }
 
 module.exports = {
   createApp,
   startServer,
+  buildReadinessPayload,
 };

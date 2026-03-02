@@ -58,7 +58,7 @@ Read:
 
 1. [08-server-api-guide.md](./08-server-api-guide.md)
 2. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
-3. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)
+3. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
 
 Implementation checklist:
 
@@ -85,9 +85,10 @@ Implementation checklist:
 Read:
 
 1. [16-server-auth-and-admin-roadmap.md](./16-server-auth-and-admin-roadmap.md)
-2. [17-server-auth-implementation-backlog.md](./17-server-auth-implementation-backlog.md)
-3. [18-server-2.0-kickoff.md](./18-server-2.0-kickoff.md)
-4. [08-server-api-guide.md](./08-server-api-guide.md)
+2. [19-web-admin-studio-upgrade-plan.md](./19-web-admin-studio-upgrade-plan.md)
+3. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
+4. [23-server2-admin-studio-separation.md](./23-server2-admin-studio-separation.md)
+5. [08-server-api-guide.md](./08-server-api-guide.md)
 
 Implementation checklist:
 
@@ -118,7 +119,7 @@ Implementation checklist:
 
 Read:
 
-1. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)
+1. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
 2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
 
 Implementation checklist:
@@ -213,7 +214,7 @@ Implementation checklist:
 
 1. [08-server-api-guide.md](./08-server-api-guide.md)
 2. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
-3. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)
+3. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
 
 实施清单：
 
@@ -239,7 +240,7 @@ Implementation checklist:
 
 建议阅读：
 
-1. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)
+1. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
 2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
 
 实施清单：

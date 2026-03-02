@@ -5,11 +5,21 @@ services:
       - "3001:3001"
     environment:
       - PORT=3001
+      - NODE_ENV=${NODE_ENV:-development}
       - API_KEY=${API_KEY:-your-secret-key}
+      - ACCESS_TOKEN_SECRET=${ACCESS_TOKEN_SECRET:-your-secret-key-access-local}
+      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET:-your-secret-key-refresh-local}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-*}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-matchflow}
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3001/readyz > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
     restart: unless-stopped
 
   db:

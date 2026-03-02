@@ -107,7 +107,7 @@ Capabilities:
 
 Recommended:
 
-1. Separate app: `match-admin-web`.
+1. Separate app: `admin-studio-web` (workspace path: `match-data-server/admin-studio-web`).
 2. Stack: React + TypeScript + route-level permission guards + form engine + diff viewer.
 3. Main pages:
    - dashboard
@@ -247,13 +247,17 @@ Phase C backend kickoff items (started):
 
 ## 7.2 Progress Update (as of 2026-03-02)
 
-Phase C web MVP first slice delivered in current repo app:
+Phase C web MVP first slice delivered (initially in root app, later migrated to standalone admin web):
 
 1. Added Admin Studio route and page:
-   - `src/pages/AdminStudio.tsx`
-   - `src/App.tsx` route: `/admin-studio`
+   - Initial implementation path:
+     - `src/pages/AdminStudio.tsx`
+     - `src/App.tsx` route: `/admin-studio`
+   - Current standalone path:
+     - `match-data-server/admin-studio-web/src/pages/AdminStudio.tsx`
 2. Added shared admin-web API client:
-   - `src/services/adminStudio.ts`
+   - Current path:
+     - `match-data-server/admin-studio-web/src/services/adminStudio.ts`
 3. Implemented visual workflow for first vertical slice (all domains, datasource-first):
    - catalog entry list
    - revision list
@@ -262,8 +266,8 @@ Phase C web MVP first slice delivered in current repo app:
    - validate run and result view
    - publish / rollback actions
    - release history view
-4. Added entry point from home header:
-   - `src/pages/Home.tsx`
+4. Added entry point from home header in initial slice (later removed after standalone migration):
+   - Initial path: `src/pages/Home.tsx`
 5. Verification:
    - `npm run lint` passed
    - `npm run build` passed
@@ -273,7 +277,7 @@ Phase C web MVP first slice delivered in current repo app:
 Phase C second slice + Phase D first slice delivered:
 
 1. Planning template visual editor:
-   - Added structured builder UI in `src/pages/AdminStudio.tsx` for:
+   - Added structured builder UI in `match-data-server/admin-studio-web/src/pages/AdminStudio.tsx` for:
      - template metadata (`id`, `name`, `rule`)
      - `requiredAgents` and `requiredSkills` (csv editor)
      - `segments[]` add/remove and per-segment fields
@@ -374,7 +378,7 @@ Client-server joint testing second slice delivered:
    - `npm run test:admin-web-joint-smoke`
 2. Added runner:
    - `match-data-server/test/runAdminStudioWebJointSmoke.js`
-3. Coverage through the real web API client (`src/services/adminStudio.ts`):
+3. Coverage through API-contract client flow aligned with admin-web client (`match-data-server/admin-studio-web/src/services/adminStudio.ts`):
    - strict-domain create/list/revision/validate across:
      - `datasource`
      - `planning_template`
@@ -385,6 +389,54 @@ Client-server joint testing second slice delivered:
    - datasource publish + rollback + release history linkage
 4. Next objective:
    - Add browser-level Admin Studio E2E (page interaction) on top of API-client joint smoke.
+
+## 7.7 Progress Update (as of 2026-03-02, production-readiness baseline)
+
+Server 2.0 production-readiness baseline delivered:
+
+1. Runtime startup hardening:
+   - Added startup validation for production mode in `match-data-server/src/config.js`
+   - Rejects weak/default secrets and missing DB URL in production mode
+2. Health and readiness endpoints:
+   - Added `/livez` and `/readyz` in `match-data-server/index.js`
+   - `/readyz` now performs real DB ping checks
+3. Security and ops hardening:
+   - Added baseline security headers (`nosniff`, `DENY`, `no-referrer`)
+   - Added graceful shutdown for `SIGTERM`/`SIGINT` with DB pool close
+4. Container hardening:
+   - Added app healthcheck against `/readyz` in Dockerfile and compose
+   - Added DB SSL mode controls for production/local compatibility
+5. Production gate commands:
+   - Added:
+     - `npm run test:prod-ready`
+     - `npm run preflight:prod`
+   - Added checklist document:
+     - `docs/22-server2-production-readiness-checklist.md`
+6. Next objective:
+   - Start browser-level Admin Studio E2E on top of production-ready runtime baseline.
+
+## 7.8 Progress Update (as of 2026-03-02, admin-studio architecture split)
+
+Admin Studio has been separated from MatchFlow client app and aligned with server-side ownership:
+
+1. Removed Admin Studio embedding from MatchFlow client app:
+   - removed route `/admin-studio` from `src/App.tsx`
+   - removed home-header entry from `src/pages/Home.tsx`
+2. Removed admin-studio page/client code from client app scope:
+   - removed `src/pages/AdminStudio.tsx`
+   - removed `src/services/adminStudio.ts`
+3. Added standalone admin web app colocated with server:
+   - `match-data-server/admin-studio-web`
+   - includes:
+     - dedicated `package.json`
+     - Vite/TypeScript config
+     - migrated Admin Studio page and API client
+4. Added server-side helper scripts for standalone admin web:
+   - `npm run admin-web:dev`
+   - `npm run admin-web:build`
+   - `npm run admin-web:lint`
+5. Next objective:
+   - Implement browser-level E2E against standalone `admin-studio-web`.
 
 ## 8. Definition of Done
 
@@ -414,7 +466,7 @@ npm run dev
 npm test
 
 # admin web (new app, when scaffolded)
-cd ../match-admin-web
+cd match-data-server/admin-studio-web
 npm install
 npm run dev
 ```
@@ -542,7 +594,7 @@ Expected outcomes:
 
 建议：
 
-1. 独立项目：`match-admin-web`。
+1. 独立项目：`admin-studio-web`（工作区路径：`match-data-server/admin-studio-web`）。
 2. 技术栈：React + TypeScript + 路由级权限守卫 + 表单引擎 + diff 组件。
 3. 页面：
    - 总览看板
@@ -677,7 +729,7 @@ npm run dev
 npm test
 
 # 管理端（新项目）
-cd ../match-admin-web
+cd match-data-server/admin-studio-web
 npm install
 npm run dev
 ```

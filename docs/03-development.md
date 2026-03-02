@@ -6,61 +6,36 @@
 
 1. Node.js 18+
 2. npm
-3. Android Studio (Android builds)
-4. Xcode (iOS builds on macOS)
-5. Optional:
-   - Docker + PostgreSQL for server integration testing
+3. Docker (recommended for local PostgreSQL and server validation)
+4. Android Studio / Xcode (only when developing mobile runtime)
 
-## 2. App Development
+## 2. Workspaces
 
-Install:
+This repository now has three active workspaces:
+
+1. Client App:
+   - root `package.json`
+   - source in `/src`
+2. Server 2.0:
+   - `/match-data-server`
+3. Standalone Admin Studio Web:
+   - `/match-data-server/admin-studio-web`
+
+## 3. Client App (End-User Runtime)
 
 ```bash
 npm install
-```
-
-Run dev server:
-
-```bash
 npm run dev
-```
-
-Type-check:
-
-```bash
 npm run lint
-```
-
-Build web bundle:
-
-```bash
 npm run build
 ```
 
-## 3. Capacitor Workflow
+Notes:
 
-Sync web assets to native:
+1. Client app no longer contains embedded admin studio route/page.
+2. Keep client focused on match analysis user flows.
 
-```bash
-npm run cap:sync
-```
-
-Generate app assets:
-
-```bash
-npm run cap:assets
-```
-
-Open projects:
-
-```bash
-npx cap open android
-npx cap open ios
-```
-
-## 4. Match Data Server
-
-Start local server:
+## 4. Server 2.0
 
 ```bash
 cd match-data-server
@@ -68,30 +43,70 @@ npm install
 npm run dev
 ```
 
-When no PostgreSQL is configured, server runs in mock mode.
+Useful commands:
 
-## 5. High-Frequency Debug Scenarios
+1. `npm test`
+2. `npm run test:db-phase`
+3. `npm run test:phase-e`
+4. `npm run test:joint-smoke`
+5. `npm run test:web-joint-smoke`
+6. `npm run test:prod-ready`
+7. `npm run preflight:prod`
 
-1. Match list empty:
-   - Check Settings: `matchDataServerUrl` + `matchDataApiKey`.
-   - Server may be unreachable or unauthorized.
-2. Analysis route unexpected:
-   - Inspect payload `sourceContext`.
-   - Check server `/analysis/config/*` response.
-3. Extension auto-install fails:
-   - Verify hub endpoints and auth.
-   - Validate manifest schema (`kind/id/version/...`).
-4. Chinese text corrupted:
-   - Ensure file encoding is UTF-8.
-   - Check i18n dictionaries and prompt files.
+Database lifecycle:
 
-## 6. Commit Discipline
+1. `npm run db:up`
+2. `npm run db:logs`
+3. `npm run db:down`
 
-1. Keep feature + docs updates in same commit/PR.
-2. Run at least `npm run lint` before commit.
-3. For server API changes, update docs:
-   - `08-server-api-guide.md`
-   - `09-server-deploy-and-database-guide.md`
+## 5. Admin Studio Web (Standalone)
+
+From server root:
+
+```bash
+cd match-data-server
+npm run admin-web:dev
+npm run admin-web:lint
+npm run admin-web:build
+```
+
+Directly from admin web folder:
+
+```bash
+cd match-data-server/admin-studio-web
+npm install
+npm run dev
+```
+
+Optional env defaults:
+
+1. `VITE_MATCH_DATA_SERVER_URL`
+2. `VITE_MATCH_DATA_API_KEY`
+
+## 6. Production Gate Sequence (Server 2.0)
+
+```bash
+cd match-data-server
+npm test
+npm run test:db-phase
+npm run test:phase-e
+npm run test:joint-smoke
+npm run test:web-joint-smoke
+npm run test:prod-ready
+npm run preflight:prod
+```
+
+If local DB has no SSL:
+
+```bash
+DB_SSL_MODE=disable npm run preflight:prod
+```
+
+## 7. Commit Rules
+
+1. Keep code and docs changes in the same commit/PR.
+2. Run lint/tests for affected workspace before commit.
+3. When server contracts change, update docs under `docs/` in the same change set.
 
 ## ZH
 
@@ -99,61 +114,36 @@ When no PostgreSQL is configured, server runs in mock mode.
 
 1. Node.js 18+
 2. npm
-3. Android Studio（Android）
-4. Xcode（macOS 下 iOS）
-5. 可选：
-   - Docker + PostgreSQL（服务端联调）
+3. Docker（建议用于本地 PostgreSQL 与服务端联调）
+4. Android Studio / Xcode（仅在开发移动端运行时时需要）
 
-## 2. 前端开发
+## 2. 工作区划分
 
-安装依赖：
+当前仓库有三个活跃工作区：
+
+1. 客户端 App：
+   - 根目录 `package.json`
+   - 源码在 `/src`
+2. 服务端 2.0：
+   - `/match-data-server`
+3. 独立 Admin Studio Web：
+   - `/match-data-server/admin-studio-web`
+
+## 3. 客户端 App（终端用户运行时）
 
 ```bash
 npm install
-```
-
-启动开发环境：
-
-```bash
 npm run dev
-```
-
-类型检查：
-
-```bash
 npm run lint
-```
-
-构建产物：
-
-```bash
 npm run build
 ```
 
-## 3. Capacitor 工作流
+说明：
 
-同步 Web 构建到原生工程：
+1. 客户端已不再包含内嵌 admin studio 路由/页面。
+2. 客户端应聚焦比赛分析用户流程。
 
-```bash
-npm run cap:sync
-```
-
-生成图标和启动图：
-
-```bash
-npm run cap:assets
-```
-
-打开原生工程：
-
-```bash
-npx cap open android
-npx cap open ios
-```
-
-## 4. 数据服务端
-
-本地启动：
+## 4. 服务端 2.0
 
 ```bash
 cd match-data-server
@@ -161,28 +151,67 @@ npm install
 npm run dev
 ```
 
-未配置 PostgreSQL 时，服务端会进入 mock 模式。
+常用命令：
 
-## 5. 常见调试场景
+1. `npm test`
+2. `npm run test:db-phase`
+3. `npm run test:phase-e`
+4. `npm run test:joint-smoke`
+5. `npm run test:web-joint-smoke`
+6. `npm run test:prod-ready`
+7. `npm run preflight:prod`
 
-1. 赛事列表为空：
-   - 检查设置中的 `matchDataServerUrl`、`matchDataApiKey`。
-   - 服务端可能不可达或鉴权失败。
-2. 分析路由不符合预期：
-   - 检查请求 payload 的 `sourceContext`。
-   - 检查 `/analysis/config/*` 返回。
-3. 扩展自动安装失败：
-   - 检查 hub 接口和鉴权。
-   - 检查 manifest 结构合法性。
-4. 中文乱码：
-   - 确认文件编码 UTF-8。
-   - 检查 i18n 词典与 prompt 文件。
+数据库生命周期：
 
-## 6. 提交规范
+1. `npm run db:up`
+2. `npm run db:logs`
+3. `npm run db:down`
 
-1. 功能改动与文档更新同一提交或同一 PR 完成。
-2. 提交前至少执行 `npm run lint`。
-3. 服务端 API 改动后必须更新：
-   - `08-server-api-guide.md`
-   - `09-server-deploy-and-database-guide.md`
+## 5. Admin Studio Web（独立管理端）
 
+在服务端目录执行：
+
+```bash
+cd match-data-server
+npm run admin-web:dev
+npm run admin-web:lint
+npm run admin-web:build
+```
+
+直接在 admin web 目录执行：
+
+```bash
+cd match-data-server/admin-studio-web
+npm install
+npm run dev
+```
+
+可选默认环境变量：
+
+1. `VITE_MATCH_DATA_SERVER_URL`
+2. `VITE_MATCH_DATA_API_KEY`
+
+## 6. 服务端生产门禁顺序
+
+```bash
+cd match-data-server
+npm test
+npm run test:db-phase
+npm run test:phase-e
+npm run test:joint-smoke
+npm run test:web-joint-smoke
+npm run test:prod-ready
+npm run preflight:prod
+```
+
+若本地数据库未启用 SSL：
+
+```bash
+DB_SSL_MODE=disable npm run preflight:prod
+```
+
+## 7. 提交规则
+
+1. 代码与文档同一提交/PR 同步更新。
+2. 提交前执行受影响工作区的 lint/测试。
+3. 服务端契约变更时，必须在同一改动中同步更新 `docs/`。

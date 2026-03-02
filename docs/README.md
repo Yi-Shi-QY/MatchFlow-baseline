@@ -1,8 +1,10 @@
-﻿# MatchFlow Documentation Hub / 鏂囨。涓績
+# MatchFlow Documentation Hub / 文档中心
 
 This folder is the single source of truth for project documentation.  
-鏈洰褰曟槸椤圭洰鏂囨。鐨勫敮涓€鍏ュ彛銆?
-## Start Here / 浠庤繖閲屽紑濮?
+本目录是项目文档的唯一入口。
+
+## Start Here / 从这里开始
+
 EN:
 
 1. If you know your role, start with [00-role-navigation.md](./00-role-navigation.md).
@@ -14,59 +16,70 @@ EN:
 
 ZH:
 
-1. 鎸夎鑹叉煡闃咃紝璇峰厛鐪?[00-role-navigation.md](./00-role-navigation.md)銆?2. 鎸変换鍔℃煡闃咃紝璇峰厛鐪?[15-task-navigation.md](./15-task-navigation.md)銆?3. 鏂版垚鍛樺缓璁『搴忛槄璇伙細
+1. 如果你明确角色分工，先看 [00-role-navigation.md](./00-role-navigation.md)。
+2. 如果你按任务推进，先看 [15-task-navigation.md](./15-task-navigation.md)。
+3. 新成员建议顺序阅读：
    [01-product-overview.md](./01-product-overview.md) ->
    [02-architecture.md](./02-architecture.md) ->
-   [03-development.md](./03-development.md)銆?
-## Document Index / 鏂囨。绱㈠紩
+   [03-development.md](./03-development.md)。
+
+## Document Index / 文档索引
 
 1. [00-role-navigation.md](./00-role-navigation.md)  
-   Role-based reading paths / 鎸夎鑰呰鑹插鑸?2. [01-product-overview.md](./01-product-overview.md)  
-   Product scope, features, current goals / 浜у搧鑼冨洿涓庡綋鍓嶇洰鏍?3. [02-architecture.md](./02-architecture.md)  
-   App/server architecture and runtime flow / 鍓嶅悗绔灦鏋勪笌杩愯娴?4. [03-development.md](./03-development.md)  
-   Local development and release workflow / 鏈湴寮€鍙戜笌鍙戝竷娴佺▼
+   Role-based reading paths / 按角色阅读导航
+2. [01-product-overview.md](./01-product-overview.md)  
+   Product scope, features, and current goals / 产品范围、能力与当前目标
+3. [02-architecture.md](./02-architecture.md)  
+   Current architecture and runtime boundaries / 当前架构与运行边界
+4. [03-development.md](./03-development.md)  
+   Development workflows for client/server/admin-web / 客户端、服务端、管理端开发流程
 5. [04-ai-agent-framework.md](./04-ai-agent-framework.md)  
-   Agent/skill pipeline and model routing / Agent-Skill 娴佺▼涓庢ā鍨嬭矾鐢?6. [05-i18n-and-encoding.md](./05-i18n-and-encoding.md)  
-   i18n and UTF-8 quality rules / i18n 涓?UTF-8 璐ㄩ噺瑙勮寖
+   Agent/skill framework and model routing / Agent/Skill 框架与模型路由
+6. [05-i18n-and-encoding.md](./05-i18n-and-encoding.md)  
+   i18n and UTF-8 quality rules / i18n 与 UTF-8 质量规范
 7. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)  
-   Agent/Skill/Template extension guide / Agent銆丼kill銆乀emplate 鎵╁睍鎸囧崡
+   Agent/Skill/Template extension guide / Agent、Skill、Template 扩展指南
 8. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)  
-   Declarative data source extension guide / 澹版槑寮忔暟鎹簮鎵╁睍鎸囧崡
+   Declarative data source extension guide / 声明式数据源扩展指南
 9. [08-server-api-guide.md](./08-server-api-guide.md)  
-   Match data server API reference / 鏁版嵁鏈嶅姟绔?API 鍙傝€?10. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)  
-    Deployment, PostgreSQL schema, admin workflows / 閮ㄧ讲銆佹暟鎹簱涓庤繍缁存祦绋?11. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)  
-    Server evolution roadmap / 鏈嶅姟绔噸鏋勪笌婕旇繘璺嚎
-12. [11-linux-validation-handoff.md](./11-linux-validation-handoff.md)  
-    Linux environment validation checklist / Linux 鐜鑱旇皟鏍￠獙娓呭崟
-13. [12-changelog.md](./12-changelog.md)  
-    Human-readable project change log / 椤圭洰鍙樻洿璁板綍
-14. [13-cicd-guide.md](./13-cicd-guide.md)  
-    CI/CD workflow and release strategy / CI/CD 宸ヤ綔娴佷笌鍙戝竷绛栫暐
-15. [14-extension-hub-spec.md](./14-extension-hub-spec.md)  
-    Manifest schema and hub compatibility / Manifest 缁撴瀯涓?Hub 鍏煎瑙勮寖
-16. [15-task-navigation.md](./15-task-navigation.md)  
-    Task-based reading paths / 鎸変换鍔″畾浣嶉槄璇昏矾寰?
-17. [16-server-auth-and-admin-roadmap.md](./16-server-auth-and-admin-roadmap.md)  
-    Server auth, account system, and admin console roadmap / 服务端账号、权限与管理后台路线图
-18. [17-server-auth-implementation-backlog.md](./17-server-auth-implementation-backlog.md)  
-    Phase 0/1 execution backlog for auth rollout / 账号鉴权阶段 0/1 实施任务清单
-19. [18-server-2.0-kickoff.md](./18-server-2.0-kickoff.md)  
-    Server 2.0 kickoff baseline and first-delivery checklist / 服务端 2.0 启动基线与首批交付清单
-20. [19-web-admin-studio-upgrade-plan.md](./19-web-admin-studio-upgrade-plan.md)  
-    Web admin visual governance upgrade plan / Web 管理端可视化治理升级计划
-21. [20-web-admin-phase-a-contract-freeze.md](./20-web-admin-phase-a-contract-freeze.md)  
-    Phase A contract freeze deliverables for admin studio / 管理端阶段 A 契约冻结交付物
-22. [21-server2-phase-e-rollout-runbook.md](./21-server2-phase-e-rollout-runbook.md)  
-    Phase E hardening and tenant rollout execution runbook / Phase E 加固与分租户上线执行手册
-## Writing Rules / 鏂囨。瑙勮寖
+   Server API reference / 服务端 API 参考
+10. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)  
+    Deployment, database, and operations / 部署、数据库与运维指南
+11. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)  
+    Server refactor and evolution roadmap / 服务端重构与演进路线
+12. [12-changelog.md](./12-changelog.md)  
+    Human-readable project changelog / 项目变更记录
+13. [13-cicd-guide.md](./13-cicd-guide.md)  
+    CI/CD workflow and release strategy / CI/CD 流程与发布策略
+14. [14-extension-hub-spec.md](./14-extension-hub-spec.md)  
+    Extension manifest schema and compatibility / 扩展 Manifest 规范与兼容性
+15. [15-task-navigation.md](./15-task-navigation.md)  
+    Task-based reading paths / 按任务定位阅读路径
+16. [16-server-auth-and-admin-roadmap.md](./16-server-auth-and-admin-roadmap.md)  
+    Auth/account/admin governance roadmap / 账号鉴权与管理治理路线
+17. [19-web-admin-studio-upgrade-plan.md](./19-web-admin-studio-upgrade-plan.md)  
+    Admin Studio 2.0 upgrade plan / 管理端 2.0 升级计划
+18. [20-web-admin-phase-a-contract-freeze.md](./20-web-admin-phase-a-contract-freeze.md)  
+    Admin Studio Phase-A contract freeze / 管理端阶段 A 契约冻结
+19. [21-server2-phase-e-rollout-runbook.md](./21-server2-phase-e-rollout-runbook.md)  
+    Phase-E hardening and rollout runbook / Phase-E 加固与上线手册
+20. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)  
+    Production readiness checklist / 生产就绪门禁清单
+21. [23-server2-admin-studio-separation.md](./23-server2-admin-studio-separation.md)  
+    Admin Studio standalone architecture / 管理端独立架构说明
+
+## Writing Rules / 文档规范
 
 1. Every document must contain English + Chinese sections in the same file.  
-   姣忎唤鏂囨。蹇呴』鍦ㄥ悓涓€鏂囦欢鍐呭寘鍚嫳鏂囧拰涓枃銆?2. All docs must be UTF-8 encoded.  
-   鎵€鏈夋枃妗ｅ繀椤讳娇鐢?UTF-8 缂栫爜銆?3. Keep docs operational, not only conceptual: include commands, inputs, and expected outputs.  
-   鏂囨。瑕佸彲鎵ц锛屼笉浠呰姒傚康锛岃繕瑕佺粰鍛戒护銆佽緭鍏ュ拰棰勬湡缁撴灉銆?4. When behavior changes, update docs in this folder in the same PR/commit.  
-   鍔熻兘琛屼负鍙樺寲鏃讹紝蹇呴』鍦ㄥ悓涓€ PR/鎻愪氦涓悓姝ユ洿鏂版湰鐩綍鏂囨。銆?
-## Scope / 鑼冨洿澹版槑
+   每份文档必须包含中英文双语内容。
+2. All docs must be UTF-8 encoded.  
+   所有文档必须使用 UTF-8 编码。
+3. Keep docs operational, not only conceptual: include commands, inputs, and expected outputs.  
+   文档要可执行，不只讲概念，要包含命令、输入与预期结果。
+4. When behavior changes, update docs in this folder in the same PR/commit.  
+   行为变更时必须在同一提交中同步更新本目录文档。
+
+## Scope / 范围声明
 
 Only markdown files under `docs/` are considered maintained project documentation.  
-浠?`docs/` 鐩綍鍐呯殑 Markdown 鏂囦欢灞炰簬姝ｅ紡缁存姢鏂囨。銆?
-
+只有 `docs/` 目录下的 Markdown 文件属于正式维护文档。

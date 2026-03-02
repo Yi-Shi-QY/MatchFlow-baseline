@@ -39,6 +39,8 @@ cd match-data-server
 npm test
 npm run test:db-phase
 npm run test:phase-e
+npm run test:prod-ready
+npm run preflight:prod
 ```
 
 Expected results:
@@ -46,6 +48,8 @@ Expected results:
 1. `npm test` summary ends with `0 failed`.
 2. `npm run test:db-phase` summary ends with `0 failed`.
 3. `npm run test:phase-e` summary ends with `0 failed`.
+4. `npm run test:prod-ready` passes readiness endpoint and security-header checks.
+5. `npm run preflight:prod` ends with `PASS`.
 
 Optional stricter performance thresholds:
 
@@ -53,6 +57,12 @@ Optional stricter performance thresholds:
 PHASE_E_HEALTH_P95_MAX_MS=220 \
 PHASE_E_CATALOG_P95_MAX_MS=450 \
 npm run test:phase-e
+```
+
+If local database does not support SSL:
+
+```bash
+DB_SSL_MODE=disable npm run preflight:prod
 ```
 
 ## 4. Tenant-by-Tenant Rollout
@@ -131,6 +141,9 @@ After Phase E is green, move to client-server integration testing with this chec
    - revision status transitions
    - release history linkage
    - audit trace completeness
+5. Standalone admin-web architecture:
+   - Admin Studio runs from `match-data-server/admin-studio-web`
+   - no embedded admin route in MatchFlow client app
 
 Joint-smoke command (API-contract level):
 
@@ -144,6 +157,13 @@ Web-client joint-smoke command (web API client level):
 ```bash
 cd match-data-server
 npm run test:web-joint-smoke
+```
+
+Standalone admin-web local run:
+
+```bash
+cd match-data-server
+npm run admin-web:dev
 ```
 
 ## 7. Sign-Off Template

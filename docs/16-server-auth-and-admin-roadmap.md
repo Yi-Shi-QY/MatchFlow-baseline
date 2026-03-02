@@ -119,7 +119,7 @@ Definition of done:
 
 ## Phase 4: Web Admin Console (7-10 days)
 
-1. New frontend app (recommended: separate `match-admin-web`) or integrated admin module.
+1. New frontend app (recommended: separate `admin-studio-web`) or integrated admin module.
 2. Core pages:
    - Login
    - User/role management
@@ -369,7 +369,7 @@ M4 (Client adoption):
 
 ## 阶段 4：Web 管理后台（7-10 天）
 
-1. 新建管理前端（建议独立 `match-admin-web`）。
+1. 新建管理前端（建议独立 `admin-studio-web`）。
 2. 核心页面：
    - 登录
    - 用户/角色管理
