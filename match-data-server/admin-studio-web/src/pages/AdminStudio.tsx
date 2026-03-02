@@ -2136,6 +2136,7 @@ export default function AdminStudio() {
               value={serverUrlInput}
               onChange={(event) => setServerUrlInput(event.target.value)}
               placeholder="Server URL (e.g. http://127.0.0.1:3001)"
+              data-testid="settings-server-url"
               className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
             />
             <input
@@ -2143,9 +2144,15 @@ export default function AdminStudio() {
               value={apiKeyInput}
               onChange={(event) => setApiKeyInput(event.target.value)}
               placeholder="API Key"
+              data-testid="settings-api-key"
               className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
             />
-            <Button variant="secondary" size="sm" onClick={handleSaveConnectionSettings}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSaveConnectionSettings}
+              data-testid="settings-save-connection"
+            >
               Save Connection
             </Button>
           </div>
@@ -2220,6 +2227,7 @@ export default function AdminStudio() {
                   value={newItemId}
                   onChange={(event) => setNewItemId(event.target.value)}
                   placeholder="itemId (e.g. market_source_v2)"
+                  data-testid="create-item-id"
                   className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                 />
                 <input
@@ -2227,6 +2235,7 @@ export default function AdminStudio() {
                   value={newItemVersion}
                   onChange={(event) => setNewItemVersion(event.target.value)}
                   placeholder="version (e.g. 1.0.0)"
+                  data-testid="create-item-version"
                   className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                 />
               </div>
@@ -2234,9 +2243,15 @@ export default function AdminStudio() {
                 value={newItemManifestText}
                 onChange={(event) => setNewItemManifestText(event.target.value)}
                 spellCheck={false}
+                data-testid="create-item-manifest"
                 className="min-h-[180px] w-full rounded-lg border border-white/10 bg-zinc-900 p-3 font-mono text-xs text-white focus:border-emerald-500 focus:outline-none"
               />
-              <Button onClick={() => void handleCreateItem()} disabled={isCreatingItem} className="w-full gap-2">
+              <Button
+                onClick={() => void handleCreateItem()}
+                disabled={isCreatingItem}
+                className="w-full gap-2"
+                data-testid="create-item-submit"
+              >
                 {isCreatingItem ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 Create Item
               </Button>
@@ -2247,6 +2262,7 @@ export default function AdminStudio() {
         <section className="space-y-4">
           {feedback && (
             <div
+              data-testid="feedback-banner"
               className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${
                 feedback.tone === 'success'
                   ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
@@ -2268,7 +2284,10 @@ export default function AdminStudio() {
                 <div>
                   <h2 className="text-sm font-semibold text-white">Revision Editor</h2>
                   <p className="text-xs text-zinc-500">
-                    Item: <span className="font-mono text-zinc-300">{selectedItemId || '-'}</span>
+                    Item:{' '}
+                    <span className="font-mono text-zinc-300" data-testid="revision-editor-item">
+                      {selectedItemId || '-'}
+                    </span>
                   </p>
                 </div>
                 <Button
@@ -3264,6 +3283,7 @@ export default function AdminStudio() {
                       onClick={() => void handleSaveDraft()}
                       disabled={!selectedRevision || selectedRevision.status !== 'draft' || isSavingDraft}
                       className="gap-2"
+                      data-testid="action-save-draft"
                     >
                       {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                       Save Draft
@@ -3273,6 +3293,7 @@ export default function AdminStudio() {
                       variant="outline"
                       disabled={!selectedRevision || isValidating}
                       className="gap-2"
+                      data-testid="action-validate"
                     >
                       {isValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                       Validate
@@ -3282,6 +3303,7 @@ export default function AdminStudio() {
                       variant="outline"
                       disabled={!selectedRevision}
                       className="gap-2"
+                      data-testid="action-toggle-publish-wizard"
                     >
                       <PlayCircle className="h-4 w-4" />
                       {publishWizardOpen ? 'Hide Publish Wizard' : 'Publish Wizard'}
@@ -3291,6 +3313,7 @@ export default function AdminStudio() {
                       variant="outline"
                       disabled={!selectedRevision || isRollbacking}
                       className="gap-2"
+                      data-testid="action-rollback"
                     >
                       {isRollbacking ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
                       Rollback
@@ -3332,7 +3355,10 @@ export default function AdminStudio() {
                   </div>
 
                   {publishWizardOpen && (
-                    <div className="space-y-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                    <div
+                      className="space-y-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3"
+                      data-testid="publish-wizard"
+                    >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <h3 className="text-xs font-semibold uppercase tracking-wider text-sky-300">
@@ -3353,11 +3379,14 @@ export default function AdminStudio() {
                         </Button>
                       </div>
 
-                      <div className={`rounded-lg border px-3 py-2 text-xs ${
+                      <div
+                        data-testid="publish-gate-status"
+                        className={`rounded-lg border px-3 py-2 text-xs ${
                         publishGate.passed
                           ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
                           : 'border-red-500/20 bg-red-500/10 text-red-300'
-                      }`}>
+                      }`}
+                      >
                         <div className="font-semibold">
                           Gate: {publishGate.passed ? 'Passed' : 'Blocked'}
                         </div>
@@ -3393,6 +3422,7 @@ export default function AdminStudio() {
                           className="gap-2"
                           onClick={() => void handleValidate()}
                           disabled={!selectedRevision || isValidating}
+                          data-testid="publish-wizard-run-validation"
                         >
                           {isValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                           Run Validation
@@ -3401,6 +3431,7 @@ export default function AdminStudio() {
                           className="gap-2"
                           onClick={() => void handlePublish({ notes: publishNotes })}
                           disabled={!selectedRevision || !publishGate.passed || isPublishing}
+                          data-testid="publish-wizard-confirm-publish"
                         >
                           {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
                           Confirm Publish
@@ -3593,6 +3624,7 @@ export default function AdminStudio() {
                   value={releaseHistorySearch}
                   onChange={(event) => setReleaseHistorySearch(event.target.value)}
                   placeholder="Filter by itemId"
+                  data-testid="release-history-filter-item"
                   className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                 />
                 <Select
@@ -3604,7 +3636,7 @@ export default function AdminStudio() {
                   ]}
                 />
               </div>
-              <div className="max-h-[260px] space-y-2 overflow-auto pr-1">
+              <div className="max-h-[260px] space-y-2 overflow-auto pr-1" data-testid="release-history-list">
                 {filteredReleaseHistory.length === 0 && (
                   <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
                     No release records found for current domain.
@@ -3617,6 +3649,7 @@ export default function AdminStudio() {
                       type="button"
                       key={record.id}
                       onClick={() => void handleSelectReleaseRecord(record)}
+                      data-testid={`release-record-${record.id}`}
                       className={`w-full rounded-lg border p-3 text-left text-[11px] transition-colors ${
                         active
                           ? 'border-sky-400/40 bg-sky-500/10'

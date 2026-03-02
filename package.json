@@ -10,6 +10,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test:admin-web-joint-smoke": "npm --prefix match-data-server run test:web-joint-smoke",
+    "test:admin-web-e2e": "npm --prefix match-data-server run admin-web:e2e",
     "cap:sync": "npx cap sync",
     "cap:add:android": "npx cap add android",
     "cap:add:ios": "npx cap add ios",

@@ -64,6 +64,7 @@ npm run test:db-phase
 npm run test:phase-e
 npm run test:joint-smoke
 npm run test:web-joint-smoke
+npm run admin-web:e2e
 npm run test:prod-ready
 npm run preflight:prod
 ```

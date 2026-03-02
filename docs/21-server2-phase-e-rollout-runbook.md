@@ -39,6 +39,7 @@ cd match-data-server
 npm test
 npm run test:db-phase
 npm run test:phase-e
+npm run admin-web:e2e
 npm run test:prod-ready
 npm run preflight:prod
 ```
@@ -164,6 +165,14 @@ Standalone admin-web local run:
 ```bash
 cd match-data-server
 npm run admin-web:dev
+```
+
+Browser-level admin-web E2E (Playwright):
+
+```bash
+cd match-data-server
+npm run admin-web:e2e:install   # first-time browser install
+npm run admin-web:e2e
 ```
 
 ## 7. Sign-Off Template

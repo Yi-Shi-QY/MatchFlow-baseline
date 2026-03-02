@@ -68,6 +68,7 @@ cd match-data-server
 npm run admin-web:dev
 npm run admin-web:lint
 npm run admin-web:build
+npm run admin-web:e2e
 ```
 
 Directly from admin web folder:
@@ -76,12 +77,15 @@ Directly from admin web folder:
 cd match-data-server/admin-studio-web
 npm install
 npm run dev
+npm run test:e2e
 ```
 
 Optional env defaults:
 
 1. `VITE_MATCH_DATA_SERVER_URL`
 2. `VITE_MATCH_DATA_API_KEY`
+3. `E2E_MATCH_DATA_SERVER_URL`
+4. `E2E_MATCH_DATA_API_KEY`
 
 ## 6. Production Gate Sequence (Server 2.0)
 

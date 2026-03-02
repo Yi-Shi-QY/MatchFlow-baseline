@@ -436,7 +436,29 @@ Admin Studio has been separated from MatchFlow client app and aligned with serve
    - `npm run admin-web:build`
    - `npm run admin-web:lint`
 5. Next objective:
-   - Implement browser-level E2E against standalone `admin-studio-web`.
+   - Add browser-level E2E baseline against standalone `admin-studio-web`.
+
+## 7.9 Progress Update (as of 2026-03-02, browser-level e2e baseline)
+
+Browser-level Admin Studio E2E baseline delivered:
+
+1. Added Playwright test runtime in standalone admin web:
+   - `match-data-server/admin-studio-web/playwright.config.ts`
+   - `match-data-server/admin-studio-web/e2e/datasource-governance.spec.ts`
+2. Added first full governance-loop browser spec:
+   - create item
+   - run validation
+   - publish via wizard gate
+   - rollback
+   - verify release history linkage
+3. Added stable test selectors in Admin Studio UI:
+   - `data-testid` markers for connection settings, create-item form, publish wizard, rollback action, and release history list
+4. Added runnable commands:
+   - `cd match-data-server && npm run admin-web:e2e:install`
+   - `cd match-data-server && npm run admin-web:e2e`
+   - `cd match-data-server/admin-studio-web && npm run test:e2e`
+5. Next objective:
+   - Extend browser E2E coverage for role/permission scenarios and multi-domain matrix.
 
 ## 8. Definition of Done
 
