@@ -460,6 +460,29 @@ Browser-level Admin Studio E2E baseline delivered:
 5. Next objective:
    - Extend browser E2E coverage for role/permission scenarios and multi-domain matrix.
 
+## 7.10 Progress Update (as of 2026-03-02, browser-level e2e coverage expansion)
+
+Expanded browser-level Admin Studio E2E coverage delivered:
+
+1. Added planning_template governance lifecycle E2E:
+   - create item
+   - run validation
+   - publish
+   - rollback
+   - release history trace
+2. Added permission-guard E2E:
+   - create analyst user through admin API
+   - login and use user access token in Admin Studio settings
+   - verify `catalog:datasource:edit` enforcement blocks create-item action
+3. Added domain selector test hooks for stable cross-domain switching in E2E.
+4. Verification:
+   - `cd match-data-server && npm run admin-web:e2e` passed with 3 browser tests:
+     - datasource governance lifecycle
+     - planning_template governance lifecycle
+     - permission guard for catalog edit
+5. Next objective:
+   - Extend browser E2E matrix to remaining domains (`animation_template`, `agent`, `skill`) and role matrix (`publisher`, `admin`).
+
 ## 8. Definition of Done
 
 Functional DoD:

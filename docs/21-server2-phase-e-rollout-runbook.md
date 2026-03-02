@@ -175,6 +175,12 @@ npm run admin-web:e2e:install   # first-time browser install
 npm run admin-web:e2e
 ```
 
+Current browser E2E baseline covers:
+
+1. Datasource governance lifecycle (create/validate/publish/rollback/history).
+2. Planning-template governance lifecycle (create/validate/publish/rollback/history).
+3. Permission guard scenario for `catalog:datasource:edit`.
+
 ## 7. Sign-Off Template
 
 Record the following before rollout expansion:

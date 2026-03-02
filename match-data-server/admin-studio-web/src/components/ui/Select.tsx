@@ -11,9 +11,10 @@ interface SelectProps {
   onChange: (value: string) => void;
   options: Option[];
   className?: string;
+  testId?: string;
 }
 
-export function Select({ value, onChange, options, className = '' }: SelectProps) {
+export function Select({ value, onChange, options, className = '', testId }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
 
@@ -33,10 +34,11 @@ export function Select({ value, onChange, options, className = '' }: SelectProps
   }, []);
 
   return (
-    <div className={`relative ${className}`} ref={selectRef}>
+    <div className={`relative ${className}`} ref={selectRef} data-testid={testId ? `${testId}-root` : undefined}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
+        data-testid={testId}
         className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors flex justify-between items-center"
       >
         <span>{selectedOption?.label}</span>
@@ -49,6 +51,7 @@ export function Select({ value, onChange, options, className = '' }: SelectProps
             {options.map((option) => (
               <li
                 key={option.value}
+                data-testid={testId ? `${testId}-option-${option.value}` : undefined}
                 onClick={() => {
                   onChange(option.value);
                   setIsOpen(false);

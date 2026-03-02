@@ -2127,6 +2127,7 @@ export default function AdminStudio() {
                   resetEditorForDomain(nextDomain);
                 }}
                 options={DOMAIN_OPTIONS}
+                testId="domain-select"
               />
             </div>
           </div>

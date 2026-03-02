@@ -55,6 +55,12 @@ npm run admin-web:e2e
 npm run test:e2e
 ```
 
+Current suite coverage:
+
+1. `e2e/datasource-governance.spec.ts`
+2. `e2e/planning-template-governance.spec.ts`
+3. `e2e/permission-guard.spec.ts`
+
 ## Environment
 
 Optional Vite env values:
