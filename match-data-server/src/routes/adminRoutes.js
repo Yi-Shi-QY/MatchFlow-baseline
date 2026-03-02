@@ -27,6 +27,8 @@ const {
 const {
   StudioCatalogError,
   getCatalogEditPermission,
+  previewDatasourceStructureForAdmin,
+  previewDatasourceDataForAdmin,
   listCatalogEntriesForAdmin,
   createCatalogEntryForAdmin,
   listCatalogRevisionsForAdmin,
@@ -41,6 +43,17 @@ const {
   rollbackReleaseForAdmin,
   listReleaseHistoryForAdmin,
 } = require('../services/studioCatalogService');
+const {
+  listDatasourceCollectorsForAdmin,
+  createDatasourceCollectorForAdmin,
+  updateDatasourceCollectorForAdmin,
+  triggerDatasourceCollectorRunForAdmin,
+  importDatasourceCollectionSnapshotForAdmin,
+  listDatasourceCollectionRunsForAdmin,
+  listDatasourceCollectionSnapshotsForAdmin,
+  confirmDatasourceCollectionSnapshotForAdmin,
+  releaseDatasourceCollectionSnapshotForAdmin,
+} = require('../services/datasourceCollectionService');
 
 function parseStatuses(input) {
   if (Array.isArray(input)) {
@@ -502,6 +515,141 @@ function registerAdminRoutes(app, authenticate) {
       return res.status(201).json({ data });
     } catch (error) {
       return handleStudioCatalogError(res, error, 'Failed to create catalog entry');
+    }
+  }));
+
+  app.post('/admin/catalog/datasource/preview/structure', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const data = await previewDatasourceStructureForAdmin({
+        body: req.body || {},
+      });
+      return res.json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to build datasource structure preview');
+    }
+  }));
+
+  app.post('/admin/catalog/datasource/preview/data', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const data = await previewDatasourceDataForAdmin({
+        body: req.body || {},
+      });
+      return res.json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to build datasource data preview');
+    }
+  }));
+
+  app.get('/admin/data-collections/collectors', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const result = await listDatasourceCollectorsForAdmin({
+        query: req.query,
+        authContext: req.authContext,
+      });
+      return res.json(result);
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to list datasource collectors');
+    }
+  }));
+
+  app.post('/admin/data-collections/collectors', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const data = await createDatasourceCollectorForAdmin({
+        body: req.body || {},
+        authContext: req.authContext,
+      });
+      return res.status(201).json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to create datasource collector');
+    }
+  }));
+
+  app.put('/admin/data-collections/collectors/:collectorId', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const data = await updateDatasourceCollectorForAdmin({
+        collectorId: req.params.collectorId,
+        body: req.body || {},
+        authContext: req.authContext,
+      });
+      return res.json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to update datasource collector');
+    }
+  }));
+
+  app.post('/admin/data-collections/collectors/:collectorId/run', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const data = await triggerDatasourceCollectorRunForAdmin({
+        collectorId: req.params.collectorId,
+        body: req.body || {},
+        authContext: req.authContext,
+      });
+      return res.status(202).json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to trigger datasource collector run');
+    }
+  }));
+
+  app.post('/admin/data-collections/collectors/:collectorId/import', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const data = await importDatasourceCollectionSnapshotForAdmin({
+        collectorId: req.params.collectorId,
+        body: req.body || {},
+        authContext: req.authContext,
+      });
+      return res.status(202).json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to import datasource collection snapshot');
+    }
+  }));
+
+  app.get('/admin/data-collections/runs', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const result = await listDatasourceCollectionRunsForAdmin({
+        query: req.query,
+        authContext: req.authContext,
+      });
+      return res.json(result);
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to list datasource collection runs');
+    }
+  }));
+
+  app.get('/admin/data-collections/snapshots', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const result = await listDatasourceCollectionSnapshotsForAdmin({
+        query: req.query,
+        authContext: req.authContext,
+      });
+      return res.json(result);
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to list datasource collection snapshots');
+    }
+  }));
+
+  app.post('/admin/data-collections/snapshots/:snapshotId/confirm', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const data = await confirmDatasourceCollectionSnapshotForAdmin({
+        snapshotId: req.params.snapshotId,
+        body: req.body || {},
+        authContext: req.authContext,
+      });
+      return res.json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to confirm datasource collection snapshot');
+    }
+  }));
+
+  app.post('/admin/data-collections/snapshots/:snapshotId/release', authenticate, withRequiredPermission('release:publish', async (req, res) => {
+    try {
+      const data = await releaseDatasourceCollectionSnapshotForAdmin({
+        snapshotId: req.params.snapshotId,
+        body: req.body || {},
+        authContext: req.authContext,
+      });
+      return res.json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to release datasource collection snapshot');
     }
   }));
 

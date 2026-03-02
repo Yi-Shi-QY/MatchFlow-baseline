@@ -28,19 +28,33 @@ import {
   AdminCatalogDomain,
   AdminStudioApiError,
   CatalogRevision,
+  DatasourceCollector,
+  DatasourceCollectionRun,
+  DatasourceCollectionSnapshot,
+  DatasourceDataPreview,
+  DatasourceStructurePreview,
   ManifestDiffResult,
   ReleaseRecord,
   ValidationRunRecord,
+  confirmDatasourceCollectionSnapshot,
+  createDatasourceCollector,
   createCatalogEntry,
   createCatalogRevision,
   getCatalogRevisionDiff,
   getValidationRun,
+  listDatasourceCollectionRuns,
+  listDatasourceCollectionSnapshots,
+  listDatasourceCollectors,
   listCatalogEntries,
   listCatalogRevisions,
   listReleaseHistory,
+  previewDatasourceData,
+  previewDatasourceStructure,
+  releaseDatasourceCollectionSnapshot,
   publishCatalogRevision,
   rollbackCatalogRevision,
   runCatalogValidation,
+  triggerDatasourceCollectorRun,
   updateCatalogDraftRevision,
 } from '@/src/services/adminStudio';
 import { getSettings, saveSettings } from '@/src/services/settings';
@@ -1109,6 +1123,15 @@ export default function AdminStudio() {
   const [manifestEditor, setManifestEditor] = useState(prettyJson(starterManifest('datasource')));
   const [showRawManifestEditor, setShowRawManifestEditor] = useState(true);
   const [datasourceDraft, setDatasourceDraft] = useState<DatasourceManifestDraft | null>(null);
+  const [datasourceStructurePreview, setDatasourceStructurePreview] = useState<DatasourceStructurePreview | null>(null);
+  const [datasourceDataPreview, setDatasourceDataPreview] = useState<DatasourceDataPreview | null>(null);
+  const [datasourcePreviewLimitInput, setDatasourcePreviewLimitInput] = useState('5');
+  const [datasourcePreviewStatusInput, setDatasourcePreviewStatusInput] = useState('');
+  const [datasourceCollectorSourceIdInput, setDatasourceCollectorSourceIdInput] = useState('');
+  const [datasourceCollectorNameInput, setDatasourceCollectorNameInput] = useState('Match Snapshot Collector');
+  const [datasourceCollectors, setDatasourceCollectors] = useState<DatasourceCollector[]>([]);
+  const [datasourceCollectionRuns, setDatasourceCollectionRuns] = useState<DatasourceCollectionRun[]>([]);
+  const [datasourceCollectionSnapshots, setDatasourceCollectionSnapshots] = useState<DatasourceCollectionSnapshot[]>([]);
   const [planningDraft, setPlanningDraft] = useState<PlanningTemplateDraft | null>(null);
   const [animationTemplateDraft, setAnimationTemplateDraft] = useState<AnimationTemplateDraft | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentManifestDraft | null>(null);
@@ -1139,6 +1162,12 @@ export default function AdminStudio() {
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
   const [isDiffing, setIsDiffing] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+  const [isRunningDatasourcePreview, setIsRunningDatasourcePreview] = useState(false);
+  const [isDatasourceCollectionLoading, setIsDatasourceCollectionLoading] = useState(false);
+  const [isCreatingDatasourceCollector, setIsCreatingDatasourceCollector] = useState(false);
+  const [runningCollectorId, setRunningCollectorId] = useState('');
+  const [confirmingSnapshotId, setConfirmingSnapshotId] = useState('');
+  const [releasingSnapshotId, setReleasingSnapshotId] = useState('');
   const [isFetchingValidationRun, setIsFetchingValidationRun] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isRollbacking, setIsRollbacking] = useState(false);
@@ -1309,6 +1338,32 @@ export default function AdminStudio() {
     return payload;
   }, [datasourceManifestPreview]);
 
+  useEffect(() => {
+    setDatasourceStructurePreview(null);
+    setDatasourceDataPreview(null);
+  }, [datasourceManifestPreview]);
+
+  useEffect(() => {
+    if (domain !== 'datasource') {
+      return;
+    }
+    const fallbackSourceId = datasourceDraft?.id?.trim() || selectedItemId.trim();
+    if (!fallbackSourceId) {
+      return;
+    }
+    setDatasourceCollectorSourceIdInput((previous) => (
+      previous.trim().length > 0 ? previous : fallbackSourceId
+    ));
+  }, [domain, datasourceDraft?.id, selectedItemId]);
+
+  useEffect(() => {
+    if (domain !== 'datasource') {
+      return;
+    }
+    void refreshDatasourceCollectionGovernance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [domain, datasourceCollectorSourceIdInput, datasourceDraft?.id, selectedItemId]);
+
   const publishGate = useMemo(() => {
     const summary = asRecord(selectedRevision?.validationSummary);
     const mode = asText(summary.mode);
@@ -1361,6 +1416,15 @@ export default function AdminStudio() {
     setSelectedReleaseRecordId('');
     setReleaseHistorySearch('');
     setReleaseHistoryChannelFilter('all');
+    setDatasourceStructurePreview(null);
+    setDatasourceDataPreview(null);
+    setDatasourcePreviewLimitInput('5');
+    setDatasourcePreviewStatusInput('');
+    setDatasourceCollectorSourceIdInput('');
+    setDatasourceCollectorNameInput('Match Snapshot Collector');
+    setDatasourceCollectors([]);
+    setDatasourceCollectionRuns([]);
+    setDatasourceCollectionSnapshots([]);
     setFeedback(null);
   }
 
@@ -1835,6 +1899,180 @@ export default function AdminStudio() {
       setFeedback({ tone: 'success', message: 'Builder loaded from raw JSON manifest.' });
     } catch (error) {
       setFeedback({ tone: 'error', message: summarizeError(error) });
+    }
+  }
+
+  async function handleRunDatasourcePreview() {
+    if (!datasourceManifestPreview) {
+      setFeedback({ tone: 'error', message: 'Datasource manifest is not ready for preview.' });
+      return;
+    }
+
+    const parsedLimit = Number.parseInt(datasourcePreviewLimitInput, 10);
+    const statuses = parseCsvText(datasourcePreviewStatusInput);
+    const limit = Number.isFinite(parsedLimit) ? parsedLimit : 5;
+
+    setIsRunningDatasourcePreview(true);
+    try {
+      const [structure, data] = await Promise.all([
+        previewDatasourceStructure({
+          manifest: datasourceManifestPreview,
+        }),
+        previewDatasourceData({
+          manifest: datasourceManifestPreview,
+          limit,
+          ...(statuses.length > 0 ? { statuses } : {}),
+        }),
+      ]);
+
+      setDatasourceStructurePreview(structure);
+      setDatasourceDataPreview(data);
+      setFeedback({
+        tone: 'success',
+        message: `Datasource server preview loaded (${data.summary.rowCount} row(s)).`,
+      });
+    } catch (error) {
+      setFeedback({ tone: 'error', message: summarizeError(error) });
+    } finally {
+      setIsRunningDatasourcePreview(false);
+    }
+  }
+
+  function resolveDatasourceCollectionSourceId() {
+    const fromInput = datasourceCollectorSourceIdInput.trim();
+    if (fromInput) {
+      return fromInput;
+    }
+    if (datasourceDraft?.id?.trim()) {
+      return datasourceDraft.id.trim();
+    }
+    if (selectedItemId.trim()) {
+      return selectedItemId.trim();
+    }
+    return '';
+  }
+
+  async function refreshDatasourceCollectionGovernance() {
+    if (domain !== 'datasource') {
+      return;
+    }
+    const sourceId = resolveDatasourceCollectionSourceId();
+    if (!sourceId) {
+      setDatasourceCollectors([]);
+      setDatasourceCollectionRuns([]);
+      setDatasourceCollectionSnapshots([]);
+      return;
+    }
+
+    setIsDatasourceCollectionLoading(true);
+    try {
+      const [collectorsResult, runsResult, snapshotsResult] = await Promise.all([
+        listDatasourceCollectors({
+          sourceId,
+          limit: 20,
+        }),
+        listDatasourceCollectionRuns({
+          sourceId,
+          limit: 20,
+        }),
+        listDatasourceCollectionSnapshots({
+          sourceId,
+          limit: 30,
+        }),
+      ]);
+
+      setDatasourceCollectors(collectorsResult.data || []);
+      setDatasourceCollectionRuns(runsResult.data || []);
+      setDatasourceCollectionSnapshots(snapshotsResult.data || []);
+    } catch (error) {
+      setFeedback({ tone: 'error', message: summarizeError(error) });
+    } finally {
+      setIsDatasourceCollectionLoading(false);
+    }
+  }
+
+  async function handleCreateDatasourceCollector() {
+    const sourceId = resolveDatasourceCollectionSourceId();
+    if (!sourceId) {
+      setFeedback({ tone: 'error', message: 'collector sourceId is required.' });
+      return;
+    }
+    if (!datasourceCollectorNameInput.trim()) {
+      setFeedback({ tone: 'error', message: 'collector name is required.' });
+      return;
+    }
+
+    setIsCreatingDatasourceCollector(true);
+    try {
+      await createDatasourceCollector({
+        sourceId,
+        name: datasourceCollectorNameInput.trim(),
+        provider: 'match_snapshot',
+        config: {
+          sampleLimit: 20,
+        },
+      });
+      setFeedback({ tone: 'success', message: `Collector created for source ${sourceId}.` });
+      await refreshDatasourceCollectionGovernance();
+    } catch (error) {
+      setFeedback({ tone: 'error', message: summarizeError(error) });
+    } finally {
+      setIsCreatingDatasourceCollector(false);
+    }
+  }
+
+  async function handleTriggerDatasourceCollectorRun(collectorId: string) {
+    setRunningCollectorId(collectorId);
+    try {
+      const result = await triggerDatasourceCollectorRun(collectorId, {
+        triggerType: 'manual',
+      });
+      setFeedback({
+        tone: 'success',
+        message: `Collection run succeeded (${result.snapshot.recordCount} record(s)).`,
+      });
+      await refreshDatasourceCollectionGovernance();
+    } catch (error) {
+      setFeedback({ tone: 'error', message: summarizeError(error) });
+    } finally {
+      setRunningCollectorId('');
+    }
+  }
+
+  async function handleConfirmDatasourceSnapshot(snapshotId: string, action: 'confirm' | 'reject') {
+    setConfirmingSnapshotId(snapshotId);
+    try {
+      await confirmDatasourceCollectionSnapshot(snapshotId, {
+        action,
+      });
+      setFeedback({
+        tone: action === 'confirm' ? 'success' : 'info',
+        message: `Snapshot ${action} completed.`,
+      });
+      await refreshDatasourceCollectionGovernance();
+    } catch (error) {
+      setFeedback({ tone: 'error', message: summarizeError(error) });
+    } finally {
+      setConfirmingSnapshotId('');
+    }
+  }
+
+  async function handleReleaseDatasourceSnapshot(snapshotId: string) {
+    setReleasingSnapshotId(snapshotId);
+    try {
+      const data = await releaseDatasourceCollectionSnapshot(snapshotId, {
+        channel: publishChannel as 'internal' | 'beta' | 'stable',
+      });
+      const deprecatedCount = data.deprecatedSnapshotIds.length;
+      setFeedback({
+        tone: 'success',
+        message: `Snapshot released to ${publishChannel}. Deprecated ${deprecatedCount} previous snapshot(s).`,
+      });
+      await refreshDatasourceCollectionGovernance();
+    } catch (error) {
+      setFeedback({ tone: 'error', message: summarizeError(error) });
+    } finally {
+      setReleasingSnapshotId('');
     }
   }
 
@@ -2772,6 +3010,333 @@ export default function AdminStudio() {
                           spellCheck={false}
                           className="min-h-[180px] w-full rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-[11px] text-zinc-200 focus:border-emerald-500 focus:outline-none"
                         />
+                      </div>
+
+                      <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <h4 className="text-[11px] uppercase tracking-wider text-zinc-500">
+                              Server Preview
+                            </h4>
+                            <p className="text-[11px] text-zinc-400">
+                              Query server-side structure and live DB samples using current datasource draft.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              type="number"
+                              min={1}
+                              max={20}
+                              value={datasourcePreviewLimitInput}
+                              onChange={(event) => setDatasourcePreviewLimitInput(event.target.value)}
+                              placeholder="limit"
+                              className="w-20 rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                              data-testid="datasource-server-preview-limit"
+                            />
+                            <input
+                              type="text"
+                              value={datasourcePreviewStatusInput}
+                              onChange={(event) => setDatasourcePreviewStatusInput(event.target.value)}
+                              placeholder="status filter (csv)"
+                              className="w-48 rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                              data-testid="datasource-server-preview-statuses"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1"
+                              onClick={handleRunDatasourcePreview}
+                              disabled={isRunningDatasourcePreview}
+                              data-testid="datasource-server-preview-run"
+                            >
+                              {isRunningDatasourcePreview ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                              Run Server Preview
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                          <div className="space-y-2 rounded-lg border border-white/10 bg-black/40 p-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+                                Server Structure Preview
+                              </p>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                  datasourceStructurePreview?.validation.status === 'passed'
+                                    ? 'bg-emerald-500/15 text-emerald-300'
+                                    : 'bg-zinc-700 text-zinc-300'
+                                }`}
+                              >
+                                {datasourceStructurePreview
+                                  ? datasourceStructurePreview.validation.status
+                                  : 'idle'}
+                              </span>
+                            </div>
+                            {!datasourceStructurePreview && (
+                              <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
+                                Run server preview to inspect datasource field mappings and path tree.
+                              </div>
+                            )}
+                            {datasourceStructurePreview && (
+                              <div className="space-y-2">
+                                <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3 xl:grid-cols-5">
+                                  <div className="rounded border border-white/10 bg-zinc-900 px-2 py-1.5 text-zinc-300">
+                                    fields: {datasourceStructurePreview.summary.totalFields}
+                                  </div>
+                                  <div className="rounded border border-white/10 bg-zinc-900 px-2 py-1.5 text-zinc-300">
+                                    mapped: {datasourceStructurePreview.summary.mappedFieldCount}
+                                  </div>
+                                  <div className="rounded border border-white/10 bg-zinc-900 px-2 py-1.5 text-zinc-300">
+                                    paths: {datasourceStructurePreview.summary.mappedPathCount}
+                                  </div>
+                                  <div className="rounded border border-white/10 bg-zinc-900 px-2 py-1.5 text-zinc-300">
+                                    duplicates: {datasourceStructurePreview.summary.duplicatePathCount}
+                                  </div>
+                                  <div className="rounded border border-white/10 bg-zinc-900 px-2 py-1.5 text-zinc-300">
+                                    invalid: {datasourceStructurePreview.summary.invalidFieldCount}
+                                  </div>
+                                </div>
+                                <div className="max-h-[200px] space-y-2 overflow-auto pr-1">
+                                  {datasourceStructurePreview.fieldCatalog.map((field, fieldIndex) => (
+                                    <div key={`server-preview-field-${field.fieldId}-${fieldIndex}`} className="rounded border border-white/10 bg-zinc-900 px-2 py-1.5">
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="font-semibold text-zinc-200">{field.fieldId}</span>
+                                        <span className="text-zinc-500">{field.fieldType}</span>
+                                      </div>
+                                      <div className="mt-1 break-all text-[11px] text-zinc-400">
+                                        {field.mappings.length > 0
+                                          ? field.mappings.map((mapping) => `${mapping.slot}:${mapping.pathText}`).join(' | ')
+                                          : 'No valid mapping'}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <textarea
+                                  value={prettyJson(datasourceStructurePreview.pathCatalog)}
+                                  readOnly
+                                  spellCheck={false}
+                                  className="min-h-[120px] w-full rounded-lg border border-white/10 bg-zinc-900 p-3 font-mono text-[11px] text-zinc-300 focus:border-emerald-500 focus:outline-none"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-2 rounded-lg border border-white/10 bg-black/40 p-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+                                Database Data Preview
+                              </p>
+                              <span className="rounded-full bg-zinc-700 px-2 py-0.5 text-[10px] font-semibold text-zinc-300">
+                                rows: {datasourceDataPreview?.summary.rowCount || 0}
+                              </span>
+                            </div>
+                            {!datasourceDataPreview && (
+                              <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
+                                No DB sample yet. Run server preview first.
+                              </div>
+                            )}
+                            {datasourceDataPreview && (
+                              <div className="space-y-2">
+                                <div className="text-[11px] text-zinc-400">
+                                  source: {datasourceDataPreview.source} | limit: {datasourceDataPreview.filters.limit} | statuses: {datasourceDataPreview.filters.statuses.join(', ') || 'all'}
+                                </div>
+                                {datasourceDataPreview.rows.length === 0 && (
+                                  <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
+                                    Query returned no rows for current filter.
+                                  </div>
+                                )}
+                                {datasourceDataPreview.rows.length > 0 && (
+                                  <div className="max-h-[280px] space-y-2 overflow-auto pr-1">
+                                    {datasourceDataPreview.rows.map((row) => (
+                                      <div key={`server-preview-row-${row.rowIndex}-${row.matchId || 'none'}`} className="space-y-1 rounded border border-white/10 bg-zinc-900 px-2 py-2">
+                                        <div className="text-[11px] text-zinc-400">
+                                          #{row.rowIndex} | {row.matchId || 'N/A'} | {row.league || '-'} | {row.status || '-'} | {formatTime(row.matchDate)}
+                                        </div>
+                                        <textarea
+                                          value={prettyJson(row.values)}
+                                          readOnly
+                                          spellCheck={false}
+                                          className="min-h-[88px] w-full rounded-lg border border-white/10 bg-black/50 p-2 font-mono text-[11px] text-zinc-300 focus:border-emerald-500 focus:outline-none"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <h4 className="text-[11px] uppercase tracking-wider text-emerald-300">
+                              Datasource Collection Governance
+                            </h4>
+                            <p className="text-[11px] text-zinc-400">
+                              Collect, confirm, and release lifecycle for datasource snapshots.
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={refreshDatasourceCollectionGovernance}
+                            disabled={isDatasourceCollectionLoading}
+                          >
+                            {isDatasourceCollectionLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                            Refresh
+                          </Button>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-2 xl:grid-cols-[1fr_1fr_auto]">
+                          <input
+                            type="text"
+                            value={datasourceCollectorSourceIdInput}
+                            onChange={(event) => setDatasourceCollectorSourceIdInput(event.target.value)}
+                            placeholder="sourceId"
+                            className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                          />
+                          <input
+                            type="text"
+                            value={datasourceCollectorNameInput}
+                            onChange={(event) => setDatasourceCollectorNameInput(event.target.value)}
+                            placeholder="collector name"
+                            className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={handleCreateDatasourceCollector}
+                            disabled={isCreatingDatasourceCollector}
+                          >
+                            {isCreatingDatasourceCollector ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                            Create Collector
+                          </Button>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                          <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                            <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                              Collectors ({datasourceCollectors.length})
+                            </div>
+                            {datasourceCollectors.length === 0 && (
+                              <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
+                                No collectors for current source.
+                              </div>
+                            )}
+                            {datasourceCollectors.length > 0 && (
+                              <div className="max-h-[220px] space-y-2 overflow-auto pr-1">
+                                {datasourceCollectors.map((collector) => (
+                                  <div key={collector.id} className="rounded-lg border border-white/10 bg-black/40 p-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                      <div>
+                                        <div className="font-semibold text-zinc-100">{collector.name}</div>
+                                        <div className="text-zinc-400">
+                                          {collector.sourceId} | {collector.provider} | last: {collector.lastRunStatus}
+                                        </div>
+                                      </div>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1"
+                                        onClick={() => handleTriggerDatasourceCollectorRun(collector.id)}
+                                        disabled={runningCollectorId === collector.id}
+                                      >
+                                        {runningCollectorId === collector.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                                        Run
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                            <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                              Snapshots ({datasourceCollectionSnapshots.length})
+                            </div>
+                            {datasourceCollectionSnapshots.length === 0 && (
+                              <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
+                                No snapshots yet. Trigger collector run first.
+                              </div>
+                            )}
+                            {datasourceCollectionSnapshots.length > 0 && (
+                              <div className="max-h-[260px] space-y-2 overflow-auto pr-1">
+                                {datasourceCollectionSnapshots.map((snapshot) => (
+                                  <div key={snapshot.id} className="space-y-2 rounded-lg border border-white/10 bg-black/40 p-2">
+                                    <div className="text-[11px] text-zinc-300">
+                                      {snapshot.id}
+                                    </div>
+                                    <div className="text-[11px] text-zinc-400">
+                                      records: {snapshot.recordCount} | confirm: {snapshot.confirmationStatus} | release: {snapshot.releaseStatus}{snapshot.releaseChannel ? ` (${snapshot.releaseChannel})` : ''}
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1"
+                                        onClick={() => handleConfirmDatasourceSnapshot(snapshot.id, 'confirm')}
+                                        disabled={confirmingSnapshotId === snapshot.id || snapshot.confirmationStatus === 'confirmed'}
+                                      >
+                                        {confirmingSnapshotId === snapshot.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                                        Confirm
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1"
+                                        onClick={() => handleConfirmDatasourceSnapshot(snapshot.id, 'reject')}
+                                        disabled={confirmingSnapshotId === snapshot.id || snapshot.releaseStatus === 'released'}
+                                      >
+                                        <XCircle className="h-3.5 w-3.5" />
+                                        Reject
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1"
+                                        onClick={() => handleReleaseDatasourceSnapshot(snapshot.id)}
+                                        disabled={
+                                          releasingSnapshotId === snapshot.id
+                                          || snapshot.confirmationStatus !== 'confirmed'
+                                          || snapshot.releaseStatus === 'released'
+                                        }
+                                      >
+                                        {releasingSnapshotId === snapshot.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                                        Release
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                          <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                            Recent Runs ({datasourceCollectionRuns.length})
+                          </div>
+                          {datasourceCollectionRuns.length === 0 && (
+                            <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
+                              No run records for current source.
+                            </div>
+                          )}
+                          {datasourceCollectionRuns.length > 0 && (
+                            <div className="max-h-[180px] space-y-1 overflow-auto pr-1">
+                              {datasourceCollectionRuns.map((run) => (
+                                <div key={run.id} className="rounded border border-white/10 bg-black/40 px-2 py-1.5 text-[11px] text-zinc-300">
+                                  {run.id} | {run.status} | {run.triggerType} | started: {formatTime(run.startedAt)}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}

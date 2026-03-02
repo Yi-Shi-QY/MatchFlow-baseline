@@ -259,6 +259,166 @@ async function main() {
     );
 
     await runCase(
+      'datasource preview routes enforce permission and return stable validation/db errors',
+      async () => {
+        const noCatalogPermissionToken = createAccessToken(['datasource:use:fundamental']);
+        const catalogEditorToken = createAccessToken(['catalog:datasource:edit'], ['tenant_admin']);
+        const payload = {
+          manifest: {
+            id: 'market_source',
+            name: 'Market Source',
+            fields: [{ id: 'had_home', type: 'number', path: ['odds', 'had', 'h'] }],
+          },
+        };
+
+        const deniedStructure = await requestJsonWithBody(
+          baseUrl,
+          '/admin/catalog/datasource/preview/structure',
+          noCatalogPermissionToken,
+          'POST',
+          payload,
+        );
+        assert.equal(deniedStructure.status, 403);
+        assert.equal(deniedStructure.body?.error?.code, 'AUTH_FORBIDDEN');
+
+        const deniedData = await requestJsonWithBody(
+          baseUrl,
+          '/admin/catalog/datasource/preview/data',
+          noCatalogPermissionToken,
+          'POST',
+          payload,
+        );
+        assert.equal(deniedData.status, 403);
+        assert.equal(deniedData.body?.error?.code, 'AUTH_FORBIDDEN');
+
+        const structure = await requestJsonWithBody(
+          baseUrl,
+          '/admin/catalog/datasource/preview/structure',
+          catalogEditorToken,
+          'POST',
+          payload,
+        );
+        assert.equal(structure.status, 200);
+        assert.equal(structure.body?.data?.sourceId, 'market_source');
+        assert.ok(Array.isArray(structure.body?.data?.fieldCatalog));
+
+        const invalidManifest = await requestJsonWithBody(
+          baseUrl,
+          '/admin/catalog/datasource/preview/data',
+          catalogEditorToken,
+          'POST',
+          { manifest: 'invalid' },
+        );
+        assert.equal(invalidManifest.status, 400);
+        assert.equal(invalidManifest.body?.error?.code, 'CATALOG_MANIFEST_INVALID');
+
+        const dbRequired = await requestJsonWithBody(
+          baseUrl,
+          '/admin/catalog/datasource/preview/data',
+          catalogEditorToken,
+          'POST',
+          payload,
+        );
+        assert.equal(dbRequired.status, 503);
+        assert.equal(dbRequired.body?.error?.code, 'CATALOG_DB_REQUIRED');
+      },
+      counters,
+    );
+
+    await runCase(
+      'datasource collection routes enforce permission and DB-required behavior',
+      async () => {
+        const noCatalogPermissionToken = createAccessToken(['datasource:use:fundamental']);
+        const catalogEditorToken = createAccessToken(['catalog:datasource:edit'], ['tenant_admin']);
+        const releasePublisherToken = createAccessToken(['release:publish'], ['tenant_admin']);
+
+        const deniedCollectors = await requestJson(
+          baseUrl,
+          '/admin/data-collections/collectors',
+          noCatalogPermissionToken,
+        );
+        assert.equal(deniedCollectors.status, 403);
+        assert.equal(deniedCollectors.body?.error?.code, 'AUTH_FORBIDDEN');
+
+        const listCollectorsDbRequired = await requestJson(
+          baseUrl,
+          '/admin/data-collections/collectors',
+          catalogEditorToken,
+        );
+        assert.equal(listCollectorsDbRequired.status, 503);
+        assert.equal(listCollectorsDbRequired.body?.error?.code, 'CATALOG_DB_REQUIRED');
+
+        const createCollectorDbRequired = await requestJsonWithBody(
+          baseUrl,
+          '/admin/data-collections/collectors',
+          catalogEditorToken,
+          'POST',
+          {
+            sourceId: 'market_source',
+            name: 'Market Snapshot Collector',
+            provider: 'match_snapshot',
+            config: { sampleLimit: 5 },
+          },
+        );
+        assert.equal(createCollectorDbRequired.status, 503);
+        assert.equal(createCollectorDbRequired.body?.error?.code, 'CATALOG_DB_REQUIRED');
+
+        const deniedImport = await requestJsonWithBody(
+          baseUrl,
+          '/admin/data-collections/collectors/00000000-0000-4000-8000-000000000001/import',
+          noCatalogPermissionToken,
+          'POST',
+          {
+            payload: {
+              rows: [{ id: 'm1' }],
+            },
+          },
+        );
+        assert.equal(deniedImport.status, 403);
+        assert.equal(deniedImport.body?.error?.code, 'AUTH_FORBIDDEN');
+
+        const importDbRequired = await requestJsonWithBody(
+          baseUrl,
+          '/admin/data-collections/collectors/00000000-0000-4000-8000-000000000001/import',
+          catalogEditorToken,
+          'POST',
+          {
+            payload: {
+              rows: [{ id: 'm1' }],
+            },
+          },
+        );
+        assert.equal(importDbRequired.status, 503);
+        assert.equal(importDbRequired.body?.error?.code, 'CATALOG_DB_REQUIRED');
+
+        const deniedRelease = await requestJsonWithBody(
+          baseUrl,
+          '/admin/data-collections/snapshots/demo/release',
+          catalogEditorToken,
+          'POST',
+          {
+            channel: 'stable',
+          },
+        );
+        assert.equal(deniedRelease.status, 403);
+        assert.equal(deniedRelease.body?.error?.code, 'AUTH_FORBIDDEN');
+
+        const releaseDbRequired = await requestJsonWithBody(
+          baseUrl,
+          '/admin/data-collections/snapshots/00000000-0000-4000-8000-000000000001/release',
+          releasePublisherToken,
+          'POST',
+          {
+            channel: 'stable',
+          },
+        );
+        assert.equal(releaseDbRequired.status, 503);
+        assert.equal(releaseDbRequired.body?.error?.code, 'CATALOG_DB_REQUIRED');
+      },
+      counters,
+    );
+
+    await runCase(
       'catalog diff and draft-save routes enforce permission first and stable validation behavior',
       async () => {
         const noCatalogPermissionToken = createAccessToken(['datasource:use:fundamental']);

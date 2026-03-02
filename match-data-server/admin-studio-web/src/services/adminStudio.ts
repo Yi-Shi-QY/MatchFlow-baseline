@@ -139,6 +139,146 @@ export interface ReleaseRecord {
   updatedAt: string;
 }
 
+export type DatasourcePreviewPathSlot = 'value' | 'home' | 'draw' | 'away';
+
+export interface DatasourcePreviewFieldMapping {
+  slot: DatasourcePreviewPathSlot;
+  path: string[];
+  pathText: string;
+}
+
+export interface DatasourcePreviewField {
+  fieldId: string;
+  fieldType: string;
+  mappings: DatasourcePreviewFieldMapping[];
+}
+
+export interface DatasourcePreviewPathReference {
+  fieldId: string;
+  fieldType: string;
+  slot: DatasourcePreviewPathSlot;
+}
+
+export interface DatasourcePreviewPathCatalogItem {
+  pathText: string;
+  segments: string[];
+  fieldRefs: DatasourcePreviewPathReference[];
+}
+
+export interface DatasourcePreviewTreeNode {
+  segment: string;
+  path: string;
+  fieldRefs: DatasourcePreviewPathReference[];
+  children: DatasourcePreviewTreeNode[];
+}
+
+export interface DatasourceStructurePreview {
+  sourceId: string;
+  displayName: string;
+  requiredPermissions: string[];
+  validation: {
+    status: 'passed' | 'failed';
+    failedChecks: string[];
+    checks: Array<{
+      name: string;
+      status: 'passed' | 'failed';
+      message: string;
+      details?: unknown;
+    }>;
+  };
+  summary: {
+    totalFields: number;
+    mappedFieldCount: number;
+    mappedPathCount: number;
+    duplicatePathCount: number;
+    invalidFieldCount: number;
+  };
+  fieldCatalog: DatasourcePreviewField[];
+  pathCatalog: DatasourcePreviewPathCatalogItem[];
+  tree: DatasourcePreviewTreeNode;
+  sourceContextPreview: Record<string, unknown>;
+}
+
+export interface DatasourceDataPreviewRow {
+  rowIndex: number;
+  matchId: string | null;
+  league: string | null;
+  status: string | null;
+  matchDate: string | null;
+  values: Record<string, unknown>;
+  sourceRecord?: Record<string, unknown>;
+}
+
+export interface DatasourceDataPreview {
+  source: string;
+  sampledAt: string;
+  filters: {
+    limit: number;
+    statuses: string[];
+  };
+  summary: {
+    rowCount: number;
+    fieldCount: number;
+    pathCount: number;
+  };
+  fieldCatalog: DatasourcePreviewField[];
+  rows: DatasourceDataPreviewRow[];
+}
+
+export interface DatasourceCollector {
+  id: string;
+  tenantId: string;
+  sourceId: string;
+  name: string;
+  provider: 'match_snapshot' | 'manual_import';
+  config: Record<string, unknown>;
+  scheduleCron: string | null;
+  isEnabled: boolean;
+  lastRunAt: string | null;
+  lastRunStatus: 'idle' | 'running' | 'succeeded' | 'failed';
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DatasourceCollectionRun {
+  id: string;
+  tenantId: string;
+  collectorId: string;
+  sourceId: string;
+  triggerType: 'manual' | 'scheduled' | 'retry';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  requestPayload: Record<string, unknown>;
+  resultSummary: Record<string, unknown>;
+  errorMessage: string | null;
+  requestedByUserId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DatasourceCollectionSnapshot {
+  id: string;
+  tenantId: string;
+  collectorId: string;
+  runId: string | null;
+  sourceId: string;
+  payload: Record<string, unknown>;
+  recordCount: number;
+  contentHash: string | null;
+  confirmationStatus: 'pending' | 'confirmed' | 'rejected';
+  confirmationNotes: string | null;
+  confirmedByUserId: string | null;
+  confirmedAt: string | null;
+  releaseStatus: 'draft' | 'released' | 'deprecated';
+  releaseChannel: 'internal' | 'beta' | 'stable' | null;
+  releasedByUserId: string | null;
+  releasedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface CatalogListResponse {
   data: CatalogEntry[];
   pagination: Pagination;
@@ -151,6 +291,21 @@ interface RevisionListResponse {
 
 interface ReleaseHistoryResponse {
   data: ReleaseRecord[];
+  pagination: Pagination;
+}
+
+interface DatasourceCollectorListResponse {
+  data: DatasourceCollector[];
+  pagination: Pagination;
+}
+
+interface DatasourceCollectionRunListResponse {
+  data: DatasourceCollectionRun[];
+  pagination: Pagination;
+}
+
+interface DatasourceCollectionSnapshotListResponse {
+  data: DatasourceCollectionSnapshot[];
   pagination: Pagination;
 }
 
@@ -171,7 +326,7 @@ function buildBaseUrl() {
   };
 }
 
-function toQueryString(query?: Record<string, string | number | undefined | null>) {
+function toQueryString(query?: Record<string, string | number | boolean | undefined | null>) {
   const searchParams = new URLSearchParams();
   Object.entries(query || {}).forEach(([key, value]) => {
     if (value === undefined || value === null || String(value).trim() === '') {
@@ -182,7 +337,7 @@ function toQueryString(query?: Record<string, string | number | undefined | null
   return searchParams.toString();
 }
 
-function buildUrl(path: string, query?: Record<string, string | number | undefined | null>) {
+function buildUrl(path: string, query?: Record<string, string | number | boolean | undefined | null>) {
   const { baseUrl } = buildBaseUrl();
   const url = new URL(path, baseUrl);
   const queryString = toQueryString(query);
@@ -196,7 +351,7 @@ async function requestJson<T>(
   path: string,
   options: {
     method?: 'GET' | 'POST' | 'PUT';
-    query?: Record<string, string | number | undefined | null>;
+    query?: Record<string, string | number | boolean | undefined | null>;
     body?: unknown;
   } = {},
 ): Promise<T> {
@@ -327,6 +482,207 @@ export async function getCatalogRevisionDiff(
         fromVersion,
         toVersion,
       },
+    },
+  );
+  return response.data;
+}
+
+export async function previewDatasourceStructure(payload: {
+  manifest: Record<string, unknown>;
+}) {
+  const response = await requestJson<{ data: DatasourceStructurePreview }>(
+    '/admin/catalog/datasource/preview/structure',
+    {
+      method: 'POST',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function previewDatasourceData(payload: {
+  manifest: Record<string, unknown>;
+  limit?: number;
+  statuses?: string[];
+  includeSourceRecord?: boolean;
+}) {
+  const response = await requestJson<{ data: DatasourceDataPreview }>(
+    '/admin/catalog/datasource/preview/data',
+    {
+      method: 'POST',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function listDatasourceCollectors(params: {
+  sourceId?: string;
+  isEnabled?: boolean;
+  limit?: number;
+  offset?: number;
+} = {}) {
+  return requestJson<DatasourceCollectorListResponse>('/admin/data-collections/collectors', {
+    method: 'GET',
+    query: params,
+  });
+}
+
+export async function createDatasourceCollector(payload: {
+  sourceId: string;
+  name: string;
+  provider?: 'match_snapshot' | 'manual_import';
+  config?: Record<string, unknown>;
+  scheduleCron?: string;
+  isEnabled?: boolean;
+}) {
+  const response = await requestJson<{ data: DatasourceCollector }>(
+    '/admin/data-collections/collectors',
+    {
+      method: 'POST',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function updateDatasourceCollector(
+  collectorId: string,
+  payload: {
+    sourceId?: string;
+    name?: string;
+    provider?: 'match_snapshot' | 'manual_import';
+    config?: Record<string, unknown>;
+    scheduleCron?: string;
+    isEnabled?: boolean;
+  },
+) {
+  const response = await requestJson<{ data: DatasourceCollector }>(
+    `/admin/data-collections/collectors/${encodeURIComponent(collectorId)}`,
+    {
+      method: 'PUT',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function triggerDatasourceCollectorRun(
+  collectorId: string,
+  payload: {
+    triggerType?: 'manual' | 'scheduled' | 'retry';
+    statuses?: string[];
+    limit?: number;
+    force?: boolean;
+  } = {},
+) {
+  const response = await requestJson<{
+    data: {
+      collector: DatasourceCollector;
+      run: DatasourceCollectionRun;
+      snapshot: DatasourceCollectionSnapshot;
+    };
+  }>(
+    `/admin/data-collections/collectors/${encodeURIComponent(collectorId)}/run`,
+    {
+      method: 'POST',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function importDatasourceCollectorSnapshot(
+  collectorId: string,
+  payload: {
+    triggerType?: 'manual' | 'scheduled' | 'retry';
+    sourceId?: string;
+    payload: Record<string, unknown>;
+    recordCount?: number;
+    contentHash?: string;
+    allowDuplicate?: boolean;
+    force?: boolean;
+  },
+) {
+  const response = await requestJson<{
+    data: {
+      collector: DatasourceCollector;
+      run: DatasourceCollectionRun;
+      snapshot: DatasourceCollectionSnapshot;
+      deduplicated?: boolean;
+    };
+  }>(
+    `/admin/data-collections/collectors/${encodeURIComponent(collectorId)}/import`,
+    {
+      method: 'POST',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function listDatasourceCollectionRuns(params: {
+  collectorId?: string;
+  sourceId?: string;
+  status?: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  triggerType?: 'manual' | 'scheduled' | 'retry';
+  limit?: number;
+  offset?: number;
+} = {}) {
+  return requestJson<DatasourceCollectionRunListResponse>('/admin/data-collections/runs', {
+    method: 'GET',
+    query: params,
+  });
+}
+
+export async function listDatasourceCollectionSnapshots(params: {
+  collectorId?: string;
+  sourceId?: string;
+  confirmationStatus?: 'pending' | 'confirmed' | 'rejected';
+  releaseStatus?: 'draft' | 'released' | 'deprecated';
+  releaseChannel?: 'internal' | 'beta' | 'stable';
+  limit?: number;
+  offset?: number;
+} = {}) {
+  return requestJson<DatasourceCollectionSnapshotListResponse>('/admin/data-collections/snapshots', {
+    method: 'GET',
+    query: params,
+  });
+}
+
+export async function confirmDatasourceCollectionSnapshot(
+  snapshotId: string,
+  payload: {
+    action?: 'confirm' | 'reject';
+    notes?: string;
+  } = {},
+) {
+  const response = await requestJson<{ data: DatasourceCollectionSnapshot }>(
+    `/admin/data-collections/snapshots/${encodeURIComponent(snapshotId)}/confirm`,
+    {
+      method: 'POST',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function releaseDatasourceCollectionSnapshot(
+  snapshotId: string,
+  payload: {
+    channel?: 'internal' | 'beta' | 'stable';
+  } = {},
+) {
+  const response = await requestJson<{
+    data: {
+      snapshot: DatasourceCollectionSnapshot;
+      deprecatedSnapshotIds: string[];
+    };
+  }>(
+    `/admin/data-collections/snapshots/${encodeURIComponent(snapshotId)}/release`,
+    {
+      method: 'POST',
+      body: payload,
     },
   );
   return response.data;

@@ -353,7 +353,7 @@ async function main() {
             description: 'Agent schema for strict validator',
             rolePrompt: {
               en: 'You are a concise football analyst.',
-              zh: '你是一个简洁的足球分析师。',
+              zh: 'Concise football analyst (zh).',
             },
             skills: ['select_plan_template_v2'],
             contextDependencies: 'all',
@@ -419,6 +419,309 @@ async function main() {
         assert.ok(checks.some((check) => check.name === 'dependency'));
         assert.ok(checks.some((check) => check.name === 'compatibility'));
       }
+    }, counters);
+
+    await runCase('phase-gate 2c: datasource preview endpoints return structure and db samples', async () => {
+      const manifest = {
+        id: 'preview_source',
+        name: 'Preview Source',
+        fields: [
+          { id: 'league', type: 'text', path: ['league'] },
+          { id: 'had_home', type: 'number', path: ['odds', 'had', 'h'] },
+          { id: 'shots_home', type: 'number', path: ['stats', 'shots', 'home'] },
+        ],
+      };
+
+      const structure = await requestJson(baseUrl, '/admin/catalog/datasource/preview/structure', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({ manifest }),
+      });
+      assert.equal(structure.status, 200);
+      assert.equal(structure.body?.data?.summary?.totalFields, 3);
+      assert.equal(structure.body?.data?.summary?.mappedPathCount, 3);
+      assert.ok(Array.isArray(structure.body?.data?.pathCatalog));
+      assert.ok(
+        structure.body?.data?.pathCatalog?.some((item) => item.pathText === 'odds.had.h'),
+      );
+
+      const data = await requestJson(baseUrl, '/admin/catalog/datasource/preview/data', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          manifest,
+          limit: 3,
+        }),
+      });
+      assert.equal(data.status, 200);
+      assert.equal(data.body?.data?.summary?.fieldCount, 3);
+      assert.ok(Array.isArray(data.body?.data?.rows));
+      assert.ok((data.body?.data?.rows?.length || 0) > 0);
+      const firstRow = data.body?.data?.rows?.[0];
+      assert.ok(firstRow?.values);
+      assert.ok(Object.prototype.hasOwnProperty.call(firstRow.values, 'league'));
+    }, counters);
+
+    await runCase('phase-gate 2d: datasource collection lifecycle (collect -> confirm -> release)', async () => {
+      const sourceId = `collection_source_${Date.now()}`;
+      const createCollector = await requestJson(baseUrl, '/admin/data-collections/collectors', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          sourceId,
+          name: 'Match Snapshot Collector',
+          provider: 'match_snapshot',
+          config: {
+            sampleLimit: 4,
+            statuses: ['upcoming', 'live', 'finished'],
+          },
+        }),
+      });
+      assert.equal(createCollector.status, 201);
+      const collectorId = createCollector.body?.data?.id;
+      assert.ok(collectorId);
+
+      const importPayload = {
+        source: 'script',
+        sampledAt: new Date().toISOString(),
+        rows: [
+          {
+            matchNum: 'monday001',
+            league: 'itest_league',
+            homeTeam: 'homeA',
+            awayTeam: 'awayB',
+            odds: {
+              nspf: { win: 2.1, draw: 3.2, lose: 3.1 },
+            },
+          },
+        ],
+      };
+
+      const importResp = await requestJson(
+        baseUrl,
+        `/admin/data-collections/collectors/${encodeURIComponent(collectorId)}/import`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            triggerType: 'manual',
+            sourceId,
+            payload: importPayload,
+          }),
+        },
+      );
+      assert.equal(importResp.status, 202);
+      assert.equal(importResp.body?.data?.run?.status, 'succeeded');
+      assert.equal(importResp.body?.data?.snapshot?.confirmationStatus, 'pending');
+      assert.equal(importResp.body?.data?.deduplicated, false);
+      const importedSnapshotId = importResp.body?.data?.snapshot?.id;
+      assert.ok(importedSnapshotId);
+
+      const duplicateImportResp = await requestJson(
+        baseUrl,
+        `/admin/data-collections/collectors/${encodeURIComponent(collectorId)}/import`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            triggerType: 'manual',
+            sourceId,
+            payload: importPayload,
+          }),
+        },
+      );
+      assert.equal(duplicateImportResp.status, 202);
+      assert.equal(duplicateImportResp.body?.data?.deduplicated, true);
+      assert.equal(duplicateImportResp.body?.data?.snapshot?.id, importedSnapshotId);
+      assert.equal(duplicateImportResp.body?.data?.run?.resultSummary?.deduplicated, true);
+
+      const exceededRecordCountImport = await requestJson(
+        baseUrl,
+        `/admin/data-collections/collectors/${encodeURIComponent(collectorId)}/import`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            triggerType: 'manual',
+            sourceId,
+            payload: importPayload,
+            recordCount: 999999,
+          }),
+        },
+      );
+      assert.equal(exceededRecordCountImport.status, 400);
+      assert.equal(
+        exceededRecordCountImport.body?.error?.code,
+        'COLLECTION_IMPORT_RECORD_COUNT_EXCEEDED',
+      );
+
+      const collectors = await requestJson(
+        baseUrl,
+        `/admin/data-collections/collectors?sourceId=${encodeURIComponent(sourceId)}&limit=20`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(collectors.status, 200);
+      assert.ok((collectors.body?.data || []).some((item) => item.id === collectorId));
+
+      const run1 = await requestJson(
+        baseUrl,
+        `/admin/data-collections/collectors/${encodeURIComponent(collectorId)}/run`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            triggerType: 'manual',
+          }),
+        },
+      );
+      assert.equal(run1.status, 202);
+      assert.equal(run1.body?.data?.run?.status, 'succeeded');
+      const firstSnapshotId = run1.body?.data?.snapshot?.id;
+      assert.ok(firstSnapshotId);
+      assert.equal(run1.body?.data?.snapshot?.confirmationStatus, 'pending');
+
+      const listRuns = await requestJson(
+        baseUrl,
+        `/admin/data-collections/runs?collectorId=${encodeURIComponent(collectorId)}&limit=20`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(listRuns.status, 200);
+      assert.ok((listRuns.body?.data || []).length > 0);
+
+      const confirm1 = await requestJson(
+        baseUrl,
+        `/admin/data-collections/snapshots/${encodeURIComponent(firstSnapshotId)}/confirm`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            action: 'confirm',
+            notes: 'first confirmation pass',
+          }),
+        },
+      );
+      assert.equal(confirm1.status, 200);
+      assert.equal(confirm1.body?.data?.confirmationStatus, 'confirmed');
+
+      const release1 = await requestJson(
+        baseUrl,
+        `/admin/data-collections/snapshots/${encodeURIComponent(firstSnapshotId)}/release`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            channel: 'stable',
+          }),
+        },
+      );
+      assert.equal(release1.status, 200);
+      assert.equal(release1.body?.data?.snapshot?.releaseStatus, 'released');
+      assert.equal(release1.body?.data?.snapshot?.releaseChannel, 'stable');
+
+      const run2 = await requestJson(
+        baseUrl,
+        `/admin/data-collections/collectors/${encodeURIComponent(collectorId)}/run`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            triggerType: 'manual',
+            limit: 3,
+          }),
+        },
+      );
+      assert.equal(run2.status, 202);
+      assert.equal(run2.body?.data?.run?.status, 'succeeded');
+      const secondSnapshotId = run2.body?.data?.snapshot?.id;
+      assert.ok(secondSnapshotId);
+
+      const blockedRelease = await requestJson(
+        baseUrl,
+        `/admin/data-collections/snapshots/${encodeURIComponent(secondSnapshotId)}/release`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            channel: 'stable',
+          }),
+        },
+      );
+      assert.equal(blockedRelease.status, 409);
+      assert.equal(blockedRelease.body?.error?.code, 'COLLECTION_RELEASE_BLOCKED_BY_CONFIRMATION');
+
+      const confirm2 = await requestJson(
+        baseUrl,
+        `/admin/data-collections/snapshots/${encodeURIComponent(secondSnapshotId)}/confirm`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            action: 'confirm',
+            notes: 'second confirmation pass',
+          }),
+        },
+      );
+      assert.equal(confirm2.status, 200);
+      assert.equal(confirm2.body?.data?.confirmationStatus, 'confirmed');
+
+      const release2 = await requestJson(
+        baseUrl,
+        `/admin/data-collections/snapshots/${encodeURIComponent(secondSnapshotId)}/release`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            channel: 'stable',
+          }),
+        },
+      );
+      assert.equal(release2.status, 200);
+      assert.equal(release2.body?.data?.snapshot?.releaseStatus, 'released');
+      assert.equal(release2.body?.data?.snapshot?.releaseChannel, 'stable');
+      const deprecatedIds = release2.body?.data?.deprecatedSnapshotIds || [];
+      assert.ok(deprecatedIds.includes(firstSnapshotId));
+
+      const releasedSnapshots = await requestJson(
+        baseUrl,
+        `/admin/data-collections/snapshots?sourceId=${encodeURIComponent(sourceId)}&releaseStatus=released&releaseChannel=stable&limit=20`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(releasedSnapshots.status, 200);
+      const releasedRows = releasedSnapshots.body?.data || [];
+      assert.ok(releasedRows.some((item) => item.id === secondSnapshotId));
+
+      const deprecatedSnapshots = await requestJson(
+        baseUrl,
+        `/admin/data-collections/snapshots?sourceId=${encodeURIComponent(sourceId)}&releaseStatus=deprecated&releaseChannel=stable&limit=20`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(deprecatedSnapshots.status, 200);
+      const deprecatedRows = deprecatedSnapshots.body?.data || [];
+      assert.ok(deprecatedRows.some((item) => item.id === firstSnapshotId));
+
+      const pendingSnapshots = await requestJson(
+        baseUrl,
+        `/admin/data-collections/snapshots?sourceId=${encodeURIComponent(sourceId)}&confirmationStatus=pending&limit=20`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(pendingSnapshots.status, 200);
+      const pendingRows = pendingSnapshots.body?.data || [];
+      assert.ok(pendingRows.some((item) => item.id === importedSnapshotId));
     }, counters);
 
     const releaseItemId = `ds_release_${Date.now()}`;
@@ -715,6 +1018,56 @@ async function main() {
       );
       assert.notEqual(catalogDraftSaveAllowed.status, 403);
 
+      const catalogPreviewStructureAllowed = await requestJson(
+        baseUrl,
+        '/admin/catalog/datasource/preview/structure',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${catalogToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            manifest: {
+              id: 'preview_permission_check',
+              name: 'Preview Permission Check',
+              fields: [
+                { id: 'league', type: 'text', path: ['league'] },
+              ],
+            },
+          }),
+        },
+      );
+      assert.notEqual(catalogPreviewStructureAllowed.status, 403);
+
+      const catalogCollectionAllowed = await requestJson(
+        baseUrl,
+        '/admin/data-collections/collectors?limit=10',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${catalogToken}` },
+        },
+      );
+      assert.notEqual(catalogCollectionAllowed.status, 403);
+
+      const catalogImportAllowed = await requestJson(
+        baseUrl,
+        '/admin/data-collections/collectors/00000000-0000-4000-8000-000000000010/import',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${catalogToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            payload: {
+              rows: [{ id: 'x1' }],
+            },
+          }),
+        },
+      );
+      assert.notEqual(catalogImportAllowed.status, 403);
+
       const catalogDeniedValidate = await requestJson(baseUrl, '/admin/validate/run', {
         method: 'POST',
         headers: {
@@ -772,6 +1125,56 @@ async function main() {
       );
       assert.equal(validateDeniedDraftSave.status, 403);
 
+      const validateDeniedPreviewStructure = await requestJson(
+        baseUrl,
+        '/admin/catalog/datasource/preview/structure',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${validateToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            manifest: {
+              id: 'preview_permission_check',
+              name: 'Preview Permission Check',
+              fields: [
+                { id: 'league', type: 'text', path: ['league'] },
+              ],
+            },
+          }),
+        },
+      );
+      assert.equal(validateDeniedPreviewStructure.status, 403);
+
+      const validateDeniedCollectionList = await requestJson(
+        baseUrl,
+        '/admin/data-collections/collectors?limit=10',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${validateToken}` },
+        },
+      );
+      assert.equal(validateDeniedCollectionList.status, 403);
+
+      const validateDeniedCollectionImport = await requestJson(
+        baseUrl,
+        '/admin/data-collections/collectors/00000000-0000-4000-8000-000000000011/import',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${validateToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            payload: {
+              rows: [{ id: 'x1' }],
+            },
+          }),
+        },
+      );
+      assert.equal(validateDeniedCollectionImport.status, 403);
+
       const validateAllowed = await requestJson(baseUrl, '/admin/validate/run', {
         method: 'POST',
         headers: {
@@ -802,6 +1205,20 @@ async function main() {
       });
       assert.equal(releaseReadDeniedPublish.status, 403);
 
+      const releaseReadDeniedCollectionRelease = await requestJson(
+        baseUrl,
+        '/admin/data-collections/snapshots/non-existing/release',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${releaseReadToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ channel: 'stable' }),
+        },
+      );
+      assert.equal(releaseReadDeniedCollectionRelease.status, 403);
+
       const releasePublishAllowed = await requestJson(baseUrl, '/admin/release/publish', {
         method: 'POST',
         headers: {
@@ -811,6 +1228,20 @@ async function main() {
         body: JSON.stringify({}),
       });
       assert.equal(releasePublishAllowed.status, 400);
+
+      const releasePublishCollectionReleaseAllowed = await requestJson(
+        baseUrl,
+        '/admin/data-collections/snapshots/00000000-0000-4000-8000-000000000002/release',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${releasePublishToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ channel: 'stable' }),
+        },
+      );
+      assert.notEqual(releasePublishCollectionReleaseAllowed.status, 403);
 
       const releasePublishDeniedRead = await requestJson(baseUrl, '/admin/release/history', {
         method: 'GET',
@@ -834,7 +1265,12 @@ async function main() {
            'studio.catalog.revision.create',
            'studio.validation.run',
            'studio.catalog.publish',
-           'studio.catalog.rollback'
+           'studio.catalog.rollback',
+           'datasource.collection.collector.create',
+           'datasource.collection.run',
+           'datasource.collection.import',
+           'datasource.collection.snapshot.confirm',
+           'datasource.collection.snapshot.release'
          )
          GROUP BY action`,
       );
@@ -845,6 +1281,11 @@ async function main() {
       assert.ok((map.get('studio.validation.run') || 0) > 0);
       assert.ok((map.get('studio.catalog.publish') || 0) > 0);
       assert.ok((map.get('studio.catalog.rollback') || 0) > 0);
+      assert.ok((map.get('datasource.collection.collector.create') || 0) > 0);
+      assert.ok((map.get('datasource.collection.run') || 0) > 0);
+      assert.ok((map.get('datasource.collection.import') || 0) > 0);
+      assert.ok((map.get('datasource.collection.snapshot.confirm') || 0) > 0);
+      assert.ok((map.get('datasource.collection.snapshot.release') || 0) > 0);
     }, counters);
 
     await runCase('phase-gate 6: duplicate itemId+version conflict returns 409', async () => {
@@ -916,3 +1357,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+

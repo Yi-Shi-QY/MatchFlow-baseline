@@ -83,3 +83,8 @@ ZH:
 
 Only markdown files under `docs/` are considered maintained project documentation.  
 只有 `docs/` 目录下的 Markdown 文件属于正式维护文档。
+
+## Latest Additions / 最新补充
+
+1. [24-cn-jczq-collection-interface-and-script.md](./24-cn-jczq-collection-interface-and-script.md)  
+   CN JCZQ collection API + script runbook / 中国足彩竞彩采集接口与脚本执行手册

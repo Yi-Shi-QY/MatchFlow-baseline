@@ -13,6 +13,7 @@
     "test:web-joint-smoke": "node test/runAdminStudioWebJointSmoke.js",
     "test:prod-ready": "node test/runProductionReadiness.js",
     "preflight:prod": "node scripts/preflightProd.js",
+    "collect:jczq:sample": "node scripts/collectCnJczqSample.js",
     "admin-web:dev": "npm --prefix admin-studio-web run dev",
     "admin-web:build": "npm --prefix admin-studio-web run build",
     "admin-web:lint": "npm --prefix admin-studio-web run lint",

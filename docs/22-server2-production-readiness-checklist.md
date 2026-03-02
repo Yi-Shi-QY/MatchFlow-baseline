@@ -43,6 +43,8 @@ Minimum required for production:
 4. `REFRESH_TOKEN_SECRET` (recommended >= 32 chars)
 5. `DATABASE_URL`
 6. `CORS_ALLOWED_ORIGINS` (avoid `*` in production)
+7. `COLLECTION_MAX_IMPORT_RECORDS` (optional, default `20000`)
+8. `COLLECTION_MAX_IMPORT_PAYLOAD_BYTES` (optional, default `8388608`)
 
 Database SSL knobs:
 

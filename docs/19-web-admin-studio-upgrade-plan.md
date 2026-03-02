@@ -304,6 +304,9 @@ Phase C second slice + Phase D first slice delivered:
 8. Datasource validation/preview enhancement:
    - Added local precheck cards for `schema/dependency/compatibility` aligned with server-side datasource checks.
    - Added `sourceContext` preview and payload skeleton preview to speed up editor self-verification before server validation.
+   - Added server preview endpoints and UI wiring for:
+     - datasource structure/path-tree visualization
+     - database sample extraction preview from `matches`
 9. Datasource form/rule builder enhancement:
    - Added visual editing for `labelKey`, `formSections[]` layout, and section-to-field binding (`fieldIds` mapping).
    - Added visual editing for `applyRules[]` and `removeRules[]` with target path/target fallback support.
@@ -831,3 +834,47 @@ npm run dev
    - 缓解：发布前强制执行依赖图检查。
 3. 风险：前后端权限认知漂移。
    - 缓解：服务端最终裁决 + 契约测试 + 权限矩阵快照。
+
+## 7.13 Progress Update (as of 2026-03-02, datasource collection governance baseline)
+
+Datasource collection lifecycle baseline delivered for server 2.0:
+
+1. Added datasource collection data model and migration:
+   - `datasource_collectors`
+   - `datasource_collection_runs`
+   - `datasource_collection_snapshots`
+2. Added admin APIs for full governance chain:
+   - collect management: create/list/update collectors
+   - collect execution: trigger run and inspect runs
+   - confirmation workflow: confirm/reject snapshots
+   - release workflow: release confirmed snapshot by channel with previous release deprecation
+3. Added audit writes for key actions:
+   - collector create/update
+   - collection run
+   - snapshot confirm
+   - snapshot release
+4. Added test coverage:
+   - authz + DB-required behavior (`runAuthzIntegration.js`)
+   - DB phase-gate full lifecycle (`runDbPhaseGate.js`)
+
+## 7.14 Progress Update (as of 2026-03-02, datasource collection production hardening)
+
+Production hardening completed for datasource collection pipeline:
+
+1. Import safety guards:
+   - `COLLECTION_MAX_IMPORT_RECORDS` (default `20000`)
+   - `COLLECTION_MAX_IMPORT_PAYLOAD_BYTES` (default `8388608`)
+   - over-limit request returns explicit error code.
+2. Import idempotency:
+   - default dedup by `sourceId + contentHash` for non-rejected snapshots
+   - response includes `data.deduplicated`
+   - run record is still persisted for traceability.
+3. Release consistency:
+   - release and previous-snapshot deprecation executed via one atomic SQL operation
+   - concurrent-state conflict returns deterministic `COLLECTION_RELEASE_CONFLICT`.
+4. Collector operability control:
+   - disabled collector blocks import by default
+   - `force=true` can override for emergency/manual operations.
+5. Script production options:
+   - upstream timeout, retry, backoff, minimum-row threshold
+   - import supports `allowDuplicate` and `force`.

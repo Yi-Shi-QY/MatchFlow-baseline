@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const db = require('../../db');
 const {
   normalizeDomain,
   getDomainConfig,
@@ -900,6 +901,304 @@ function buildValidationSummary(checks, status, metadata = {}) {
   };
 }
 
+function toCapabilitySuffix(value) {
+  return String(value || '')
+    .split(/[_-]+/g)
+    .filter((segment) => segment.length > 0)
+    .map((segment) => `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`)
+    .join('');
+}
+
+function normalizePathSegments(value) {
+  if (!isPathArray(value)) {
+    return [];
+  }
+  return value
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+}
+
+function normalizeStatusList(value) {
+  if (Array.isArray(value)) {
+    return uniqueStrings(value);
+  }
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return [];
+  }
+  return uniqueStrings(normalized.split(','));
+}
+
+function normalizePreviewLimit(limitInput, fallbackValue = 5) {
+  const parsed = Number.parseInt(limitInput, 10);
+  const fallback = Number.isFinite(fallbackValue) ? fallbackValue : 5;
+  if (!Number.isFinite(parsed)) {
+    return Math.max(1, Math.min(fallback, 20));
+  }
+  return Math.max(1, Math.min(parsed, 20));
+}
+
+function collectDatasourceFieldMappings(manifest) {
+  const fields = collectDatasourceFields(manifest);
+  const fieldCatalog = [];
+  const pathCatalogMap = new Map();
+  let invalidFieldCount = 0;
+
+  fields.forEach((field, index) => {
+    if (!isPlainObject(field)) {
+      invalidFieldCount += 1;
+      return;
+    }
+
+    const fieldId = normalizeString(field.id) || `field_${index + 1}`;
+    const fieldType = normalizeString(field.type) || 'text';
+    const mappings = [];
+
+    const appendMapping = (slot, pathValue) => {
+      const segments = normalizePathSegments(pathValue);
+      if (segments.length === 0) {
+        return;
+      }
+      const pathText = segments.join('.');
+      mappings.push({
+        slot,
+        path: segments,
+        pathText,
+      });
+
+      if (!pathCatalogMap.has(pathText)) {
+        pathCatalogMap.set(pathText, {
+          pathText,
+          segments,
+          fieldRefs: [],
+        });
+      }
+      const existing = pathCatalogMap.get(pathText);
+      existing.fieldRefs.push({ fieldId, fieldType, slot });
+    };
+
+    if (fieldType === 'versus_number') {
+      appendMapping('home', field.homePath);
+      appendMapping('away', field.awayPath);
+    } else if (fieldType === 'odds_triplet') {
+      appendMapping('home', field.homePath);
+      appendMapping('draw', field.drawPath);
+      appendMapping('away', field.awayPath);
+    } else {
+      appendMapping('value', field.path);
+    }
+
+    if (mappings.length === 0) {
+      invalidFieldCount += 1;
+    }
+
+    fieldCatalog.push({
+      fieldId,
+      fieldType,
+      mappings,
+    });
+  });
+
+  const pathCatalog = Array.from(pathCatalogMap.values())
+    .map((item) => ({
+      ...item,
+      fieldRefs: item.fieldRefs
+        .slice()
+        .sort((left, right) => {
+          const byField = left.fieldId.localeCompare(right.fieldId);
+          if (byField !== 0) {
+            return byField;
+          }
+          return left.slot.localeCompare(right.slot);
+        }),
+    }))
+    .sort((left, right) => left.pathText.localeCompare(right.pathText));
+
+  return {
+    fieldCatalog,
+    pathCatalog,
+    invalidFieldCount,
+    mappedFieldCount: fieldCatalog.filter((field) => field.mappings.length > 0).length,
+    duplicatePathCount: pathCatalog.filter((item) => item.fieldRefs.length > 1).length,
+  };
+}
+
+function buildDatasourcePathTree(pathCatalog) {
+  const root = {
+    segment: '$',
+    path: '$',
+    fieldRefs: [],
+    children: [],
+  };
+
+  pathCatalog.forEach((pathRecord) => {
+    let cursor = root;
+    let currentPath = '';
+
+    pathRecord.segments.forEach((segment) => {
+      currentPath = currentPath ? `${currentPath}.${segment}` : segment;
+      let child = cursor.children.find((item) => item.segment === segment);
+      if (!child) {
+        child = {
+          segment,
+          path: currentPath,
+          fieldRefs: [],
+          children: [],
+        };
+        cursor.children.push(child);
+      }
+      cursor = child;
+    });
+
+    cursor.fieldRefs.push(...pathRecord.fieldRefs);
+  });
+
+  const sortNode = (node) => {
+    node.fieldRefs.sort((left, right) => {
+      const byField = left.fieldId.localeCompare(right.fieldId);
+      if (byField !== 0) {
+        return byField;
+      }
+      return left.slot.localeCompare(right.slot);
+    });
+    node.children.sort((left, right) => left.segment.localeCompare(right.segment));
+    node.children.forEach((child) => sortNode(child));
+  };
+  sortNode(root);
+
+  return root;
+}
+
+function extractValueAtPath(value, pathSegments) {
+  if (!Array.isArray(pathSegments) || pathSegments.length === 0) {
+    return undefined;
+  }
+  let cursor = value;
+  for (const segment of pathSegments) {
+    if (cursor === null || cursor === undefined) {
+      return undefined;
+    }
+
+    if (Array.isArray(cursor)) {
+      const index = Number.parseInt(segment, 10);
+      if (!Number.isFinite(index)) {
+        return undefined;
+      }
+      cursor = cursor[index];
+      continue;
+    }
+
+    if (typeof cursor !== 'object') {
+      return undefined;
+    }
+    cursor = cursor[segment];
+  }
+  return cursor;
+}
+
+function resolveDatasourceFieldPreviewValue(record, fieldRecord) {
+  const mappings = Array.isArray(fieldRecord?.mappings) ? fieldRecord.mappings : [];
+  if (mappings.length === 0) {
+    return null;
+  }
+  if (mappings.length === 1 && mappings[0].slot === 'value') {
+    const value = extractValueAtPath(record, mappings[0].path);
+    return value === undefined ? null : value;
+  }
+
+  const composite = {};
+  mappings.forEach((mapping) => {
+    const value = extractValueAtPath(record, mapping.path);
+    composite[mapping.slot] = value === undefined ? null : value;
+  });
+  return composite;
+}
+
+function mapMatchRowToDatasourcePreviewRecord(row) {
+  const homeTeam = row?.hometeam || row?.homeTeam || null;
+  const awayTeam = row?.awayteam || row?.awayTeam || null;
+  return {
+    id: row?.id || null,
+    league: row?.league_name || null,
+    date: row?.match_date || null,
+    status: row?.status || null,
+    score: {
+      home: row?.home_score ?? null,
+      away: row?.away_score ?? null,
+    },
+    stats: row?.match_stats || {},
+    odds: row?.odds || {},
+    homeTeam: homeTeam
+      ? {
+        id: homeTeam.id || null,
+        name: homeTeam.name || null,
+        logo: homeTeam.logo_url || null,
+        form: homeTeam.recent_form || [],
+      }
+      : null,
+    awayTeam: awayTeam
+      ? {
+        id: awayTeam.id || null,
+        name: awayTeam.name || null,
+        logo: awayTeam.logo_url || null,
+        form: awayTeam.recent_form || [],
+      }
+      : null,
+  };
+}
+
+function buildDatasourceSourceContextPreview(manifest, pathCatalog) {
+  const sourceId = normalizeString(manifest.id || manifest.sourceId) || 'datasource';
+  const selected = manifest.defaultSelected !== false;
+  const allPaths = pathCatalog
+    .map((item) => item.pathText.toLowerCase())
+    .filter((pathText) => pathText.length > 0);
+
+  const hasOdds = allPaths.some((pathText) => (
+    pathText.startsWith('odds')
+    || pathText.includes('.odds.')
+  ));
+  const hasStats = allPaths.some((pathText) => (
+    pathText.startsWith('stats')
+    || pathText.includes('.stats.')
+  ));
+  const hasFundamental = allPaths.some((pathText) => (
+    pathText.startsWith('league')
+    || pathText.startsWith('status')
+    || pathText.startsWith('hometeam')
+    || pathText.startsWith('awayteam')
+    || pathText.includes('.league')
+    || pathText.includes('.hometeam')
+    || pathText.includes('.awayteam')
+  ));
+  const hasCustom = allPaths.some((pathText) => (
+    pathText.startsWith('custom') || pathText.includes('.custom')
+  ));
+
+  const capabilities = {
+    hasFundamental,
+    hasStats,
+    hasOdds,
+    hasCustom,
+  };
+  const suffix = toCapabilitySuffix(sourceId);
+  if (suffix) {
+    capabilities[`has${suffix}`] = selected;
+  }
+
+  return {
+    sourceContext: {
+      origin: 'server-db',
+      selectedSources: {
+        [sourceId]: selected,
+      },
+      selectedSourceIds: selected ? [sourceId] : [],
+      capabilities,
+      matchStatus: 'upcoming',
+    },
+  };
+}
+
 function runStrictManifestValidationForWrite(domain, manifest) {
   if (!supportsStrictDomainValidation(domain)) {
     return {};
@@ -1111,6 +1410,119 @@ function getCatalogEditPermission(domain) {
     throw new StudioCatalogError('Invalid catalog domain', 'CATALOG_DOMAIN_INVALID', 400);
   }
   return config.editPermission;
+}
+
+async function previewDatasourceStructureForAdmin({ body }) {
+  const manifest = ensureManifest(body?.manifest);
+  const checks = buildDomainValidationChecks('datasource', manifest);
+  const failedChecks = getFailedChecks(checks);
+  const mappings = collectDatasourceFieldMappings(manifest);
+  const sourceId = normalizeString(manifest.id || manifest.sourceId) || 'datasource';
+  const displayName = normalizeString(manifest.name || manifest.label || manifest.labelKey) || sourceId;
+  const requiredPermissions = uniqueStrings(manifest.requiredPermissions);
+
+  return {
+    sourceId,
+    displayName,
+    requiredPermissions,
+    validation: {
+      status: failedChecks.length === 0 ? 'passed' : 'failed',
+      failedChecks: failedChecks.map((check) => check.name),
+      checks,
+    },
+    summary: {
+      totalFields: mappings.fieldCatalog.length,
+      mappedFieldCount: mappings.mappedFieldCount,
+      mappedPathCount: mappings.pathCatalog.length,
+      duplicatePathCount: mappings.duplicatePathCount,
+      invalidFieldCount: mappings.invalidFieldCount,
+    },
+    fieldCatalog: mappings.fieldCatalog,
+    pathCatalog: mappings.pathCatalog,
+    tree: buildDatasourcePathTree(mappings.pathCatalog),
+    sourceContextPreview: buildDatasourceSourceContextPreview(manifest, mappings.pathCatalog),
+  };
+}
+
+async function previewDatasourceDataForAdmin({ body }) {
+  const manifest = ensureManifest(body?.manifest);
+  const limit = normalizePreviewLimit(body?.limit, 5);
+  const statuses = normalizeStatusList(
+    body?.statuses !== undefined ? body.statuses : body?.status,
+  );
+  const includeSourceRecord = body?.includeSourceRecord === true;
+  const mappings = collectDatasourceFieldMappings(manifest);
+
+  if (!db.isConnected()) {
+    throw new StudioCatalogError('Database not connected', 'CATALOG_DB_REQUIRED', 503);
+  }
+
+  try {
+    const params = [];
+    let whereClause = 'WHERE 1=1';
+
+    if (statuses.length > 0) {
+      params.push(statuses);
+      whereClause += ` AND m.status = ANY($${params.length}::text[])`;
+    }
+
+    params.push(limit);
+    const limitPlaceholder = `$${params.length}`;
+
+    const query = `
+      SELECT m.*,
+             row_to_json(ht.*) AS homeTeam,
+             row_to_json(at.*) AS awayTeam
+      FROM matches m
+      LEFT JOIN teams ht ON m.home_team_id = ht.id
+      LEFT JOIN teams at ON m.away_team_id = at.id
+      ${whereClause}
+      ORDER BY m.match_date DESC
+      LIMIT ${limitPlaceholder}
+    `;
+
+    const result = await db.query(query, params);
+    const rows = Array.isArray(result?.rows) ? result.rows : [];
+    const previewRows = rows.map((row, index) => {
+      const record = mapMatchRowToDatasourcePreviewRecord(row);
+      const values = {};
+
+      mappings.fieldCatalog.forEach((field) => {
+        values[field.fieldId] = resolveDatasourceFieldPreviewValue(record, field);
+      });
+
+      return {
+        rowIndex: index + 1,
+        matchId: record.id,
+        league: record.league,
+        status: record.status,
+        matchDate: record.date,
+        values,
+        ...(includeSourceRecord ? { sourceRecord: record } : {}),
+      };
+    });
+
+    return {
+      source: 'server-db',
+      sampledAt: new Date().toISOString(),
+      filters: {
+        limit,
+        statuses,
+      },
+      summary: {
+        rowCount: previewRows.length,
+        fieldCount: mappings.fieldCatalog.length,
+        pathCount: mappings.pathCatalog.length,
+      },
+      fieldCatalog: mappings.fieldCatalog,
+      rows: previewRows,
+    };
+  } catch (error) {
+    if (String(error?.message || '').includes('Database not connected')) {
+      throw new StudioCatalogError('Database not connected', 'CATALOG_DB_REQUIRED', 503);
+    }
+    throw error;
+  }
 }
 
 async function listCatalogEntriesForAdmin({ domain, query, authContext }) {
@@ -1791,6 +2203,8 @@ async function listReleaseHistoryForAdmin({ query, authContext }) {
 module.exports = {
   StudioCatalogError,
   getCatalogEditPermission,
+  previewDatasourceStructureForAdmin,
+  previewDatasourceDataForAdmin,
   listCatalogEntriesForAdmin,
   createCatalogEntryForAdmin,
   listCatalogRevisionsForAdmin,

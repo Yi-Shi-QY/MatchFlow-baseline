@@ -159,6 +159,8 @@ Operational notes:
 1. Catalog:
    - `GET /admin/catalog/:domain`
    - `POST /admin/catalog/:domain`
+   - `POST /admin/catalog/datasource/preview/structure`
+   - `POST /admin/catalog/datasource/preview/data`
    - `GET /admin/catalog/:domain/:itemId/revisions`
    - `GET /admin/catalog/:domain/:itemId/diff`
    - `POST /admin/catalog/:domain/:itemId/revisions`
@@ -172,6 +174,16 @@ Operational notes:
    - `POST /admin/release/publish`
    - `POST /admin/release/rollback`
    - `GET /admin/release/history`
+4. Datasource Collection Governance:
+   - `GET /admin/data-collections/collectors`
+   - `POST /admin/data-collections/collectors`
+   - `PUT /admin/data-collections/collectors/:collectorId`
+   - `POST /admin/data-collections/collectors/:collectorId/run`
+   - `POST /admin/data-collections/collectors/:collectorId/import`
+   - `GET /admin/data-collections/runs`
+   - `GET /admin/data-collections/snapshots`
+   - `POST /admin/data-collections/snapshots/:snapshotId/confirm`
+   - `POST /admin/data-collections/snapshots/:snapshotId/release`
 
 Domain values:
 
@@ -228,6 +240,86 @@ Revision diff notes:
    - revision metadata (`fromRevision`, `toRevision`)
    - manifest diff summary (`added/removed/changed/total`)
    - path-level changes (`addedPaths`, `removedPaths`, `changedPaths`)
+
+Datasource preview notes:
+
+1. `POST /admin/catalog/datasource/preview/structure`
+   - Requires `catalog:datasource:edit`.
+   - Body:
+     - `manifest` (required, object)
+   - Returns:
+     - datasource field/path mapping summary
+     - path tree and `sourceContextPreview`
+     - strict validation check result (`schema/dependency/compatibility`)
+2. `POST /admin/catalog/datasource/preview/data`
+   - Requires `catalog:datasource:edit`.
+   - Body:
+     - `manifest` (required, object)
+     - `limit` (optional, 1-20, default 5)
+     - `statuses` (optional, array or csv)
+   - Returns:
+     - sampled match rows from DB
+     - per-row datasource field values extracted from configured paths
+
+Datasource collection governance notes:
+
+Reference runbook:
+
+1. `docs/24-cn-jczq-collection-interface-and-script.md`
+
+1. Collector management (`/admin/data-collections/collectors*`)
+   - Create/update collector metadata:
+     - `sourceId`
+     - `provider` (`match_snapshot|manual_import`)
+     - `config` (sample limit, status filters, etc.)
+   - Trigger collection run:
+     - `POST /admin/data-collections/collectors/:collectorId/run`
+     - server creates:
+       - collection run record
+       - collection snapshot (`confirmationStatus=pending`, `releaseStatus=draft`)
+   - Import external payload (script/ETL):
+     - `POST /admin/data-collections/collectors/:collectorId/import`
+     - body requires:
+       - `payload` (JSON object)
+     - body optional:
+       - `allowDuplicate` (default `false`)
+       - `force` (default `false`, bypass disabled collector check)
+       - `contentHash` (hex string, override server-side payload hash)
+     - server creates:
+       - succeeded collection run (`datasource.collection.import`)
+       - pending snapshot for confirm/release workflow
+     - dedup behavior (default):
+       - when `sourceId + contentHash` already exists and snapshot is not rejected
+       - returns existing snapshot with `data.deduplicated=true`
+       - still writes a succeeded run record for auditability
+2. Snapshot confirmation:
+   - `POST /admin/data-collections/snapshots/:snapshotId/confirm`
+   - body `action`:
+     - `confirm`
+     - `reject`
+3. Snapshot release:
+   - `POST /admin/data-collections/snapshots/:snapshotId/release`
+   - requires snapshot `confirmationStatus=confirmed`
+   - release channel:
+     - `internal|beta|stable`
+   - previous released snapshot in same `sourceId + channel` is marked `deprecated`
+4. Permission baseline:
+   - collector/runs/snapshots read-write-confirm:
+     - `catalog:datasource:edit`
+   - snapshot release:
+     - `release:publish`
+5. Import safety limits:
+   - max record count:
+     - env `COLLECTION_MAX_IMPORT_RECORDS` (default `20000`)
+   - max payload bytes:
+     - env `COLLECTION_MAX_IMPORT_PAYLOAD_BYTES` (default `8388608`)
+   - over-limit returns:
+     - `400` + `COLLECTION_IMPORT_RECORD_COUNT_EXCEEDED`
+     - `413` + `COLLECTION_IMPORT_PAYLOAD_TOO_LARGE`
+   - invalid override hash:
+      - `400` + `COLLECTION_IMPORT_CONTENT_HASH_INVALID`
+   - disabled collector import without force:
+      - `409` + `COLLECTION_COLLECTOR_DISABLED`
 
 Publish gate note:
 
