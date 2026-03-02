@@ -80,6 +80,40 @@ Implementation checklist:
 2. Initialize database and verify schema objects.
 3. Run hub/admin endpoint smoke checks.
 
+## 5.1 I want to implement account auth + admin console
+
+Read:
+
+1. [16-server-auth-and-admin-roadmap.md](./16-server-auth-and-admin-roadmap.md)
+2. [17-server-auth-implementation-backlog.md](./17-server-auth-implementation-backlog.md)
+3. [18-server-2.0-kickoff.md](./18-server-2.0-kickoff.md)
+4. [08-server-api-guide.md](./08-server-api-guide.md)
+
+Implementation checklist:
+
+1. Freeze role/permission contract first.
+2. Implement auth endpoints and middleware with backward compatibility.
+3. Expose capability endpoint and wire client to capability-driven UI.
+
+## 5.2 I want to build visual extension governance in web admin
+
+Read:
+
+1. [19-web-admin-studio-upgrade-plan.md](./19-web-admin-studio-upgrade-plan.md)
+2. [20-web-admin-phase-a-contract-freeze.md](./20-web-admin-phase-a-contract-freeze.md)
+3. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
+4. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)
+5. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)
+6. [08-server-api-guide.md](./08-server-api-guide.md)
+
+Implementation checklist:
+
+1. Freeze catalog and release API contract first.
+2. Implement visual editors by domain slices (datasource/template/animation/agent/skill).
+3. Add validation and publish gate before stable channel release.
+4. Ensure all writes produce audit logs and can be rolled back.
+5. Run both `npm test` and `npm run test:db-phase` before moving to next phase.
+
 ## 6. I want to validate Linux environment integration
 
 Read:

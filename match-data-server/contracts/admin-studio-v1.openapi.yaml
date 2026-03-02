@@ -1,0 +1,753 @@
+openapi: 3.0.3
+info:
+  title: MatchFlow Admin Studio API
+  version: 1.0.0-draft
+  description: >
+    Phase A contract draft for the Web Admin Studio upgrade.
+    This contract covers catalog editing, validation runs, and release workflows.
+servers:
+  - url: http://localhost:3001
+    description: Local server
+security:
+  - bearerAuth: []
+tags:
+  - name: Catalog
+    description: Visual governance catalog APIs
+  - name: Validation
+    description: Validation and test run APIs
+  - name: Release
+    description: Publish and rollback APIs
+  - name: Audit
+    description: Governance activity logs
+
+paths:
+  /admin/catalog/{domain}:
+    get:
+      tags: [Catalog]
+      summary: List catalog entries by domain
+      description: Requires admin permission and domain read/edit permission policy.
+      operationId: listCatalogEntries
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/TenantIdQuery'
+        - $ref: '#/components/parameters/StatusQuery'
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/OffsetQuery'
+      responses:
+        '200':
+          description: Catalog list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogListResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+    post:
+      tags: [Catalog]
+      summary: Create catalog entry
+      operationId: createCatalogEntry
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItemResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - catalog:{domain}:edit
+
+  /admin/catalog/{domain}/{itemId}/revisions:
+    get:
+      tags: [Catalog]
+      summary: List revisions for one catalog item
+      operationId: listCatalogRevisions
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/ItemIdParam'
+        - $ref: '#/components/parameters/StatusQuery'
+        - $ref: '#/components/parameters/ChannelQuery'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/OffsetQuery'
+      responses:
+        '200':
+          description: Revision list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogRevisionListResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+    post:
+      tags: [Catalog]
+      summary: Create a new draft revision
+      operationId: createCatalogRevision
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/ItemIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRevisionCreateRequest'
+      responses:
+        '201':
+          description: Revision created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogRevisionResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - catalog:{domain}:edit
+
+  /admin/catalog/{domain}/{itemId}/publish:
+    post:
+      tags: [Release]
+      summary: Publish a revision to a channel
+      operationId: publishCatalogRevision
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/ItemIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogPublishRequest'
+      responses:
+        '200':
+          description: Publish result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseRecordResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - release:publish
+
+  /admin/catalog/{domain}/{itemId}/rollback:
+    post:
+      tags: [Release]
+      summary: Roll back catalog item to a target version
+      operationId: rollbackCatalogRevision
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/ItemIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRollbackRequest'
+      responses:
+        '200':
+          description: Rollback result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseRecordResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - release:rollback
+
+  /admin/validate/run:
+    post:
+      tags: [Validation]
+      summary: Trigger validation and test workflow
+      operationId: runValidationWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationRunCreateRequest'
+      responses:
+        '202':
+          description: Validation run accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationRunResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - validate:run
+
+  /admin/validate/{runId}:
+    get:
+      tags: [Validation]
+      summary: Get validation run status and result
+      operationId: getValidationRun
+      parameters:
+        - $ref: '#/components/parameters/RunIdParam'
+      responses:
+        '200':
+          description: Validation run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationRunResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - validate:run
+
+  /admin/release/publish:
+    post:
+      tags: [Release]
+      summary: Publish one catalog item revision
+      operationId: publishRelease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleasePublishRequest'
+      responses:
+        '200':
+          description: Publish succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseRecordResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - release:publish
+
+  /admin/release/rollback:
+    post:
+      tags: [Release]
+      summary: Roll back one catalog item revision
+      operationId: rollbackRelease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseRollbackRequest'
+      responses:
+        '200':
+          description: Rollback succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseRecordResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - release:rollback
+
+  /admin/release/history:
+    get:
+      tags: [Release]
+      summary: Query release history
+      operationId: listReleaseHistory
+      parameters:
+        - $ref: '#/components/parameters/TenantIdQuery'
+        - $ref: '#/components/parameters/DomainQuery'
+        - $ref: '#/components/parameters/ChannelQuery'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/OffsetQuery'
+      responses:
+        '200':
+          description: Release records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseRecordListResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - release:read
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    DomainParam:
+      name: domain
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/CatalogDomain'
+    ItemIdParam:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 2
+        maxLength: 128
+    RunIdParam:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TenantIdQuery:
+      name: tenantId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    StatusQuery:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+    SearchQuery:
+      name: search
+      in: query
+      required: false
+      schema:
+        type: string
+    LimitQuery:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    OffsetQuery:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    ChannelQuery:
+      name: channel
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/ReleaseChannel'
+    DomainQuery:
+      name: domain
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/CatalogDomain'
+
+  responses:
+    ErrorResponse:
+      description: Standard error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    CatalogDomain:
+      type: string
+      enum:
+        - datasource
+        - planning_template
+        - animation_template
+        - agent
+        - skill
+    ReleaseChannel:
+      type: string
+      enum: [internal, beta, stable]
+    RevisionStatus:
+      type: string
+      enum: [draft, validated, published, deprecated]
+    ValidationRunStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, canceled]
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              nullable: true
+    Pagination:
+      type: object
+      required: [limit, offset, count]
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+    CatalogEntry:
+      type: object
+      required:
+        - domain
+        - itemId
+        - latestVersion
+        - latestStatus
+      properties:
+        domain:
+          $ref: '#/components/schemas/CatalogDomain'
+        itemId:
+          type: string
+        latestVersion:
+          type: string
+        latestStatus:
+          $ref: '#/components/schemas/RevisionStatus'
+        latestChannel:
+          $ref: '#/components/schemas/ReleaseChannel'
+        updatedAt:
+          type: string
+          format: date-time
+    CatalogRevision:
+      type: object
+      required:
+        - id
+        - domain
+        - itemId
+        - version
+        - status
+        - channel
+        - manifest
+      properties:
+        id:
+          type: string
+          format: uuid
+        domain:
+          $ref: '#/components/schemas/CatalogDomain'
+        itemId:
+          type: string
+        version:
+          type: string
+        status:
+          $ref: '#/components/schemas/RevisionStatus'
+        channel:
+          $ref: '#/components/schemas/ReleaseChannel'
+        manifest:
+          type: object
+          additionalProperties: true
+        checksum:
+          type: string
+        validationSummary:
+          type: object
+          additionalProperties: true
+        createdByUserId:
+          type: string
+          format: uuid
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ValidationRun:
+      type: object
+      required:
+        - id
+        - runType
+        - domain
+        - status
+        - scope
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        runType:
+          type: string
+          enum: [catalog_validate, pre_publish, post_publish]
+        domain:
+          $ref: '#/components/schemas/CatalogDomain'
+        status:
+          $ref: '#/components/schemas/ValidationRunStatus'
+        scope:
+          type: object
+          additionalProperties: true
+        logs:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        result:
+          type: object
+          additionalProperties: true
+        triggeredByUserId:
+          type: string
+          format: uuid
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    ReleaseRecord:
+      type: object
+      required:
+        - id
+        - domain
+        - itemId
+        - action
+        - channel
+        - toVersion
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        domain:
+          $ref: '#/components/schemas/CatalogDomain'
+        itemId:
+          type: string
+        action:
+          type: string
+          enum: [publish, rollback]
+        channel:
+          $ref: '#/components/schemas/ReleaseChannel'
+        fromVersion:
+          type: string
+          nullable: true
+        toVersion:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, canceled]
+        validationRunId:
+          type: string
+          format: uuid
+          nullable: true
+        triggeredByUserId:
+          type: string
+          format: uuid
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CatalogCreateRequest:
+      type: object
+      required: [itemId, version, manifest]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        itemId:
+          type: string
+          minLength: 2
+          maxLength: 128
+        version:
+          type: string
+          example: 1.0.0
+        manifest:
+          type: object
+          additionalProperties: true
+        channel:
+          $ref: '#/components/schemas/ReleaseChannel'
+        status:
+          $ref: '#/components/schemas/RevisionStatus'
+    CatalogRevisionCreateRequest:
+      type: object
+      required: [version, manifest]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        version:
+          type: string
+          example: 1.0.1
+        manifest:
+          type: object
+          additionalProperties: true
+        channel:
+          $ref: '#/components/schemas/ReleaseChannel'
+        status:
+          $ref: '#/components/schemas/RevisionStatus'
+    CatalogPublishRequest:
+      type: object
+      required: [version, channel]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        version:
+          type: string
+        channel:
+          $ref: '#/components/schemas/ReleaseChannel'
+        notes:
+          type: string
+    CatalogRollbackRequest:
+      type: object
+      required: [targetVersion, channel]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        targetVersion:
+          type: string
+        channel:
+          $ref: '#/components/schemas/ReleaseChannel'
+        notes:
+          type: string
+    ValidationRunCreateRequest:
+      type: object
+      required: [runType, domain, scope]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        runType:
+          type: string
+          enum: [catalog_validate, pre_publish, post_publish]
+        domain:
+          $ref: '#/components/schemas/CatalogDomain'
+        scope:
+          type: object
+          additionalProperties: true
+    ReleasePublishRequest:
+      type: object
+      required: [domain, itemId, version, channel]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        domain:
+          $ref: '#/components/schemas/CatalogDomain'
+        itemId:
+          type: string
+        version:
+          type: string
+        channel:
+          $ref: '#/components/schemas/ReleaseChannel'
+        validationRunId:
+          type: string
+          format: uuid
+        notes:
+          type: string
+    ReleaseRollbackRequest:
+      type: object
+      required: [domain, itemId, targetVersion, channel]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        domain:
+          $ref: '#/components/schemas/CatalogDomain'
+        itemId:
+          type: string
+        targetVersion:
+          type: string
+        channel:
+          $ref: '#/components/schemas/ReleaseChannel'
+        validationRunId:
+          type: string
+          format: uuid
+        notes:
+          type: string
+
+    CatalogListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogEntry'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    CatalogItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/CatalogRevision'
+    CatalogRevisionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/CatalogRevision'
+    CatalogRevisionListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogRevision'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    ValidationRunResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ValidationRun'
+    ReleaseRecordResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ReleaseRecord'
+    ReleaseRecordListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReleaseRecord'
+        pagination:
+          $ref: '#/components/schemas/Pagination'

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build: .
@@ -8,22 +6,31 @@ services:
     environment:
       - PORT=3001
       - API_KEY=${API_KEY:-your-secret-key}
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/matchflow
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-matchflow}
     depends_on:
-      - db
-    restart: always
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
   db:
-    image: postgres:15-alpine
+    image: ${POSTGRES_IMAGE:-postgres:15-alpine}
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=matchflow
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-matchflow}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/bootstrap/schema.sql:ro
+      - ./migrations:/bootstrap/migrations:ro
+      - ./docker/init/00-bootstrap.sh:/docker-entrypoint-initdb.d/00-bootstrap.sh:ro
     ports:
-      - "5432:5432"
-    restart: always
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-matchflow}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
 
 volumes:
   postgres_data:
