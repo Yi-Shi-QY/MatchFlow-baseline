@@ -139,6 +139,13 @@ cd match-data-server
 npm run test:joint-smoke
 ```
 
+Web-client joint-smoke command (web API client level):
+
+```bash
+cd match-data-server
+npm run test:web-joint-smoke
+```
+
 ## 7. Sign-Off Template
 
 Record the following before rollout expansion:

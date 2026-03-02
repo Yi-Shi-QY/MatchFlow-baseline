@@ -366,6 +366,26 @@ Client-server joint testing kickoff delivered:
 3. Next objective:
    - Add browser-level Admin Studio E2E (UI interactions) on top of current API-contract smoke.
 
+## 7.6 Progress Update (as of 2026-03-02, web-client joint smoke)
+
+Client-server joint testing second slice delivered:
+
+1. Added executable web-client joint smoke command at repo root:
+   - `npm run test:admin-web-joint-smoke`
+2. Added runner:
+   - `match-data-server/test/runAdminStudioWebJointSmoke.js`
+3. Coverage through the real web API client (`src/services/adminStudio.ts`):
+   - strict-domain create/list/revision/validate across:
+     - `datasource`
+     - `planning_template`
+     - `animation_template`
+     - `agent`
+     - `skill`
+   - datasource draft save + revision diff
+   - datasource publish + rollback + release history linkage
+4. Next objective:
+   - Add browser-level Admin Studio E2E (page interaction) on top of API-client joint smoke.
+
 ## 8. Definition of Done
 
 Functional DoD:
