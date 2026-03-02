@@ -500,6 +500,26 @@ Added remaining-domain browser matrix for strict-validation domains:
 4. Next objective:
    - Add role matrix for `publisher` and `admin` with publish/rollback permission boundaries in browser E2E.
 
+## 7.12 Progress Update (as of 2026-03-02, role matrix release boundary e2e)
+
+Added role-matrix browser E2E for release permission boundaries:
+
+1. Added `role-matrix-release.spec.ts` with two user-token scenarios:
+   - publisher role: can publish but blocked on rollback (`release:rollback` missing)
+   - tenant_admin role: can publish and rollback successfully
+2. Test setup now covers API-driven role/user bootstrap:
+   - create custom role with scoped permissions
+   - create user and login
+   - apply bearer token in Admin Studio connection settings
+3. Browser E2E suite now covers:
+   - datasource full governance lifecycle
+   - planning_template full governance lifecycle
+   - permission guard (`catalog:datasource:edit`)
+   - remaining strict-domain create+validate matrix
+   - role matrix (`publisher` vs `tenant_admin`) for publish/rollback boundaries
+4. Next objective:
+   - Add release-history assertions for role-matrix scenarios and include channel filter path coverage.
+
 ## 8. Definition of Done
 
 Functional DoD:
