@@ -11,6 +11,7 @@ If you prefer domain-first lookup, see:
 ### Quick Paths
 
 1. 30-minute quick context:
+   [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md) ->
    [01-product-overview.md](./01-product-overview.md) ->
    [02-architecture.md](./02-architecture.md) ->
    [12-changelog.md](./12-changelog.md).
@@ -25,8 +26,9 @@ If you prefer domain-first lookup, see:
 Start here:
 
 1. [01-product-overview.md](./01-product-overview.md)
-2. [02-architecture.md](./02-architecture.md)
-3. [12-changelog.md](./12-changelog.md)
+2. [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md)
+3. [02-architecture.md](./02-architecture.md)
+4. [12-changelog.md](./12-changelog.md)
 
 Focus:
 
@@ -111,9 +113,10 @@ Focus:
 Suggested reading order:
 
 1. [01-product-overview.md](./01-product-overview.md)
-2. [02-architecture.md](./02-architecture.md)
-3. [03-development.md](./client/03-development.md)
-4. Your role-specific section in this file.
+2. [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md)
+3. [02-architecture.md](./02-architecture.md)
+4. [03-development.md](./client/03-development.md)
+5. Your role-specific section in this file.
 
 ## ZH
 
@@ -128,6 +131,7 @@ Suggested reading order:
 ### 快速路径
 
 1. 30 分钟快速了解：
+   [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md) ->
    [01-product-overview.md](./01-product-overview.md) ->
    [02-architecture.md](./02-architecture.md) ->
    [12-changelog.md](./12-changelog.md)。
@@ -142,8 +146,9 @@ Suggested reading order:
 建议先读：
 
 1. [01-product-overview.md](./01-product-overview.md)
-2. [02-architecture.md](./02-architecture.md)
-3. [12-changelog.md](./12-changelog.md)
+2. [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md)
+3. [02-architecture.md](./02-architecture.md)
+4. [12-changelog.md](./12-changelog.md)
 
 关注重点：
 
@@ -228,6 +233,7 @@ Suggested reading order:
 推荐阅读顺序：
 
 1. [01-product-overview.md](./01-product-overview.md)
-2. [02-architecture.md](./02-architecture.md)
-3. [03-development.md](./client/03-development.md)
-4. 再进入本文对应角色章节。
+2. [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md)
+3. [02-architecture.md](./02-architecture.md)
+4. [03-development.md](./client/03-development.md)
+5. 再进入本文对应角色章节。

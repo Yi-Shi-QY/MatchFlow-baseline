@@ -12,6 +12,7 @@ If you already know your domain, see:
 ### Quick Modes
 
 1. 30-minute decision support:
+   [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md) ->
    [01-product-overview.md](./01-product-overview.md) ->
    [02-architecture.md](./02-architecture.md) ->
    [12-changelog.md](./12-changelog.md).
@@ -22,10 +23,11 @@ If you already know your domain, see:
 
 Read in order:
 
-1. [01-product-overview.md](./01-product-overview.md)
-2. [02-architecture.md](./02-architecture.md)
-3. [03-development.md](./client/03-development.md)
-4. [00-role-navigation.md](./00-role-navigation.md)
+1. [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md)
+2. [01-product-overview.md](./01-product-overview.md)
+3. [02-architecture.md](./02-architecture.md)
+4. [03-development.md](./client/03-development.md)
+5. [00-role-navigation.md](./00-role-navigation.md)
 
 ## 2. I want to add a new data source
 
@@ -174,6 +176,7 @@ Implementation checklist:
 ### 快速模式
 
 1. 30 分钟决策路径：
+   [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md) ->
    [01-product-overview.md](./01-product-overview.md) ->
    [02-architecture.md](./02-architecture.md) ->
    [12-changelog.md](./12-changelog.md)。
@@ -184,10 +187,11 @@ Implementation checklist:
 
 按顺序阅读：
 
-1. [01-product-overview.md](./01-product-overview.md)
-2. [02-architecture.md](./02-architecture.md)
-3. [03-development.md](./client/03-development.md)
-4. [00-role-navigation.md](./00-role-navigation.md)
+1. [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md)
+2. [01-product-overview.md](./01-product-overview.md)
+3. [02-architecture.md](./02-architecture.md)
+4. [03-development.md](./client/03-development.md)
+5. [00-role-navigation.md](./00-role-navigation.md)
 
 ## 2. 我想新增一个数据源
 

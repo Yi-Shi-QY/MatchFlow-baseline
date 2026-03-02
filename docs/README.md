@@ -27,11 +27,12 @@ If you prefer role-based/task-based navigation:
 
 These docs are cross-domain and should be referenced by all three sections:
 
-1. [01-product-overview.md](./01-product-overview.md)
-2. [02-architecture.md](./02-architecture.md)
-3. [12-changelog.md](./12-changelog.md)
-4. [13-cicd-guide.md](./13-cicd-guide.md)
-5. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
+1. [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md)
+2. [01-product-overview.md](./01-product-overview.md)
+3. [02-architecture.md](./02-architecture.md)
+4. [12-changelog.md](./12-changelog.md)
+5. [13-cicd-guide.md](./13-cicd-guide.md)
+6. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
 
 ## 4. Compatibility Note
 
@@ -73,11 +74,12 @@ role/task navigation pages as the canonical entry points.
 
 以下文档是三大分区共享的基础资料：
 
-1. [01-product-overview.md](./01-product-overview.md)
-2. [02-architecture.md](./02-architecture.md)
-3. [12-changelog.md](./12-changelog.md)
-4. [13-cicd-guide.md](./13-cicd-guide.md)
-5. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
+1. [25-project-goals-and-introduction.md](./25-project-goals-and-introduction.md)
+2. [01-product-overview.md](./01-product-overview.md)
+3. [02-architecture.md](./02-architecture.md)
+4. [12-changelog.md](./12-changelog.md)
+5. [13-cicd-guide.md](./13-cicd-guide.md)
+6. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
 
 ## 4. 兼容说明
 
