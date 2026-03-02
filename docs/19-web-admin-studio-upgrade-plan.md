@@ -220,7 +220,7 @@ Deliverables:
 |---|---|---|
 | Phase A: Contract Freeze | Completed | OpenAPI + migration draft delivered and reviewed in repo artifacts. |
 | Phase B: Backend Foundation | Completed | Catalog/validate/release APIs, validation runner, publish gate, audit writes, and DB phase-gate tests passed. |
-| Phase C: Web Studio MVP | In Progress | Admin Studio page delivered with datasource/planning/animation/agent/skill builder coverage started, plus shared API client and route wiring. |
+| Phase C: Web Studio MVP | In Progress | Admin Studio page delivered with datasource/planning/animation/agent/skill structured builders, plus shared API client and route wiring. |
 | Phase D: Validation and Release UX | In Progress | Publish wizard with validation pre-check gate started in Admin Studio page. |
 | Phase E: Hardening and Rollout | Not Started | Pending functional completion of Phase C/D. |
 
@@ -292,7 +292,16 @@ Phase C second slice + Phase D first slice delivered:
 6. Multi-domain editor enhancement:
    - Added structured builders for `animation_template`, `agent`, and `skill`.
    - Added builder-to-manifest sync and raw JSON reload path for these three domains.
-7. Verification:
+7. Datasource editor enhancement:
+   - Added structured builder for `datasource` metadata and `fields[]` path mapping.
+   - Added builder-to-manifest sync and raw JSON reload path for `datasource`.
+8. Datasource validation/preview enhancement:
+   - Added local precheck cards for `schema/dependency/compatibility` aligned with server-side datasource checks.
+   - Added `sourceContext` preview and payload skeleton preview to speed up editor self-verification before server validation.
+9. Datasource form/rule builder enhancement:
+   - Added visual editing for `labelKey`, `formSections[]` layout, and section-to-field binding (`fieldIds` mapping).
+   - Added visual editing for `applyRules[]` and `removeRules[]` with target path/target fallback support.
+10. Verification:
    - `npm run lint` passed after this slice.
    - `npm run build` passed after this slice.
 

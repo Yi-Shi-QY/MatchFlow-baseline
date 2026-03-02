@@ -76,10 +76,80 @@ const AGENT_DEPENDENCY_MODE_OPTIONS = [
   { value: 'list', label: 'custom list' },
 ];
 
+const DATASOURCE_FIELD_TYPE_OPTIONS = [
+  { value: 'text', label: 'text' },
+  { value: 'number', label: 'number' },
+  { value: 'textarea', label: 'textarea' },
+  { value: 'csv_array', label: 'csv_array' },
+  { value: 'versus_number', label: 'versus_number' },
+  { value: 'odds_triplet', label: 'odds_triplet' },
+];
+
+const DATASOURCE_CARD_SPAN_OPTIONS = [
+  { value: '1', label: '1 column' },
+  { value: '2', label: '2 columns' },
+];
+
+const DATASOURCE_SECTION_COLUMN_OPTIONS = [
+  { value: '1', label: '1 column' },
+  { value: '2', label: '2 columns' },
+];
+
 type FeedbackTone = 'success' | 'error' | 'info';
 
 type PlanningContextMode = 'independent' | 'build_upon' | 'all';
 type AgentDependencyMode = 'all' | 'none' | 'list';
+type DatasourceFieldType =
+  | 'text'
+  | 'number'
+  | 'textarea'
+  | 'csv_array'
+  | 'versus_number'
+  | 'odds_triplet';
+
+interface DatasourceFieldDraft {
+  id: string;
+  type: DatasourceFieldType;
+  pathText: string;
+  homePathText: string;
+  drawPathText: string;
+  awayPathText: string;
+}
+
+interface DatasourceFormSectionDraft {
+  id: string;
+  titleKey: string;
+  title: string;
+  columns: '1' | '2';
+  fieldIdsText: string;
+}
+
+interface DatasourceRuleDraft {
+  targetPathText: string;
+  targetText: string;
+}
+
+interface DatasourceManifestDraft {
+  id: string;
+  name: string;
+  labelKey: string;
+  requiredPermissionsText: string;
+  cardSpan: '1' | '2';
+  defaultSelected: boolean;
+  fields: DatasourceFieldDraft[];
+  formSections: DatasourceFormSectionDraft[];
+  applyRules: DatasourceRuleDraft[];
+  removeRules: DatasourceRuleDraft[];
+}
+
+interface LocalValidationCheck {
+  name: 'schema' | 'dependency' | 'compatibility';
+  status: 'passed' | 'failed';
+  message: string;
+  details?: {
+    errors: string[];
+  };
+}
 
 interface PlanningSegmentDraft {
   id: string;
@@ -164,6 +234,52 @@ function toCsvText(value: unknown) {
     .join(', ');
 }
 
+function parsePathText(pathText: string) {
+  return pathText
+    .split('.')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+}
+
+function toPathText(value: unknown) {
+  if (!Array.isArray(value)) {
+    return '';
+  }
+  return value
+    .filter((segment): segment is string => typeof segment === 'string')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0)
+    .join('.');
+}
+
+function buildDefaultDatasourceField(index: number): DatasourceFieldDraft {
+  return {
+    id: `field_${index + 1}`,
+    type: 'text',
+    pathText: '',
+    homePathText: '',
+    drawPathText: '',
+    awayPathText: '',
+  };
+}
+
+function buildDefaultDatasourceSection(index: number): DatasourceFormSectionDraft {
+  return {
+    id: `section_${index + 1}`,
+    titleKey: '',
+    title: '',
+    columns: '1',
+    fieldIdsText: '',
+  };
+}
+
+function buildDefaultDatasourceRule(): DatasourceRuleDraft {
+  return {
+    targetPathText: '',
+    targetText: '',
+  };
+}
+
 function buildDefaultPlanningSegment(index: number, contextMode: PlanningContextMode): PlanningSegmentDraft {
   return {
     id: `segment_${index + 1}`,
@@ -241,6 +357,446 @@ function toPlanningTemplateManifest(draft: PlanningTemplateDraft) {
   };
 }
 
+function toDatasourceManifestDraft(
+  manifest: Record<string, unknown>,
+  fallbackItemId: string,
+): DatasourceManifestDraft {
+  const fieldsRaw = Array.isArray(manifest.fields)
+    ? manifest.fields
+    : Array.isArray(asRecord(manifest.schema).fields)
+      ? (asRecord(manifest.schema).fields as unknown[])
+      : [];
+
+  const fields = fieldsRaw
+    .map((field, index) => {
+      const fieldRecord = asRecord(field);
+      const typeRaw = asText(fieldRecord.type) as DatasourceFieldType;
+      const type: DatasourceFieldType = DATASOURCE_FIELD_TYPE_OPTIONS.some((option) => option.value === typeRaw)
+        ? typeRaw
+        : 'text';
+      return {
+        id: asText(fieldRecord.id) || `field_${index + 1}`,
+        type,
+        pathText: toPathText(fieldRecord.path),
+        homePathText: toPathText(fieldRecord.homePath),
+        drawPathText: toPathText(fieldRecord.drawPath),
+        awayPathText: toPathText(fieldRecord.awayPath),
+      } satisfies DatasourceFieldDraft;
+    })
+    .filter((field) => field.id.length > 0);
+
+  const formSectionsRaw = Array.isArray(manifest.formSections) ? manifest.formSections : [];
+  const formSections = formSectionsRaw
+    .map((section, index) => {
+      const sectionRecord = asRecord(section);
+      const fieldIds = Array.isArray(sectionRecord.fields)
+        ? sectionRecord.fields
+          .map((field) => {
+            if (typeof field === 'string') {
+              return asText(field);
+            }
+            const fieldRecord = asRecord(field);
+            return asText(fieldRecord.id);
+          })
+          .filter((fieldId) => fieldId.length > 0)
+        : [];
+      return {
+        id: asText(sectionRecord.id) || `section_${index + 1}`,
+        titleKey: asText(sectionRecord.titleKey),
+        title: asText(sectionRecord.title),
+        columns: Number(sectionRecord.columns) === 2 ? '2' : '1',
+        fieldIdsText: fieldIds.join(', '),
+      } satisfies DatasourceFormSectionDraft;
+    })
+    .filter((section) => section.id.length > 0);
+
+  const toRuleDraft = (rule: unknown): DatasourceRuleDraft => {
+    const ruleRecord = asRecord(rule);
+    return {
+      targetPathText: toPathText(ruleRecord.path),
+      targetText: asText(ruleRecord.target || ruleRecord.fieldId || ruleRecord.key),
+    };
+  };
+
+  const applyRules = Array.isArray(manifest.applyRules)
+    ? manifest.applyRules.map((rule) => toRuleDraft(rule))
+    : [];
+  const removeRules = Array.isArray(manifest.removeRules)
+    ? manifest.removeRules.map((rule) => toRuleDraft(rule))
+    : [];
+
+  return {
+    id: asText(manifest.id || manifest.sourceId) || fallbackItemId || 'datasource_item',
+    name: asText(manifest.name || manifest.label || manifest.labelKey) || 'Datasource',
+    labelKey: asText(manifest.labelKey),
+    requiredPermissionsText: toCsvText(manifest.requiredPermissions),
+    cardSpan: String(manifest.cardSpan) === '2' ? '2' : '1',
+    defaultSelected: typeof manifest.defaultSelected === 'boolean' ? manifest.defaultSelected : true,
+    fields: fields.length > 0 ? fields : [buildDefaultDatasourceField(0)],
+    formSections,
+    applyRules,
+    removeRules,
+  };
+}
+
+function toDatasourceManifest(draft: DatasourceManifestDraft) {
+  const fields = draft.fields.map((field, index) => {
+    const base = {
+      id: asText(field.id) || `field_${index + 1}`,
+      type: field.type,
+    } as Record<string, unknown>;
+
+    if (field.type === 'versus_number') {
+      base.homePath = parsePathText(field.homePathText);
+      base.awayPath = parsePathText(field.awayPathText);
+      return base;
+    }
+
+    if (field.type === 'odds_triplet') {
+      base.homePath = parsePathText(field.homePathText);
+      base.drawPath = parsePathText(field.drawPathText);
+      base.awayPath = parsePathText(field.awayPathText);
+      return base;
+    }
+
+    base.path = parsePathText(field.pathText);
+    return base;
+  });
+
+  const fieldById = new Map(
+    fields.map((field) => [asText(field.id), field] as const).filter(([id]) => id.length > 0),
+  );
+
+  const formSections = draft.formSections.map((section, index) => {
+    const sectionFieldIds = parseCsvText(section.fieldIdsText);
+    const sectionFields = sectionFieldIds.map((fieldId) => (
+      fieldById.get(fieldId) || { id: fieldId }
+    ));
+    const sectionRecord: Record<string, unknown> = {
+      id: asText(section.id) || `section_${index + 1}`,
+      columns: Number.parseInt(section.columns, 10) === 2 ? 2 : 1,
+      fields: sectionFields,
+    };
+    if (asText(section.titleKey)) {
+      sectionRecord.titleKey = asText(section.titleKey);
+    }
+    if (asText(section.title)) {
+      sectionRecord.title = asText(section.title);
+    }
+    return sectionRecord;
+  });
+
+  const serializeRule = (rule: DatasourceRuleDraft) => {
+    const path = parsePathText(rule.targetPathText);
+    if (path.length > 0) {
+      return { path };
+    }
+    if (asText(rule.targetText)) {
+      return { target: asText(rule.targetText) };
+    }
+    return null;
+  };
+
+  const applyRules = draft.applyRules.flatMap((rule) => {
+    const serialized = serializeRule(rule);
+    return serialized ? [serialized] : [];
+  });
+
+  const removeRules = draft.removeRules.flatMap((rule) => {
+    const serialized = serializeRule(rule);
+    return serialized ? [serialized] : [];
+  });
+
+  return {
+    id: asText(draft.id),
+    name: asText(draft.name),
+    ...(asText(draft.labelKey) ? { labelKey: asText(draft.labelKey) } : {}),
+    cardSpan: Number.parseInt(draft.cardSpan, 10) || 1,
+    defaultSelected: !!draft.defaultSelected,
+    requiredPermissions: parseCsvText(draft.requiredPermissionsText),
+    fields,
+    ...(formSections.length > 0 ? { formSections } : {}),
+    ...(applyRules.length > 0 ? { applyRules } : {}),
+    ...(removeRules.length > 0 ? { removeRules } : {}),
+  };
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function isPathArray(value: unknown): value is string[] {
+  return Array.isArray(value)
+    && value.length > 0
+    && value.every((segment) => typeof segment === 'string' && segment.trim().length > 0);
+}
+
+function collectDatasourceManifestFields(manifest: Record<string, unknown>) {
+  if (Array.isArray(manifest.fields)) {
+    return manifest.fields;
+  }
+  const schema = asRecord(manifest.schema);
+  if (Array.isArray(schema.fields)) {
+    return schema.fields;
+  }
+  if (Array.isArray(manifest.formSections)) {
+    return manifest.formSections.flatMap((section) => {
+      const sectionRecord = asRecord(section);
+      return Array.isArray(sectionRecord.fields) ? sectionRecord.fields : [];
+    });
+  }
+  return [];
+}
+
+function buildLocalValidationCheck(
+  name: LocalValidationCheck['name'],
+  errors: string[],
+  passMessage: string,
+): LocalValidationCheck {
+  if (errors.length === 0) {
+    return {
+      name,
+      status: 'passed',
+      message: passMessage,
+    };
+  }
+  return {
+    name,
+    status: 'failed',
+    message: errors[0],
+    details: {
+      errors,
+    },
+  };
+}
+
+function validateDatasourceManifestSchemaLocal(manifest: Record<string, unknown>) {
+  const errors: string[] = [];
+  const sourceId = asText(manifest.id || manifest.sourceId);
+  if (!sourceId) {
+    errors.push('datasource.id (or sourceId) is required');
+  } else if (!/^[a-z0-9_][a-z0-9_-]{1,63}$/.test(sourceId)) {
+    errors.push('datasource.id must match pattern [a-z0-9_][a-z0-9_-]{1,63}');
+  }
+
+  const displayName = asText(manifest.name || manifest.label || manifest.labelKey);
+  if (!displayName) {
+    errors.push('datasource.name (or label/labelKey) is required');
+  }
+
+  const fields = collectDatasourceManifestFields(manifest);
+  if (fields.length === 0) {
+    errors.push('datasource fields are required (fields[]/schema.fields[]/formSections[].fields[])');
+    return errors;
+  }
+
+  fields.forEach((field, index) => {
+    const fieldRecord = asRecord(field);
+    if (Object.keys(fieldRecord).length === 0) {
+      errors.push(`datasource.fields[${index}] must be an object`);
+      return;
+    }
+    if (!asText(fieldRecord.id)) {
+      errors.push(`datasource.fields[${index}].id is required`);
+    }
+    const fieldType = asText(fieldRecord.type);
+    if (!fieldType) {
+      errors.push(`datasource.fields[${index}].type is required`);
+    }
+
+    if (isPathArray(fieldRecord.path)) {
+      return;
+    }
+    if (fieldType === 'versus_number') {
+      if (!isPathArray(fieldRecord.homePath) || !isPathArray(fieldRecord.awayPath)) {
+        errors.push(`datasource.fields[${index}] must include homePath/awayPath`);
+      }
+      return;
+    }
+    if (fieldType === 'odds_triplet') {
+      if (
+        !isPathArray(fieldRecord.homePath)
+        || !isPathArray(fieldRecord.drawPath)
+        || !isPathArray(fieldRecord.awayPath)
+      ) {
+        errors.push(`datasource.fields[${index}] must include homePath/drawPath/awayPath`);
+      }
+      return;
+    }
+
+    errors.push(`datasource.fields[${index}] must include path[]`);
+  });
+
+  if (Array.isArray(manifest.formSections)) {
+    manifest.formSections.forEach((section, index) => {
+      const sectionRecord = asRecord(section);
+      if (Object.keys(sectionRecord).length === 0) {
+        errors.push(`datasource.formSections[${index}] must be an object`);
+        return;
+      }
+      if (!asText(sectionRecord.id)) {
+        errors.push(`datasource.formSections[${index}].id is required`);
+      }
+      if (!asText(sectionRecord.titleKey) && !asText(sectionRecord.title)) {
+        errors.push(`datasource.formSections[${index}].titleKey (or title) is required`);
+      }
+      if (!Array.isArray(sectionRecord.fields) || sectionRecord.fields.length === 0) {
+        errors.push(`datasource.formSections[${index}].fields must be non-empty`);
+      }
+    });
+  }
+
+  return errors;
+}
+
+function validateDatasourceManifestDependenciesLocal(manifest: Record<string, unknown>) {
+  const errors: string[] = [];
+
+  if (manifest.requiredPermissions !== undefined && !Array.isArray(manifest.requiredPermissions)) {
+    errors.push('datasource.requiredPermissions must be an array when provided');
+  }
+
+  const requiredPermissions = normalizeStringArray(manifest.requiredPermissions);
+  requiredPermissions.forEach((permission, index) => {
+    if (!permission.startsWith('datasource:use:')) {
+      errors.push(`datasource.requiredPermissions[${index}] must start with datasource:use:`);
+    }
+  });
+
+  const applyTargets = new Set<string>();
+  const removeTargets = new Set<string>();
+
+  const collectRuleTarget = (
+    rule: unknown,
+    index: number,
+    fieldName: 'applyRules' | 'removeRules',
+    collector: Set<string>,
+  ) => {
+    const ruleRecord = asRecord(rule);
+    if (Object.keys(ruleRecord).length === 0) {
+      errors.push(`datasource.${fieldName}[${index}] must be an object`);
+      return;
+    }
+    const pathTarget = toPathText(ruleRecord.path);
+    const target = pathTarget || asText(ruleRecord.target || ruleRecord.fieldId || ruleRecord.key);
+    if (!target) {
+      errors.push(`datasource.${fieldName}[${index}] must provide path[] or target`);
+      return;
+    }
+    collector.add(target);
+  };
+
+  if (manifest.applyRules !== undefined && !Array.isArray(manifest.applyRules)) {
+    errors.push('datasource.applyRules must be an array when provided');
+  }
+  if (manifest.removeRules !== undefined && !Array.isArray(manifest.removeRules)) {
+    errors.push('datasource.removeRules must be an array when provided');
+  }
+
+  if (Array.isArray(manifest.applyRules)) {
+    manifest.applyRules.forEach((rule, index) => {
+      collectRuleTarget(rule, index, 'applyRules', applyTargets);
+    });
+  }
+
+  if (Array.isArray(manifest.removeRules)) {
+    manifest.removeRules.forEach((rule, index) => {
+      collectRuleTarget(rule, index, 'removeRules', removeTargets);
+    });
+  }
+
+  Array.from(applyTargets).forEach((target) => {
+    if (removeTargets.has(target)) {
+      errors.push(`datasource.applyRules/removeRules conflict on target: ${target}`);
+    }
+  });
+
+  return errors;
+}
+
+function validateDatasourceManifestCompatibilityLocal(manifest: Record<string, unknown>) {
+  const errors: string[] = [];
+  const fields = collectDatasourceManifestFields(manifest);
+  const seenFieldIds = new Set<string>();
+  const seenPaths = new Set<string>();
+
+  fields.forEach((field, index) => {
+    const fieldRecord = asRecord(field);
+    if (Object.keys(fieldRecord).length === 0) {
+      return;
+    }
+
+    const fieldId = asText(fieldRecord.id);
+    if (fieldId) {
+      if (seenFieldIds.has(fieldId)) {
+        errors.push(`datasource field id duplicated: ${fieldId}`);
+      } else {
+        seenFieldIds.add(fieldId);
+      }
+    }
+
+    const pathCandidates = [
+      toPathText(fieldRecord.path),
+      toPathText(fieldRecord.homePath),
+      toPathText(fieldRecord.drawPath),
+      toPathText(fieldRecord.awayPath),
+    ].filter((candidate) => candidate.length > 0);
+
+    pathCandidates.forEach((pathValue) => {
+      if (seenPaths.has(pathValue)) {
+        errors.push(`datasource field path duplicated: ${pathValue} (field index ${index})`);
+      } else {
+        seenPaths.add(pathValue);
+      }
+    });
+  });
+
+  if (manifest.cardSpan !== undefined && manifest.cardSpan !== 1 && manifest.cardSpan !== 2) {
+    errors.push('datasource.cardSpan must be 1 or 2 when provided');
+  }
+  if (manifest.defaultSelected !== undefined && typeof manifest.defaultSelected !== 'boolean') {
+    errors.push('datasource.defaultSelected must be boolean when provided');
+  }
+
+  return errors;
+}
+
+function toCapabilitySuffix(value: string) {
+  return value
+    .split(/[_-]+/g)
+    .filter((segment) => segment.length > 0)
+    .map((segment) => `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`)
+    .join('');
+}
+
+function setValueAtPath(target: Record<string, unknown>, path: string[], value: unknown) {
+  if (path.length === 0) {
+    return;
+  }
+  let cursor: Record<string, unknown> = target;
+  path.forEach((segment, index) => {
+    const normalizedSegment = segment.trim();
+    if (!normalizedSegment) {
+      return;
+    }
+    if (index === path.length - 1) {
+      cursor[normalizedSegment] = value;
+      return;
+    }
+    const current = cursor[normalizedSegment];
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      cursor[normalizedSegment] = {};
+    }
+    cursor = cursor[normalizedSegment] as Record<string, unknown>;
+  });
+}
+
 function parseJsonObjectText(text: string, label: string) {
   const normalized = text.trim();
   if (!normalized) {
@@ -260,7 +816,8 @@ function parseJsonObjectText(text: string, label: string) {
 
 function supportsStructuredBuilder(domain: AdminCatalogDomain) {
   return (
-    domain === 'planning_template'
+    domain === 'datasource'
+    || domain === 'planning_template'
     || domain === 'animation_template'
     || domain === 'agent'
     || domain === 'skill'
@@ -547,6 +1104,7 @@ export default function AdminStudio() {
 
   const [manifestEditor, setManifestEditor] = useState(prettyJson(starterManifest('datasource')));
   const [showRawManifestEditor, setShowRawManifestEditor] = useState(true);
+  const [datasourceDraft, setDatasourceDraft] = useState<DatasourceManifestDraft | null>(null);
   const [planningDraft, setPlanningDraft] = useState<PlanningTemplateDraft | null>(null);
   const [animationTemplateDraft, setAnimationTemplateDraft] = useState<AnimationTemplateDraft | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentManifestDraft | null>(null);
@@ -606,6 +1164,132 @@ export default function AdminStudio() {
     [revisions],
   );
 
+  const datasourceManifestPreview = useMemo(() => {
+    if (domain !== 'datasource' || !datasourceDraft) {
+      return null;
+    }
+    return toDatasourceManifest(datasourceDraft) as Record<string, unknown>;
+  }, [domain, datasourceDraft]);
+
+  const datasourceLocalChecks = useMemo(() => {
+    if (!datasourceManifestPreview) {
+      return [];
+    }
+    return [
+      buildLocalValidationCheck(
+        'schema',
+        validateDatasourceManifestSchemaLocal(datasourceManifestPreview),
+        'Datasource schema check passed',
+      ),
+      buildLocalValidationCheck(
+        'dependency',
+        validateDatasourceManifestDependenciesLocal(datasourceManifestPreview),
+        'Datasource dependency check passed',
+      ),
+      buildLocalValidationCheck(
+        'compatibility',
+        validateDatasourceManifestCompatibilityLocal(datasourceManifestPreview),
+        'Datasource compatibility check passed',
+      ),
+    ];
+  }, [datasourceManifestPreview]);
+
+  const datasourceLocalFailedChecks = useMemo(
+    () => datasourceLocalChecks.filter((check) => check.status === 'failed'),
+    [datasourceLocalChecks],
+  );
+
+  const datasourceSourceContextPreview = useMemo(() => {
+    if (!datasourceManifestPreview) {
+      return null;
+    }
+    const sourceId = asText(datasourceManifestPreview.id || datasourceManifestPreview.sourceId) || 'datasource';
+    const selected = datasourceManifestPreview.defaultSelected !== false;
+    const fields = collectDatasourceManifestFields(datasourceManifestPreview);
+    const allPaths = fields.flatMap((field) => {
+      const fieldRecord = asRecord(field);
+      return [
+        toPathText(fieldRecord.path),
+        toPathText(fieldRecord.homePath),
+        toPathText(fieldRecord.drawPath),
+        toPathText(fieldRecord.awayPath),
+      ]
+        .filter((pathText) => pathText.length > 0)
+        .map((pathText) => pathText.toLowerCase());
+    });
+
+    const hasOdds = allPaths.some((pathText) => pathText.startsWith('odds') || pathText.includes('.odds.'));
+    const hasStats = allPaths.some((pathText) => pathText.startsWith('stats') || pathText.includes('.stats.'));
+    const hasFundamental = allPaths.some((pathText) => (
+      pathText.startsWith('league')
+      || pathText.startsWith('status')
+      || pathText.startsWith('hometeam')
+      || pathText.startsWith('awayteam')
+      || pathText.includes('.league')
+      || pathText.includes('.hometeam')
+      || pathText.includes('.awayteam')
+    ));
+    const hasCustom = allPaths.some((pathText) => pathText.startsWith('custom') || pathText.includes('.custom'));
+
+    return {
+      sourceContext: {
+        origin: 'server-db',
+        selectedSources: {
+          [sourceId]: selected,
+        },
+        selectedSourceIds: selected ? [sourceId] : [],
+        capabilities: {
+          hasFundamental,
+          hasStats,
+          hasOdds,
+          hasCustom,
+          [`has${toCapabilitySuffix(sourceId)}`]: selected,
+        },
+        matchStatus: 'upcoming',
+      },
+    };
+  }, [datasourceManifestPreview]);
+
+  const datasourcePayloadPreview = useMemo(() => {
+    if (!datasourceManifestPreview) {
+      return null;
+    }
+    const payload: Record<string, unknown> = {};
+    const fields = collectDatasourceManifestFields(datasourceManifestPreview);
+
+    fields.forEach((field, index) => {
+      const fieldRecord = asRecord(field);
+      const fieldType = asText(fieldRecord.type);
+      const simplePath = parsePathText(toPathText(fieldRecord.path));
+      const homePath = parsePathText(toPathText(fieldRecord.homePath));
+      const drawPath = parsePathText(toPathText(fieldRecord.drawPath));
+      const awayPath = parsePathText(toPathText(fieldRecord.awayPath));
+
+      if (fieldType === 'versus_number') {
+        setValueAtPath(payload, homePath, 0);
+        setValueAtPath(payload, awayPath, 0);
+        return;
+      }
+      if (fieldType === 'odds_triplet') {
+        setValueAtPath(payload, homePath, 0);
+        setValueAtPath(payload, drawPath, 0);
+        setValueAtPath(payload, awayPath, 0);
+        return;
+      }
+      if (fieldType === 'csv_array') {
+        setValueAtPath(payload, simplePath, [`sample_${index + 1}`]);
+        return;
+      }
+      if (fieldType === 'number') {
+        setValueAtPath(payload, simplePath, 0);
+        return;
+      }
+      setValueAtPath(payload, simplePath, '');
+    });
+
+    return payload;
+  }, [datasourceManifestPreview]);
+
   const publishGate = useMemo(() => {
     const summary = asRecord(selectedRevision?.validationSummary);
     const mode = asText(summary.mode);
@@ -637,6 +1321,9 @@ export default function AdminStudio() {
     setNewRevisionVersion('1.0.1');
     setManifestEditor(prettyJson(starter));
     setNewItemManifestText(prettyJson(starter));
+    setDatasourceDraft(nextDomain === 'datasource'
+      ? toDatasourceManifestDraft(starter as Record<string, unknown>, 'new_datasource')
+      : null);
     setPlanningDraft(nextDomain === 'planning_template'
       ? toPlanningTemplateDraft(starter as Record<string, unknown>, 'new_template')
       : null);
@@ -697,6 +1384,9 @@ export default function AdminStudio() {
         setSelectedVersion('');
         const starter = starterManifest(domain, itemId);
         setManifestEditor(prettyJson(starter));
+        setDatasourceDraft(domain === 'datasource'
+          ? toDatasourceManifestDraft(starter as Record<string, unknown>, itemId)
+          : null);
         setPlanningDraft(domain === 'planning_template'
           ? toPlanningTemplateDraft(starter as Record<string, unknown>, itemId)
           : null);
@@ -782,6 +1472,7 @@ export default function AdminStudio() {
 
   useEffect(() => {
     if (!selectedRevision) {
+      setDatasourceDraft(null);
       setPlanningDraft(null);
       setAnimationTemplateDraft(null);
       setAgentDraft(null);
@@ -794,6 +1485,11 @@ export default function AdminStudio() {
     setPublishNotes('');
 
     const itemId = selectedItemId || selectedRevision.itemId;
+    setDatasourceDraft(
+      domain === 'datasource'
+        ? toDatasourceManifestDraft(selectedRevision.manifest || {}, itemId)
+        : null,
+    );
     setPlanningDraft(
       domain === 'planning_template'
         ? toPlanningTemplateDraft(selectedRevision.manifest || {}, itemId)
@@ -818,6 +1514,9 @@ export default function AdminStudio() {
 
   useEffect(() => {
     let nextManifest: string | null = null;
+    if (domain === 'datasource' && datasourceDraft) {
+      nextManifest = prettyJson(toDatasourceManifest(datasourceDraft));
+    }
     if (domain === 'planning_template' && planningDraft) {
       nextManifest = prettyJson(toPlanningTemplateManifest(planningDraft));
     }
@@ -834,9 +1533,12 @@ export default function AdminStudio() {
       return;
     }
     setManifestEditor((previous) => (previous === nextManifest ? previous : nextManifest));
-  }, [domain, planningDraft, animationTemplateDraft, agentDraft, skillDraft]);
+  }, [domain, datasourceDraft, planningDraft, animationTemplateDraft, agentDraft, skillDraft]);
 
   function readCurrentManifestForWrite() {
+    if (domain === 'datasource' && datasourceDraft) {
+      return toDatasourceManifest(datasourceDraft);
+    }
     if (domain === 'planning_template' && planningDraft) {
       return toPlanningTemplateManifest(planningDraft);
     }
@@ -850,6 +1552,151 @@ export default function AdminStudio() {
       return toSkillManifest(skillDraft);
     }
     return parseManifest(manifestEditor);
+  }
+
+  function updateDatasourceDraft(patch: Partial<DatasourceManifestDraft>) {
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      return {
+        ...previous,
+        ...patch,
+      };
+    });
+  }
+
+  function updateDatasourceField(index: number, patch: Partial<DatasourceFieldDraft>) {
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      const nextFields = previous.fields.map((field, fieldIndex) => (
+        fieldIndex === index
+          ? { ...field, ...patch }
+          : field
+      ));
+      return {
+        ...previous,
+        fields: nextFields,
+      };
+    });
+  }
+
+  function addDatasourceField() {
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      return {
+        ...previous,
+        fields: [
+          ...previous.fields,
+          buildDefaultDatasourceField(previous.fields.length),
+        ],
+      };
+    });
+  }
+
+  function removeDatasourceField(index: number) {
+    setDatasourceDraft((previous) => {
+      if (!previous || previous.fields.length <= 1) {
+        return previous;
+      }
+      return {
+        ...previous,
+        fields: previous.fields.filter((_, fieldIndex) => fieldIndex !== index),
+      };
+    });
+  }
+
+  function updateDatasourceSection(index: number, patch: Partial<DatasourceFormSectionDraft>) {
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      const nextSections = previous.formSections.map((section, sectionIndex) => (
+        sectionIndex === index
+          ? { ...section, ...patch }
+          : section
+      ));
+      return {
+        ...previous,
+        formSections: nextSections,
+      };
+    });
+  }
+
+  function addDatasourceSection() {
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      return {
+        ...previous,
+        formSections: [
+          ...previous.formSections,
+          buildDefaultDatasourceSection(previous.formSections.length),
+        ],
+      };
+    });
+  }
+
+  function removeDatasourceSection(index: number) {
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      return {
+        ...previous,
+        formSections: previous.formSections.filter((_, sectionIndex) => sectionIndex !== index),
+      };
+    });
+  }
+
+  function updateDatasourceRule(
+    kind: 'applyRules' | 'removeRules',
+    index: number,
+    patch: Partial<DatasourceRuleDraft>,
+  ) {
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      const nextRules = previous[kind].map((rule, ruleIndex) => (
+        ruleIndex === index
+          ? { ...rule, ...patch }
+          : rule
+      ));
+      return {
+        ...previous,
+        [kind]: nextRules,
+      };
+    });
+  }
+
+  function addDatasourceRule(kind: 'applyRules' | 'removeRules') {
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      return {
+        ...previous,
+        [kind]: [...previous[kind], buildDefaultDatasourceRule()],
+      };
+    });
+  }
+
+  function removeDatasourceRule(kind: 'applyRules' | 'removeRules', index: number) {
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      return {
+        ...previous,
+        [kind]: previous[kind].filter((_, ruleIndex) => ruleIndex !== index),
+      };
+    });
   }
 
   function updatePlanningDraft(patch: Partial<PlanningTemplateDraft>) {
@@ -951,6 +1798,9 @@ export default function AdminStudio() {
   function handleLoadRawJsonToBuilder() {
     try {
       const parsed = parseManifest(manifestEditor);
+      if (domain === 'datasource') {
+        setDatasourceDraft(toDatasourceManifestDraft(parsed, selectedItemId || 'datasource_item'));
+      }
       if (domain === 'planning_template') {
         setPlanningDraft(toPlanningTemplateDraft(parsed, selectedItemId || 'planning_template_item'));
       }
@@ -1429,6 +2279,437 @@ export default function AdminStudio() {
                         <span>Status: <span className="text-zinc-200">{selectedRevision.status}</span></span>
                         <span>Updated: <span className="text-zinc-200">{formatTime(selectedRevision.updatedAt)}</span></span>
                         <span>Checksum: <span className="font-mono text-zinc-300">{selectedRevision.checksum || '-'}</span></span>
+                      </div>
+                    </div>
+                  )}
+
+                  {domain === 'datasource' && datasourceDraft && (
+                    <div className="space-y-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
+                            Datasource Builder
+                          </h3>
+                          <p className="text-[11px] text-zinc-400">
+                            Structured editor for datasource metadata and field mapping paths.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={handleLoadRawJsonToBuilder}
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Load JSON
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => setShowRawManifestEditor((previous) => !previous)}
+                          >
+                            {showRawManifestEditor ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            {showRawManifestEditor ? 'Hide JSON' : 'Show JSON'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+                        <input
+                          type="text"
+                          value={datasourceDraft.id}
+                          onChange={(event) => updateDatasourceDraft({ id: event.target.value })}
+                          placeholder="datasource id"
+                          className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          value={datasourceDraft.name}
+                          onChange={(event) => updateDatasourceDraft({ name: event.target.value })}
+                          placeholder="datasource name"
+                          className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          value={datasourceDraft.labelKey}
+                          onChange={(event) => updateDatasourceDraft({ labelKey: event.target.value })}
+                          placeholder="labelKey (optional)"
+                          className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+                        <input
+                          type="text"
+                          value={datasourceDraft.requiredPermissionsText}
+                          onChange={(event) => updateDatasourceDraft({ requiredPermissionsText: event.target.value })}
+                          placeholder="requiredPermissions (comma-separated)"
+                          className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        />
+                        <Select
+                          value={datasourceDraft.cardSpan}
+                          onChange={(value) => updateDatasourceDraft({ cardSpan: value as '1' | '2' })}
+                          options={DATASOURCE_CARD_SPAN_OPTIONS}
+                        />
+                        <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-zinc-200">
+                          <input
+                            type="checkbox"
+                            checked={datasourceDraft.defaultSelected}
+                            onChange={(event) => updateDatasourceDraft({ defaultSelected: event.target.checked })}
+                            className="h-4 w-4 accent-emerald-500"
+                          />
+                          defaultSelected
+                        </label>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+                            Fields ({datasourceDraft.fields.length})
+                          </p>
+                          <Button variant="outline" size="sm" className="gap-1" onClick={addDatasourceField}>
+                            <Plus className="h-3.5 w-3.5" />
+                            Add Field
+                          </Button>
+                        </div>
+
+                        <div className="max-h-[420px] space-y-2 overflow-auto pr-1">
+                          {datasourceDraft.fields.map((field, fieldIndex) => (
+                            <div key={`${field.id}-${fieldIndex}`} className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-semibold text-zinc-200">
+                                  Field {fieldIndex + 1}
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="gap-1 text-red-300 hover:text-red-200"
+                                  onClick={() => removeDatasourceField(fieldIndex)}
+                                  disabled={datasourceDraft.fields.length <= 1}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  Remove
+                                </Button>
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                                <input
+                                  type="text"
+                                  value={field.id}
+                                  onChange={(event) => updateDatasourceField(fieldIndex, { id: event.target.value })}
+                                  placeholder="field id"
+                                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                />
+                                <Select
+                                  value={field.type}
+                                  onChange={(value) => updateDatasourceField(fieldIndex, { type: value as DatasourceFieldType })}
+                                  options={DATASOURCE_FIELD_TYPE_OPTIONS}
+                                />
+                              </div>
+
+                              {(field.type === 'text'
+                                || field.type === 'number'
+                                || field.type === 'textarea'
+                                || field.type === 'csv_array') && (
+                                <input
+                                  type="text"
+                                  value={field.pathText}
+                                  onChange={(event) => updateDatasourceField(fieldIndex, { pathText: event.target.value })}
+                                  placeholder="path (dot notation, e.g. stats.form)"
+                                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                />
+                              )}
+
+                              {field.type === 'versus_number' && (
+                                <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                                  <input
+                                    type="text"
+                                    value={field.homePathText}
+                                    onChange={(event) => updateDatasourceField(fieldIndex, { homePathText: event.target.value })}
+                                    placeholder="homePath (e.g. odds.home)"
+                                    className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={field.awayPathText}
+                                    onChange={(event) => updateDatasourceField(fieldIndex, { awayPathText: event.target.value })}
+                                    placeholder="awayPath (e.g. odds.away)"
+                                    className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                  />
+                                </div>
+                              )}
+
+                              {field.type === 'odds_triplet' && (
+                                <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
+                                  <input
+                                    type="text"
+                                    value={field.homePathText}
+                                    onChange={(event) => updateDatasourceField(fieldIndex, { homePathText: event.target.value })}
+                                    placeholder="homePath"
+                                    className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={field.drawPathText}
+                                    onChange={(event) => updateDatasourceField(fieldIndex, { drawPathText: event.target.value })}
+                                    placeholder="drawPath"
+                                    className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={field.awayPathText}
+                                    onChange={(event) => updateDatasourceField(fieldIndex, { awayPathText: event.target.value })}
+                                    placeholder="awayPath"
+                                    className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+                            Form Sections ({datasourceDraft.formSections.length})
+                          </p>
+                          <Button variant="outline" size="sm" className="gap-1" onClick={addDatasourceSection}>
+                            <Plus className="h-3.5 w-3.5" />
+                            Add Section
+                          </Button>
+                        </div>
+                        {datasourceDraft.formSections.length === 0 && (
+                          <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
+                            Optional: add sections for generated form layout.
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          {datasourceDraft.formSections.map((section, sectionIndex) => (
+                            <div key={`${section.id}-${sectionIndex}`} className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-semibold text-zinc-200">
+                                  Section {sectionIndex + 1}
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="gap-1 text-red-300 hover:text-red-200"
+                                  onClick={() => removeDatasourceSection(sectionIndex)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  Remove
+                                </Button>
+                              </div>
+                              <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
+                                <input
+                                  type="text"
+                                  value={section.id}
+                                  onChange={(event) => updateDatasourceSection(sectionIndex, { id: event.target.value })}
+                                  placeholder="section id"
+                                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={section.titleKey}
+                                  onChange={(event) => updateDatasourceSection(sectionIndex, { titleKey: event.target.value })}
+                                  placeholder="titleKey (optional)"
+                                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={section.title}
+                                  onChange={(event) => updateDatasourceSection(sectionIndex, { title: event.target.value })}
+                                  placeholder="title (optional)"
+                                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                />
+                              </div>
+                              <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                                <Select
+                                  value={section.columns}
+                                  onChange={(value) => updateDatasourceSection(sectionIndex, { columns: value as '1' | '2' })}
+                                  options={DATASOURCE_SECTION_COLUMN_OPTIONS}
+                                />
+                                <input
+                                  type="text"
+                                  value={section.fieldIdsText}
+                                  onChange={(event) => updateDatasourceSection(sectionIndex, { fieldIdsText: event.target.value })}
+                                  placeholder="field ids (comma-separated)"
+                                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                        <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+                              Apply Rules ({datasourceDraft.applyRules.length})
+                            </p>
+                            <Button variant="outline" size="sm" className="gap-1" onClick={() => addDatasourceRule('applyRules')}>
+                              <Plus className="h-3.5 w-3.5" />
+                              Add Rule
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {datasourceDraft.applyRules.length === 0 && (
+                              <div className="rounded-lg border border-dashed border-white/10 p-2 text-xs text-zinc-500">
+                                Optional: define patch/apply targets.
+                              </div>
+                            )}
+                            {datasourceDraft.applyRules.map((rule, ruleIndex) => (
+                              <div key={`apply-rule-${ruleIndex}`} className="space-y-2 rounded-lg border border-white/10 bg-black/40 p-2">
+                                <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                                  <input
+                                    type="text"
+                                    value={rule.targetPathText}
+                                    onChange={(event) => updateDatasourceRule('applyRules', ruleIndex, { targetPathText: event.target.value })}
+                                    placeholder="path (dot notation)"
+                                    className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={rule.targetText}
+                                    onChange={(event) => updateDatasourceRule('applyRules', ruleIndex, { targetText: event.target.value })}
+                                    placeholder="target (fallback)"
+                                    className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                  />
+                                </div>
+                                <div className="flex justify-end">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-1 text-red-300 hover:text-red-200"
+                                    onClick={() => removeDatasourceRule('applyRules', ruleIndex)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    Remove
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+                              Remove Rules ({datasourceDraft.removeRules.length})
+                            </p>
+                            <Button variant="outline" size="sm" className="gap-1" onClick={() => addDatasourceRule('removeRules')}>
+                              <Plus className="h-3.5 w-3.5" />
+                              Add Rule
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {datasourceDraft.removeRules.length === 0 && (
+                              <div className="rounded-lg border border-dashed border-white/10 p-2 text-xs text-zinc-500">
+                                Optional: define cleanup/remove targets.
+                              </div>
+                            )}
+                            {datasourceDraft.removeRules.map((rule, ruleIndex) => (
+                              <div key={`remove-rule-${ruleIndex}`} className="space-y-2 rounded-lg border border-white/10 bg-black/40 p-2">
+                                <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                                  <input
+                                    type="text"
+                                    value={rule.targetPathText}
+                                    onChange={(event) => updateDatasourceRule('removeRules', ruleIndex, { targetPathText: event.target.value })}
+                                    placeholder="path (dot notation)"
+                                    className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={rule.targetText}
+                                    onChange={(event) => updateDatasourceRule('removeRules', ruleIndex, { targetText: event.target.value })}
+                                    placeholder="target (fallback)"
+                                    className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                  />
+                                </div>
+                                <div className="flex justify-end">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-1 text-red-300 hover:text-red-200"
+                                    onClick={() => removeDatasourceRule('removeRules', ruleIndex)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    Remove
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                        <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+                              Local Contract Precheck
+                            </p>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                datasourceLocalFailedChecks.length === 0
+                                  ? 'bg-emerald-500/15 text-emerald-300'
+                                  : 'bg-red-500/15 text-red-300'
+                              }`}
+                            >
+                              {datasourceLocalFailedChecks.length === 0
+                                ? 'Passed'
+                                : `Failed (${datasourceLocalFailedChecks.length})`}
+                            </span>
+                          </div>
+                          <div className="space-y-2">
+                            {datasourceLocalChecks.map((check) => (
+                              <div
+                                key={`datasource-local-check-${check.name}`}
+                                className={`rounded-lg border px-3 py-2 text-xs ${
+                                  check.status === 'passed'
+                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                                    : 'border-red-500/20 bg-red-500/10 text-red-300'
+                                }`}
+                              >
+                                <div className="font-semibold">{check.name}</div>
+                                <div className="mt-1 text-[11px] opacity-90">{check.message}</div>
+                                {check.status === 'failed' && (
+                                  <div className="mt-1 text-[11px] opacity-80">
+                                    {check.details?.errors.length || 0} issue(s)
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                          <label className="text-[11px] uppercase tracking-wider text-zinc-500">
+                            sourceContext Preview
+                          </label>
+                          <textarea
+                            value={prettyJson(datasourceSourceContextPreview || {})}
+                            readOnly
+                            spellCheck={false}
+                            className="min-h-[180px] w-full rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-[11px] text-zinc-200 focus:border-emerald-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                        <label className="text-[11px] uppercase tracking-wider text-zinc-500">
+                          Payload Skeleton Preview
+                        </label>
+                        <textarea
+                          value={prettyJson(datasourcePayloadPreview || {})}
+                          readOnly
+                          spellCheck={false}
+                          className="min-h-[180px] w-full rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-[11px] text-zinc-200 focus:border-emerald-500 focus:outline-none"
+                        />
                       </div>
                     </div>
                   )}
