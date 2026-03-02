@@ -3,7 +3,7 @@ import { Match } from '@/src/data/matches';
 import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState, isAbortError } from '@/src/services/ai';
 import { saveHistory, saveResumeState, clearResumeState, getResumeState } from '@/src/services/history';
 import { deleteSavedMatch } from '@/src/services/savedMatches';
-import { AgentResult, parseAgentStream } from '@/src/services/agentParser';
+import { AgentResult, AgentSegment, parseAgentStream } from '@/src/services/agentParser';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { getSettings } from '@/src/services/settings';
@@ -33,6 +33,84 @@ interface AnalysisContextType {
 
 const RESUME_SNAPSHOT_INTERVAL_MS = 3000;
 const STREAM_UI_UPDATE_INTERVAL_MS = 80;
+
+function areTagsEqual(a: AgentSegment['tags'], b: AgentSegment['tags']): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (
+      a[i].label !== b[i].label ||
+      a[i].team !== b[i].team ||
+      a[i].color !== b[i].color
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function stabilizeSegment(prevSeg: AgentSegment, nextSeg: AgentSegment): AgentSegment {
+  const sameCore =
+    prevSeg.title === nextSeg.title &&
+    prevSeg.thoughts === nextSeg.thoughts &&
+    prevSeg.animationJson === nextSeg.animationJson &&
+    prevSeg.isThoughtComplete === nextSeg.isThoughtComplete &&
+    prevSeg.isAnimationComplete === nextSeg.isAnimationComplete &&
+    areTagsEqual(prevSeg.tags, nextSeg.tags);
+
+  if (sameCore) {
+    return prevSeg;
+  }
+
+  if (
+    prevSeg.animation &&
+    nextSeg.animation &&
+    nextSeg.isAnimationComplete &&
+    prevSeg.animationJson &&
+    prevSeg.animationJson === nextSeg.animationJson
+  ) {
+    return {
+      ...nextSeg,
+      animation: prevSeg.animation,
+    };
+  }
+
+  return nextSeg;
+}
+
+function stabilizeParsedStream(
+  prevParsed: AgentResult | null,
+  nextParsed: AgentResult | null,
+): AgentResult | null {
+  if (!nextParsed) return null;
+  if (!prevParsed) return nextParsed;
+
+  const prevSegmentsById = new Map(prevParsed.segments.map(seg => [seg.id, seg]));
+  const nextSegments = nextParsed.segments.map(seg => {
+    const prevSeg = prevSegmentsById.get(seg.id);
+    if (!prevSeg) return seg;
+    return stabilizeSegment(prevSeg, seg);
+  });
+
+  const summary =
+    prevParsed.summaryJson === nextParsed.summaryJson ? prevParsed.summary : nextParsed.summary;
+
+  const fullyStable =
+    prevParsed.isComplete === nextParsed.isComplete &&
+    prevParsed.summaryJson === nextParsed.summaryJson &&
+    prevParsed.segments.length === nextSegments.length &&
+    nextSegments.every((seg, idx) => seg === prevParsed.segments[idx]);
+
+  if (fullyStable) {
+    return prevParsed;
+  }
+
+  return {
+    ...nextParsed,
+    segments: nextSegments,
+    summary,
+  };
+}
 
 const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined);
 
@@ -285,13 +363,16 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       lastUiRenderAt = now;
 
       setActiveAnalyses(prev => {
-        if (!prev[matchId]) return prev;
+        const target = prev[matchId];
+        if (!target) return prev;
+        const nextParsed = stabilizeParsedStream(target.parsedStream, parsedStream);
+
         return {
           ...prev,
           [matchId]: {
-            ...prev[matchId],
+            ...target,
             thoughts: currentThoughts,
-            parsedStream,
+            parsedStream: nextParsed,
             collapsedSegments
           }
         };
@@ -340,7 +421,10 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           dropStaleDraftOnFirstChunk = false;
         }
         currentThoughts += chunk;
-        currentParsedStream = parseAgentStream(currentThoughts);
+        currentParsedStream = stabilizeParsedStream(
+          currentParsedStream,
+          parseAgentStream(currentThoughts),
+        );
         
         // Auto-collapse completed thoughts
         const newCollapsed = { ...currentCollapsed };
@@ -360,16 +444,22 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       }
 
       // Final parse after stream completes
-      const finalParsed = parseAgentStream(currentThoughts);
+      const finalParsed = stabilizeParsedStream(
+        currentParsedStream,
+        parseAgentStream(currentThoughts),
+      );
       
       setActiveAnalyses(prev => {
-        if (!prev[matchId]) return prev;
+        const target = prev[matchId];
+        if (!target) return prev;
+        const nextParsed = stabilizeParsedStream(target.parsedStream, finalParsed);
+
         return {
           ...prev,
           [matchId]: {
-            ...prev[matchId],
+            ...target,
             thoughts: currentThoughts,
-            parsedStream: finalParsed,
+            parsedStream: nextParsed,
             collapsedSegments: currentCollapsed
           }
         };

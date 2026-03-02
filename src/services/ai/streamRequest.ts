@@ -153,50 +153,65 @@ export async function* streamAIRequest(
         let currentReasoning = "";
         let toolCalls: any[] = [];
 
+        let pendingLine = "";
+
+        function* processSseLine(rawLine: string): Generator<string, void, unknown> {
+          const line = rawLine.trim();
+          if (!line) return;
+          if (line === "data: [DONE]") return;
+          if (!line.startsWith("data: ")) return;
+
+          try {
+            const data = JSON.parse(line.slice(6));
+            const delta = data.choices[0]?.delta;
+            const reasoningChunk =
+              delta?.reasoning_content ||
+              (typeof delta?.reasoning === "string" ? delta.reasoning : "");
+
+            if (reasoningChunk && includeReasoning) {
+              currentReasoning += reasoningChunk;
+              yield reasoningChunk;
+            } else if (delta?.content) {
+              currentContent += delta.content;
+              yield delta.content;
+            }
+
+            if (delta?.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                if (!toolCalls[tc.index]) {
+                  toolCalls[tc.index] = {
+                    id: tc.id,
+                    type: "function",
+                    function: { name: tc.function?.name || "", arguments: "" },
+                  };
+                }
+                if (tc.function?.arguments) {
+                  toolCalls[tc.index].function.arguments += tc.function.arguments;
+                }
+              }
+            }
+          } catch (_e) {
+            // Ignore parse errors for incomplete/corrupted lines
+          }
+        }
+
         while (true) {
           if (abortSignal?.aborted) return;
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            pendingLine += decoder.decode();
+            if (pendingLine.trim()) {
+              yield* processSseLine(pendingLine);
+            }
+            break;
+          }
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n").filter((line) => line.trim() !== "");
+          pendingLine += decoder.decode(value, { stream: true });
+          const lines = pendingLine.split("\n");
+          pendingLine = lines.pop() || "";
 
           for (const line of lines) {
-            if (line === "data: [DONE]") continue;
-            if (line.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                const delta = data.choices[0]?.delta;
-                const reasoningChunk =
-                  delta?.reasoning_content ||
-                  (typeof delta?.reasoning === "string" ? delta.reasoning : "");
-
-                if (reasoningChunk && includeReasoning) {
-                  currentReasoning += reasoningChunk;
-                  yield reasoningChunk;
-                } else if (delta?.content) {
-                  currentContent += delta.content;
-                  yield delta.content;
-                }
-
-                if (delta?.tool_calls) {
-                  for (const tc of delta.tool_calls) {
-                    if (!toolCalls[tc.index]) {
-                      toolCalls[tc.index] = {
-                        id: tc.id,
-                        type: "function",
-                        function: { name: tc.function?.name || "", arguments: "" },
-                      };
-                    }
-                    if (tc.function?.arguments) {
-                      toolCalls[tc.index].function.arguments += tc.function.arguments;
-                    }
-                  }
-                }
-              } catch (_e) {
-                // Ignore parse errors for incomplete chunks
-              }
-            }
+            yield* processSseLine(line);
           }
         }
 

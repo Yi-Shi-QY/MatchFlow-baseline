@@ -240,11 +240,6 @@ export default function Settings() {
       ]
       : openAIModelOptions;
 
-  const modelModeOptions = [
-    { value: 'global', label: t('settings.model_mode_global') },
-    { value: 'config', label: t('settings.model_mode_config') }
-  ];
-
   const configEntries = React.useMemo(() => {
     return Object.entries(AGENT_MODEL_CONFIG)
       .filter(([, value]) => !!value?.provider && !!value?.model)
@@ -254,16 +249,6 @@ export default function Settings() {
         model: value!.model
       }));
   }, []);
-
-  const configuredAgentIds = React.useMemo(
-    () => new Set(configEntries.map(entry => entry.agentId)),
-    [configEntries]
-  );
-
-  const configMissingAgents = React.useMemo(
-    () => ALL_AGENT_IDS.filter(id => !configuredAgentIds.has(id)),
-    [configuredAgentIds]
-  );
 
   const configProviders = React.useMemo(
     () => new Set(configEntries.map(entry => entry.provider)),
@@ -456,23 +441,6 @@ export default function Settings() {
               
               {!isAiConfigCollapsed && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="space-y-2 relative z-30">
-                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.model_mode')}</label>
-                    <Select
-                      value={settings.agentModelMode}
-                      onChange={(value) => {
-                        setLocalSettings({...settings, agentModelMode: value as 'global' | 'config'});
-                        setAiTestStatus('idle');
-                      }}
-                      options={modelModeOptions}
-                    />
-                    <p className="text-[10px] text-zinc-500">
-                      {settings.agentModelMode === 'global'
-                        ? t('settings.model_mode_global_desc')
-                        : t('settings.model_mode_config_desc')}
-                    </p>
-                  </div>
-
                   <div className="space-y-2 relative z-20">
                     <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.ai_provider')}</label>
                     <Select
@@ -480,17 +448,10 @@ export default function Settings() {
                       onChange={handleProviderChange}
                       options={providerOptions}
                     />
-                    {settings.agentModelMode === 'config' && (
-                      <p className="text-[10px] text-zinc-500">{t('settings.global_fallback_hint')}</p>
-                    )}
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
-                      {settings.agentModelMode === 'config'
-                        ? t('settings.global_fallback_model')
-                        : t('settings.model')}
-                    </label>
+                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.model')}</label>
                     {settings.provider === 'openai_compatible' ? (
                       <>
                         <input
@@ -528,33 +489,6 @@ export default function Settings() {
                       </p>
                     )}
                   </div>
-
-                  {settings.agentModelMode === 'config' && (
-                    <div className="space-y-2 border border-white/10 rounded-lg p-3 bg-zinc-900/40">
-                      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.config_preview')}</label>
-                      <p className="text-[10px] text-zinc-500">
-                        {t('settings.config_file_hint')} <span className="font-mono text-zinc-300">src/config/agentModelConfig.ts</span>
-                      </p>
-                      <div className="max-h-44 overflow-auto space-y-1 pr-1">
-                        {configEntries.map(entry => (
-                          <div
-                            key={entry.agentId}
-                            className="flex items-center justify-between text-[11px] bg-black/30 border border-white/5 rounded px-2 py-1"
-                          >
-                            <span className="font-mono text-zinc-300">{entry.agentId}</span>
-                            <span className="text-zinc-500">
-                              {entry.provider} / <span className="text-zinc-300">{entry.model}</span>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                      {configMissingAgents.length > 0 && (
-                        <p className="text-[10px] text-amber-400">
-                          {t('settings.config_missing_agents')}: {configMissingAgents.join(', ')}
-                        </p>
-                      )}
-                    </div>
-                  )}
 
                   {showDeepseekKeyInput && (
                     <div className="space-y-2">
