@@ -360,6 +360,81 @@ async function main() {
     );
 
     await runCase(
+      'catalog create validates animation_template/agent/skill manifests before DB call',
+      async () => {
+        const cases = [
+          {
+            domain: 'animation_template',
+            permission: 'catalog:animation:edit',
+            payload: {
+              itemId: 'animation_invalid',
+              version: '1.0.0',
+              manifest: {
+                id: 'animation_invalid',
+                name: 'Invalid Animation',
+                animationType: 'stats',
+                // invalid: templateId/schema required
+              },
+            },
+          },
+          {
+            domain: 'agent',
+            permission: 'catalog:agent:edit',
+            payload: {
+              itemId: 'agent_invalid',
+              version: '1.0.0',
+              manifest: {
+                kind: 'agent',
+                id: 'agent_invalid',
+                name: 'Invalid Agent',
+                description: 'Missing role prompt zh',
+                rolePrompt: {
+                  en: 'You are an analyst.',
+                },
+              },
+            },
+          },
+          {
+            domain: 'skill',
+            permission: 'catalog:skill:edit',
+            payload: {
+              itemId: 'skill_invalid',
+              version: '1.0.0',
+              manifest: {
+                kind: 'skill',
+                id: 'skill_invalid',
+                name: 'Invalid Skill',
+                description: 'Missing declaration/runtime contracts',
+                declaration: {
+                  name: 'skill_invalid',
+                  description: 'Invalid declaration',
+                },
+                runtime: {
+                  mode: 'custom',
+                },
+              },
+            },
+          },
+        ];
+
+        for (const testCase of cases) {
+          const token = createAccessToken([testCase.permission], ['tenant_admin']);
+          const response = await requestJsonWithBody(
+            baseUrl,
+            `/admin/catalog/${testCase.domain}`,
+            token,
+            'POST',
+            testCase.payload,
+          );
+          assert.equal(response.status, 400);
+          assert.equal(response.body?.error?.code, 'CATALOG_MANIFEST_SCHEMA_INVALID');
+          assert.ok(Array.isArray(response.body?.error?.details?.checks));
+        }
+      },
+      counters,
+    );
+
+    await runCase(
       'validate routes return 400 for invalid scope before DB call',
       async () => {
         const validateRunnerToken = createAccessToken(['validate:run'], ['tenant_admin']);

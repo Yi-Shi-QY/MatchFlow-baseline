@@ -314,6 +314,113 @@ async function main() {
       assert.ok(checks.some((check) => check.name === 'compatibility'));
     }, counters);
 
+    await runCase('phase-gate 2b: strict validation for animation/agent/skill domains', async () => {
+      const suffix = Date.now();
+      const records = [
+        {
+          domain: 'animation_template',
+          itemId: `anim_tpl_${suffix}`,
+          manifest: {
+            id: `anim_tpl_${suffix}`,
+            name: 'Animation Template',
+            description: 'Animation schema for strict validator',
+            animationType: 'stats',
+            templateId: 'stats-comparison',
+            requiredParams: ['metric', 'homeValue', 'awayValue'],
+            schema: {
+              type: 'object',
+              properties: {
+                metric: { type: 'string' },
+                homeValue: { type: 'number' },
+                awayValue: { type: 'number' },
+              },
+              required: ['metric', 'homeValue', 'awayValue'],
+            },
+            example: {
+              metric: 'xg',
+              homeValue: 1.25,
+              awayValue: 0.89,
+            },
+          },
+        },
+        {
+          domain: 'agent',
+          itemId: `agent_live_${suffix}`,
+          manifest: {
+            kind: 'agent',
+            id: `agent_live_${suffix}`,
+            name: 'Live Agent',
+            description: 'Agent schema for strict validator',
+            rolePrompt: {
+              en: 'You are a concise football analyst.',
+              zh: '你是一个简洁的足球分析师。',
+            },
+            skills: ['select_plan_template_v2'],
+            contextDependencies: 'all',
+          },
+        },
+        {
+          domain: 'skill',
+          itemId: `skill_live_${suffix}`,
+          manifest: {
+            kind: 'skill',
+            id: `skill_live_${suffix}`,
+            name: 'Live Skill',
+            description: 'Skill schema for strict validator',
+            declaration: {
+              name: `skill_live_${suffix}`,
+              description: 'Delegate to builtin selector',
+              parameters: {
+                type: 'object',
+                properties: {
+                  matchId: { type: 'string' },
+                },
+                required: ['matchId'],
+              },
+            },
+            runtime: {
+              mode: 'builtin_alias',
+              targetSkill: 'select_plan_template',
+            },
+          },
+        },
+      ];
+
+      for (const record of records) {
+        const createResp = await requestJson(baseUrl, `/admin/catalog/${record.domain}`, {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            itemId: record.itemId,
+            version: '1.0.0',
+            status: 'draft',
+            channel: 'internal',
+            manifest: record.manifest,
+          }),
+        });
+        assert.equal(createResp.status, 201);
+
+        const validateResp = await requestJson(baseUrl, '/admin/validate/run', {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            runType: 'catalog_validate',
+            domain: record.domain,
+            scope: {
+              itemId: record.itemId,
+              version: '1.0.0',
+            },
+          }),
+        });
+        assert.equal(validateResp.status, 202);
+        assert.equal(validateResp.body?.data?.status, 'succeeded');
+        const checks = validateResp.body?.data?.result?.checks || [];
+        assert.ok(checks.some((check) => check.name === 'schema'));
+        assert.ok(checks.some((check) => check.name === 'dependency'));
+        assert.ok(checks.some((check) => check.name === 'compatibility'));
+      }
+    }, counters);
+
     const releaseItemId = `ds_release_${Date.now()}`;
 
     await runCase('phase-gate 3: publish/rollback/history workflow', async () => {
