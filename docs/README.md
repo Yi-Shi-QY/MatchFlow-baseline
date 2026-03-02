@@ -56,6 +56,8 @@ ZH:
     Web admin visual governance upgrade plan / Web 管理端可视化治理升级计划
 21. [20-web-admin-phase-a-contract-freeze.md](./20-web-admin-phase-a-contract-freeze.md)  
     Phase A contract freeze deliverables for admin studio / 管理端阶段 A 契约冻结交付物
+22. [21-server2-phase-e-rollout-runbook.md](./21-server2-phase-e-rollout-runbook.md)  
+    Phase E hardening and tenant rollout execution runbook / Phase E 加固与分租户上线执行手册
 ## Writing Rules / 鏂囨。瑙勮寖
 
 1. Every document must contain English + Chinese sections in the same file.  

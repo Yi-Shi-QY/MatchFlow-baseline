@@ -220,9 +220,9 @@ Deliverables:
 |---|---|---|
 | Phase A: Contract Freeze | Completed | OpenAPI + migration draft delivered and reviewed in repo artifacts. |
 | Phase B: Backend Foundation | Completed | Catalog/validate/release APIs, validation runner, publish gate, audit writes, and DB phase-gate tests passed. |
-| Phase C: Web Studio MVP | In Progress | Admin Studio page delivered with datasource/planning/animation/agent/skill structured builders, plus shared API client and route wiring. |
-| Phase D: Validation and Release UX | In Progress | Publish wizard with validation pre-check gate started in Admin Studio page. |
-| Phase E: Hardening and Rollout | Not Started | Pending functional completion of Phase C/D. |
+| Phase C: Web Studio MVP | Completed | Admin Studio page delivered with datasource/planning/animation/agent/skill structured builders, plus shared API client and route wiring. |
+| Phase D: Validation and Release UX | Completed | Validation center + publish wizard gate + rollback/release history linkage delivered. |
+| Phase E: Hardening and Rollout | Completed | Added executable phase-e hardening suite, performance/failure checks, and rollout runbook baseline for tenant-by-tenant release. |
 
 Phase B completion evidence:
 
@@ -316,6 +316,55 @@ Phase C second slice + Phase D first slice delivered:
    - `npm run build` passed after this slice.
    - `cd match-data-server && npm test` passed after this slice.
    - `cd match-data-server && npm run test:db-phase` passed after this slice.
+
+## 7.4 Progress Update (as of 2026-03-02, phase-e baseline)
+
+Phase E hardening and rollout baseline delivered:
+
+1. E2E regression entrypoint:
+   - Added `match-data-server` script:
+     - `npm run test:phase-e`
+   - Added executable suite:
+     - `match-data-server/test/runPhaseEHardening.js`
+   - Coverage in this suite includes:
+     - create+validate regression across all 5 strict-validation domains
+     - datasource publish+rollback workflow smoke
+2. Performance smoke checks:
+   - Added latency p95 checks for:
+     - `/health`
+     - `/admin/catalog/datasource`
+   - Supports threshold override:
+     - `PHASE_E_HEALTH_P95_MAX_MS`
+     - `PHASE_E_CATALOG_P95_MAX_MS`
+3. Failure recovery checks:
+   - Invalid request followed by valid request recovery path.
+   - Service process restart recovery with persisted catalog revision readback.
+4. Tenant rollout runbook:
+   - Added `docs/21-server2-phase-e-rollout-runbook.md` for staged rollout + rollback gates.
+5. Verification:
+   - `cd match-data-server && npm run test:phase-e` passed.
+   - `cd match-data-server && npm test` passed.
+   - `cd match-data-server && npm run test:db-phase` passed.
+
+## 7.5 Progress Update (as of 2026-03-02, joint-testing kickoff)
+
+Client-server joint testing kickoff delivered:
+
+1. Added executable joint smoke script:
+   - `match-data-server/test/runClientServerJointSmoke.js`
+   - `cd match-data-server && npm run test:joint-smoke`
+2. Covered API-contract flow used by Admin Web:
+   - list entries
+   - list revisions
+   - draft save
+   - create revision
+   - diff
+   - validate run + runId lookup
+   - publish
+   - rollback
+   - release history linkage
+3. Next objective:
+   - Add browser-level Admin Studio E2E (UI interactions) on top of current API-contract smoke.
 
 ## 8. Definition of Done
 
