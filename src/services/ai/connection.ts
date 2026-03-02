@@ -1,4 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
+import { Capacitor } from "@capacitor/core";
+
+function normalizeOpenAICompatibleBaseUrl(rawBaseUrl: string): string {
+  const trimmed = String(rawBaseUrl || "").trim();
+  if (!trimmed) return "";
+  const withProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  return withProtocol.replace(/\/+$/, "");
+}
 
 export async function testConnection(settings: any): Promise<boolean> {
   try {
@@ -30,12 +40,14 @@ export async function testConnection(settings: any): Promise<boolean> {
       }
       return true;
     } else if (settings.provider === "openai_compatible") {
-      const baseUrl = (settings.openaiCompatibleBaseUrl || "").trim();
+      const baseUrl = normalizeOpenAICompatibleBaseUrl(
+        settings.openaiCompatibleBaseUrl || ""
+      );
       if (!baseUrl) {
         throw new Error("OpenAI-compatible base URL is not configured.");
       }
 
-      const endpoint = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+      const endpoint = `${baseUrl}/chat/completions`;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
@@ -75,6 +87,11 @@ export async function testConnection(settings: any): Promise<boolean> {
     console.error("Connection test failed:", e);
     // Provide a more helpful message for Failed to fetch
     if (e.message === "Failed to fetch") {
+      if (Capacitor.isNativePlatform()) {
+        throw new Error(
+          "Network request failed on native runtime. Check emulator internet/proxy/certificate, and run npx cap sync android after native network config changes."
+        );
+      }
       throw new Error(
         "Network request failed. Please check connectivity, endpoint URL, API key, or CORS settings."
       );

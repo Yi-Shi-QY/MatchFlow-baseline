@@ -339,9 +339,9 @@ export default function Home() {
                                 <div style={{ width: `${winProb.away}%` }} className="bg-red-500" />
                               </div>
                               <div className="flex justify-between text-[8px] text-zinc-500 font-mono px-1">
-                                <span>主 {winProb.home}%</span>
-                                <span>平 {winProb.draw}%</span>
-                                <span>客 {winProb.away}%</span>
+                                <span>{t('match.home_win')} {winProb.home}%</span>
+                                <span>{t('match.draw')} {winProb.draw}%</span>
+                                <span>{t('match.away_win')} {winProb.away}%</span>
                               </div>
                             </div>
                           ) : (
