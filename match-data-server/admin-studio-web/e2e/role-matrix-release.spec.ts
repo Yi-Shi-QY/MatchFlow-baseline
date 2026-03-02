@@ -152,6 +152,12 @@ test.describe('Admin Studio role matrix for release boundaries', () => {
       'Missing required permission: release:rollback',
       { timeout: 30_000 },
     );
+
+    await page.getByTestId('release-history-filter-item').fill(itemId);
+    const historyList = page.getByTestId('release-history-list');
+    await expect(historyList).toContainText(itemId);
+    await expect(historyList.locator('button:has-text("publish")').first()).toBeVisible();
+    await expect(historyList.locator('button:has-text("rollback")')).toHaveCount(0);
   });
 
   test('tenant_admin role can publish and rollback', async ({ page, request }) => {
@@ -192,5 +198,11 @@ test.describe('Admin Studio role matrix for release boundaries', () => {
       'Rollback completed to 1.0.0.',
       { timeout: 30_000 },
     );
+
+    await page.getByTestId('release-history-filter-item').fill(itemId);
+    const historyList = page.getByTestId('release-history-list');
+    await expect(historyList).toContainText(itemId);
+    await expect(historyList.locator('button:has-text("publish")').first()).toBeVisible();
+    await expect(historyList.locator('button:has-text("rollback")').first()).toBeVisible();
   });
 });
