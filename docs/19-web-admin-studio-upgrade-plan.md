@@ -483,6 +483,23 @@ Expanded browser-level Admin Studio E2E coverage delivered:
 5. Next objective:
    - Extend browser E2E matrix to remaining domains (`animation_template`, `agent`, `skill`) and role matrix (`publisher`, `admin`).
 
+## 7.11 Progress Update (as of 2026-03-02, multi-domain browser validation matrix)
+
+Added remaining-domain browser matrix for strict-validation domains:
+
+1. Added `remaining-domains-validation.spec.ts` covering create+validate loops for:
+   - `animation_template`
+   - `agent`
+   - `skill`
+2. Reused domain-selector test hooks and unified settings flow to ensure cross-domain transition stability.
+3. Current browser E2E suite now includes 4 files:
+   - datasource governance lifecycle
+   - planning_template governance lifecycle
+   - permission guard
+   - remaining strict domains validation matrix
+4. Next objective:
+   - Add role matrix for `publisher` and `admin` with publish/rollback permission boundaries in browser E2E.
+
 ## 8. Definition of Done
 
 Functional DoD:

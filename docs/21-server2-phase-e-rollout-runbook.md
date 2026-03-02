@@ -180,6 +180,7 @@ Current browser E2E baseline covers:
 1. Datasource governance lifecycle (create/validate/publish/rollback/history).
 2. Planning-template governance lifecycle (create/validate/publish/rollback/history).
 3. Permission guard scenario for `catalog:datasource:edit`.
+4. Remaining strict domains validation matrix (`animation_template`, `agent`, `skill` create+validate).
 
 ## 7. Sign-Off Template
 

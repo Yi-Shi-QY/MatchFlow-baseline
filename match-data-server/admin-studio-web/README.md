@@ -60,6 +60,7 @@ Current suite coverage:
 1. `e2e/datasource-governance.spec.ts`
 2. `e2e/planning-template-governance.spec.ts`
 3. `e2e/permission-guard.spec.ts`
+4. `e2e/remaining-domains-validation.spec.ts`
 
 ## Environment
 
