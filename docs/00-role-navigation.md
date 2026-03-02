@@ -3,6 +3,10 @@
 ## EN
 
 If you prefer task-first lookup, also see [15-task-navigation.md](./15-task-navigation.md).
+If you prefer domain-first lookup, see:
+1. [client/README.md](./client/README.md)
+2. [server/README.md](./server/README.md)
+3. [admin-web/README.md](./admin-web/README.md)
 
 ### Quick Paths
 
@@ -13,7 +17,7 @@ If you prefer task-first lookup, also see [15-task-navigation.md](./15-task-navi
 2. Half-day full onboarding:
    [01-product-overview.md](./01-product-overview.md) ->
    [02-architecture.md](./02-architecture.md) ->
-   [03-development.md](./03-development.md) ->
+   [03-development.md](./client/03-development.md) ->
    [00-role-navigation.md](./00-role-navigation.md).
 
 ## 1. Product Owner / PM
@@ -35,9 +39,9 @@ Focus:
 Start here:
 
 1. [02-architecture.md](./02-architecture.md)
-2. [03-development.md](./03-development.md)
-3. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)
-4. [05-i18n-and-encoding.md](./05-i18n-and-encoding.md)
+2. [03-development.md](./client/03-development.md)
+3. [07-data-source-extension-guide.md](./client/07-data-source-extension-guide.md)
+4. [05-i18n-and-encoding.md](./client/05-i18n-and-encoding.md)
 
 Focus:
 
@@ -49,8 +53,8 @@ Focus:
 
 Start here:
 
-1. [04-ai-agent-framework.md](./04-ai-agent-framework.md)
-2. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)
+1. [04-ai-agent-framework.md](./client/04-ai-agent-framework.md)
+2. [06-agent-skill-extension-guide.md](./client/06-agent-skill-extension-guide.md)
 3. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
 
 Focus:
@@ -63,9 +67,9 @@ Focus:
 
 Start here:
 
-1. [08-server-api-guide.md](./08-server-api-guide.md)
-2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
-3. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
+1. [08-server-api-guide.md](./server/08-server-api-guide.md)
+2. [09-server-deploy-and-database-guide.md](./server/09-server-deploy-and-database-guide.md)
+3. [10-server-refactor-roadmap.md](./server/10-server-refactor-roadmap.md)
 4. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
 
 Focus:
@@ -78,8 +82,8 @@ Focus:
 
 Start here:
 
-1. [08-server-api-guide.md](./08-server-api-guide.md)
-2. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
+1. [08-server-api-guide.md](./server/08-server-api-guide.md)
+2. [22-server2-production-readiness-checklist.md](./server/22-server2-production-readiness-checklist.md)
 3. [13-cicd-guide.md](./13-cicd-guide.md)
 
 Focus:
@@ -92,7 +96,7 @@ Focus:
 
 Start here:
 
-1. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
+1. [09-server-deploy-and-database-guide.md](./server/09-server-deploy-and-database-guide.md)
 2. [13-cicd-guide.md](./13-cicd-guide.md)
 3. [12-changelog.md](./12-changelog.md)
 
@@ -108,10 +112,16 @@ Suggested reading order:
 
 1. [01-product-overview.md](./01-product-overview.md)
 2. [02-architecture.md](./02-architecture.md)
-3. [03-development.md](./03-development.md)
+3. [03-development.md](./client/03-development.md)
 4. Your role-specific section in this file.
 
 ## ZH
+
+如果你希望按系统分区阅读，可直接从以下入口开始：
+1. [client/README.md](./client/README.md)
+2. [server/README.md](./server/README.md)
+3. [admin-web/README.md](./admin-web/README.md)
+
 
 如果你更习惯按任务查阅，也可以先看 [15-task-navigation.md](./15-task-navigation.md)。
 
@@ -124,7 +134,7 @@ Suggested reading order:
 2. 半天完整上手：
    [01-product-overview.md](./01-product-overview.md) ->
    [02-architecture.md](./02-architecture.md) ->
-   [03-development.md](./03-development.md) ->
+   [03-development.md](./client/03-development.md) ->
    [00-role-navigation.md](./00-role-navigation.md)。
 
 ## 1. 产品 / 项目负责人
@@ -146,9 +156,9 @@ Suggested reading order:
 建议先读：
 
 1. [02-architecture.md](./02-architecture.md)
-2. [03-development.md](./03-development.md)
-3. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)
-4. [05-i18n-and-encoding.md](./05-i18n-and-encoding.md)
+2. [03-development.md](./client/03-development.md)
+3. [07-data-source-extension-guide.md](./client/07-data-source-extension-guide.md)
+4. [05-i18n-and-encoding.md](./client/05-i18n-and-encoding.md)
 
 关注重点：
 
@@ -160,8 +170,8 @@ Suggested reading order:
 
 建议先读：
 
-1. [04-ai-agent-framework.md](./04-ai-agent-framework.md)
-2. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)
+1. [04-ai-agent-framework.md](./client/04-ai-agent-framework.md)
+2. [06-agent-skill-extension-guide.md](./client/06-agent-skill-extension-guide.md)
 3. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
 
 关注重点：
@@ -174,9 +184,9 @@ Suggested reading order:
 
 建议先读：
 
-1. [08-server-api-guide.md](./08-server-api-guide.md)
-2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
-3. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
+1. [08-server-api-guide.md](./server/08-server-api-guide.md)
+2. [09-server-deploy-and-database-guide.md](./server/09-server-deploy-and-database-guide.md)
+3. [10-server-refactor-roadmap.md](./server/10-server-refactor-roadmap.md)
 4. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
 
 关注重点：
@@ -189,8 +199,8 @@ Suggested reading order:
 
 建议先读：
 
-1. [08-server-api-guide.md](./08-server-api-guide.md)
-2. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
+1. [08-server-api-guide.md](./server/08-server-api-guide.md)
+2. [22-server2-production-readiness-checklist.md](./server/22-server2-production-readiness-checklist.md)
 3. [13-cicd-guide.md](./13-cicd-guide.md)
 
 关注重点：
@@ -203,7 +213,7 @@ Suggested reading order:
 
 建议先读：
 
-1. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
+1. [09-server-deploy-and-database-guide.md](./server/09-server-deploy-and-database-guide.md)
 2. [13-cicd-guide.md](./13-cicd-guide.md)
 3. [12-changelog.md](./12-changelog.md)
 
@@ -219,5 +229,5 @@ Suggested reading order:
 
 1. [01-product-overview.md](./01-product-overview.md)
 2. [02-architecture.md](./02-architecture.md)
-3. [03-development.md](./03-development.md)
+3. [03-development.md](./client/03-development.md)
 4. 再进入本文对应角色章节。

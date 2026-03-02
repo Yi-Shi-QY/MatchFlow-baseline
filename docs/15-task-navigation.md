@@ -4,6 +4,10 @@
 
 Use this page when you know what to do, but do not know where the docs are.  
 If you already know your role, see [00-role-navigation.md](./00-role-navigation.md).
+If you already know your domain, see:
+1. [client/README.md](./client/README.md)
+2. [server/README.md](./server/README.md)
+3. [admin-web/README.md](./admin-web/README.md)
 
 ### Quick Modes
 
@@ -12,7 +16,7 @@ If you already know your role, see [00-role-navigation.md](./00-role-navigation.
    [02-architecture.md](./02-architecture.md) ->
    [12-changelog.md](./12-changelog.md).
 2. Half-day execution mode:
-   Pick one task section below, then pair with [03-development.md](./03-development.md).
+   Pick one task section below, then pair with [03-development.md](./client/03-development.md).
 
 ## 1. I want to onboard quickly
 
@@ -20,16 +24,16 @@ Read in order:
 
 1. [01-product-overview.md](./01-product-overview.md)
 2. [02-architecture.md](./02-architecture.md)
-3. [03-development.md](./03-development.md)
+3. [03-development.md](./client/03-development.md)
 4. [00-role-navigation.md](./00-role-navigation.md)
 
 ## 2. I want to add a new data source
 
 Read:
 
-1. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)
+1. [07-data-source-extension-guide.md](./client/07-data-source-extension-guide.md)
 2. [02-architecture.md](./02-architecture.md)
-3. [05-i18n-and-encoding.md](./05-i18n-and-encoding.md)
+3. [05-i18n-and-encoding.md](./client/05-i18n-and-encoding.md)
 
 Implementation checklist:
 
@@ -42,8 +46,8 @@ Implementation checklist:
 
 Read:
 
-1. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)
-2. [04-ai-agent-framework.md](./04-ai-agent-framework.md)
+1. [06-agent-skill-extension-guide.md](./client/06-agent-skill-extension-guide.md)
+2. [04-ai-agent-framework.md](./client/04-ai-agent-framework.md)
 3. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
 
 Implementation checklist:
@@ -56,9 +60,9 @@ Implementation checklist:
 
 Read:
 
-1. [08-server-api-guide.md](./08-server-api-guide.md)
-2. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
-3. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
+1. [08-server-api-guide.md](./server/08-server-api-guide.md)
+2. [10-server-refactor-roadmap.md](./server/10-server-refactor-roadmap.md)
+3. [22-server2-production-readiness-checklist.md](./server/22-server2-production-readiness-checklist.md)
 
 Implementation checklist:
 
@@ -70,8 +74,8 @@ Implementation checklist:
 
 Read:
 
-1. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
-2. [08-server-api-guide.md](./08-server-api-guide.md)
+1. [09-server-deploy-and-database-guide.md](./server/09-server-deploy-and-database-guide.md)
+2. [08-server-api-guide.md](./server/08-server-api-guide.md)
 3. [13-cicd-guide.md](./13-cicd-guide.md)
 
 Implementation checklist:
@@ -84,11 +88,11 @@ Implementation checklist:
 
 Read:
 
-1. [16-server-auth-and-admin-roadmap.md](./16-server-auth-and-admin-roadmap.md)
-2. [19-web-admin-studio-upgrade-plan.md](./19-web-admin-studio-upgrade-plan.md)
-3. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
-4. [23-server2-admin-studio-separation.md](./23-server2-admin-studio-separation.md)
-5. [08-server-api-guide.md](./08-server-api-guide.md)
+1. [16-server-auth-and-admin-roadmap.md](./server/16-server-auth-and-admin-roadmap.md)
+2. [19-web-admin-studio-upgrade-plan.md](./admin-web/19-web-admin-studio-upgrade-plan.md)
+3. [22-server2-production-readiness-checklist.md](./server/22-server2-production-readiness-checklist.md)
+4. [23-server2-admin-studio-separation.md](./admin-web/23-server2-admin-studio-separation.md)
+5. [08-server-api-guide.md](./server/08-server-api-guide.md)
 
 Implementation checklist:
 
@@ -100,12 +104,12 @@ Implementation checklist:
 
 Read:
 
-1. [19-web-admin-studio-upgrade-plan.md](./19-web-admin-studio-upgrade-plan.md)
-2. [20-web-admin-phase-a-contract-freeze.md](./20-web-admin-phase-a-contract-freeze.md)
+1. [19-web-admin-studio-upgrade-plan.md](./admin-web/19-web-admin-studio-upgrade-plan.md)
+2. [20-web-admin-phase-a-contract-freeze.md](./admin-web/20-web-admin-phase-a-contract-freeze.md)
 3. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
-4. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)
-5. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)
-6. [08-server-api-guide.md](./08-server-api-guide.md)
+4. [06-agent-skill-extension-guide.md](./client/06-agent-skill-extension-guide.md)
+5. [07-data-source-extension-guide.md](./client/07-data-source-extension-guide.md)
+6. [08-server-api-guide.md](./server/08-server-api-guide.md)
 
 Implementation checklist:
 
@@ -119,8 +123,8 @@ Implementation checklist:
 
 Read:
 
-1. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
-2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
+1. [22-server2-production-readiness-checklist.md](./server/22-server2-production-readiness-checklist.md)
+2. [09-server-deploy-and-database-guide.md](./server/09-server-deploy-and-database-guide.md)
 
 Implementation checklist:
 
@@ -147,8 +151,8 @@ Implementation checklist:
 Read:
 
 1. [02-architecture.md](./02-architecture.md)
-2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
-3. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
+2. [09-server-deploy-and-database-guide.md](./server/09-server-deploy-and-database-guide.md)
+3. [10-server-refactor-roadmap.md](./server/10-server-refactor-roadmap.md)
 
 Implementation checklist:
 
@@ -157,6 +161,12 @@ Implementation checklist:
 3. Validate resume logic for network failure and app restart.
 
 ## ZH
+
+如果你已经明确自己负责的系统分区，可直接从以下入口阅读：
+1. [client/README.md](./client/README.md)
+2. [server/README.md](./server/README.md)
+3. [admin-web/README.md](./admin-web/README.md)
+
 
 当你明确要做什么，但不确定该看哪篇文档时，可以用本页快速定位。  
 如果你已经明确角色分工，也可以先看 [00-role-navigation.md](./00-role-navigation.md)。
@@ -168,7 +178,7 @@ Implementation checklist:
    [02-architecture.md](./02-architecture.md) ->
    [12-changelog.md](./12-changelog.md)。
 2. 半天执行路径：
-   从下方选择一个任务分支，再结合 [03-development.md](./03-development.md) 实施。
+   从下方选择一个任务分支，再结合 [03-development.md](./client/03-development.md) 实施。
 
 ## 1. 我想快速上手项目
 
@@ -176,16 +186,16 @@ Implementation checklist:
 
 1. [01-product-overview.md](./01-product-overview.md)
 2. [02-architecture.md](./02-architecture.md)
-3. [03-development.md](./03-development.md)
+3. [03-development.md](./client/03-development.md)
 4. [00-role-navigation.md](./00-role-navigation.md)
 
 ## 2. 我想新增一个数据源
 
 建议阅读：
 
-1. [07-data-source-extension-guide.md](./07-data-source-extension-guide.md)
+1. [07-data-source-extension-guide.md](./client/07-data-source-extension-guide.md)
 2. [02-architecture.md](./02-architecture.md)
-3. [05-i18n-and-encoding.md](./05-i18n-and-encoding.md)
+3. [05-i18n-and-encoding.md](./client/05-i18n-and-encoding.md)
 
 实施清单：
 
@@ -198,8 +208,8 @@ Implementation checklist:
 
 建议阅读：
 
-1. [06-agent-skill-extension-guide.md](./06-agent-skill-extension-guide.md)
-2. [04-ai-agent-framework.md](./04-ai-agent-framework.md)
+1. [06-agent-skill-extension-guide.md](./client/06-agent-skill-extension-guide.md)
+2. [04-ai-agent-framework.md](./client/04-ai-agent-framework.md)
 3. [14-extension-hub-spec.md](./14-extension-hub-spec.md)
 
 实施清单：
@@ -212,9 +222,9 @@ Implementation checklist:
 
 建议阅读：
 
-1. [08-server-api-guide.md](./08-server-api-guide.md)
-2. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
-3. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
+1. [08-server-api-guide.md](./server/08-server-api-guide.md)
+2. [10-server-refactor-roadmap.md](./server/10-server-refactor-roadmap.md)
+3. [22-server2-production-readiness-checklist.md](./server/22-server2-production-readiness-checklist.md)
 
 实施清单：
 
@@ -226,8 +236,8 @@ Implementation checklist:
 
 建议阅读：
 
-1. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
-2. [08-server-api-guide.md](./08-server-api-guide.md)
+1. [09-server-deploy-and-database-guide.md](./server/09-server-deploy-and-database-guide.md)
+2. [08-server-api-guide.md](./server/08-server-api-guide.md)
 3. [13-cicd-guide.md](./13-cicd-guide.md)
 
 实施清单：
@@ -240,8 +250,8 @@ Implementation checklist:
 
 建议阅读：
 
-1. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
-2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
+1. [22-server2-production-readiness-checklist.md](./server/22-server2-production-readiness-checklist.md)
+2. [09-server-deploy-and-database-guide.md](./server/09-server-deploy-and-database-guide.md)
 
 实施清单：
 
@@ -268,8 +278,8 @@ Implementation checklist:
 建议阅读：
 
 1. [02-architecture.md](./02-architecture.md)
-2. [09-server-deploy-and-database-guide.md](./09-server-deploy-and-database-guide.md)
-3. [10-server-refactor-roadmap.md](./10-server-refactor-roadmap.md)
+2. [09-server-deploy-and-database-guide.md](./server/09-server-deploy-and-database-guide.md)
+3. [10-server-refactor-roadmap.md](./server/10-server-refactor-roadmap.md)
 
 实施清单：
 
