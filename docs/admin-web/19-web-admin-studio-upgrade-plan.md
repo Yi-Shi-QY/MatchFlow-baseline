@@ -347,7 +347,7 @@ Phase E hardening and rollout baseline delivered:
    - Invalid request followed by valid request recovery path.
    - Service process restart recovery with persisted catalog revision readback.
 4. Tenant rollout runbook:
-   - Added `docs/21-server2-phase-e-rollout-runbook.md` for staged rollout + rollback gates.
+   - Added `docs/server/21-server2-phase-e-rollout-runbook.md` for staged rollout + rollback gates.
 5. Verification:
    - `cd match-data-server && npm run test:phase-e` passed.
    - `cd match-data-server && npm test` passed.
@@ -414,7 +414,7 @@ Server 2.0 production-readiness baseline delivered:
      - `npm run test:prod-ready`
      - `npm run preflight:prod`
    - Added checklist document:
-     - `docs/22-server2-production-readiness-checklist.md`
+     - `docs/server/22-server2-production-readiness-checklist.md`
 6. Next objective:
    - Start browser-level Admin Studio E2E on top of production-ready runtime baseline.
 

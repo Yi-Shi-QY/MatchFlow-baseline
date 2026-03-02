@@ -36,7 +36,8 @@ These docs are cross-domain and should be referenced by all three sections:
 ## 4. Compatibility Note
 
 Domain documents have been reorganized under `docs/client`, `docs/server`, and `docs/admin-web`.
-Legacy root-level markdown files are kept as compatibility redirect pages to avoid broken links.
+Legacy root-level duplicate markdown files have been removed. Use domain `README.md` files and
+role/task navigation pages as the canonical entry points.
 
 ## 5. Writing Rules
 
@@ -81,7 +82,7 @@ Legacy root-level markdown files are kept as compatibility redirect pages to avo
 ## 4. 兼容说明
 
 分区文档已归档到 `docs/client`、`docs/server`、`docs/admin-web`。
-根目录保留了兼容跳转页，用于避免历史链接失效。
+根目录历史重复文档已清理，请以各分区 `README.md` 与角色/任务导航页作为唯一入口。
 
 ## 5. 编写规范
 

@@ -265,7 +265,7 @@ Datasource collection governance notes:
 
 Reference runbook:
 
-1. `docs/24-cn-jczq-collection-interface-and-script.md`
+1. `docs/server/24-cn-jczq-collection-interface-and-script.md`
 
 1. Collector management (`/admin/data-collections/collectors*`)
    - Create/update collector metadata:

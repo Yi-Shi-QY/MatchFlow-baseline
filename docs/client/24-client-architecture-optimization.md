@@ -8,10 +8,10 @@
 - Last updated: 2026-03-02
 - Related docs:
   - `docs/02-architecture.md`
-  - `docs/04-ai-agent-framework.md`
+  - `docs/client/04-ai-agent-framework.md`
   - `docs/14-extension-hub-spec.md`
-  - `docs/domain-packs.md`
-  - `docs/skill-runtime-modes.md`
+  - `docs/client/domain-packs.md`
+  - `docs/client/skill-runtime-modes.md`
 
 ### ZH
 - 状态：当前有效工作稿（已与现有代码对齐）
@@ -19,10 +19,10 @@
 - 最后更新：2026-03-02
 - 关联文档：
   - `docs/02-architecture.md`
-  - `docs/04-ai-agent-framework.md`
+  - `docs/client/04-ai-agent-framework.md`
   - `docs/14-extension-hub-spec.md`
-  - `docs/domain-packs.md`
-  - `docs/skill-runtime-modes.md`
+  - `docs/client/domain-packs.md`
+  - `docs/client/skill-runtime-modes.md`
 
 ---
 
