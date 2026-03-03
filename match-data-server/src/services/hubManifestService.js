@@ -1,11 +1,16 @@
 const crypto = require('crypto');
 const extensionRepository = require('../repositories/extensionRepository');
+const {
+  getCatalogRevisionByVersion,
+  getLatestPublishedRevision,
+} = require('../repositories/studioCatalogRepository');
 
 const ALLOWED_KINDS = ['agent', 'skill', 'template'];
 const ALLOWED_CHANNELS = ['stable', 'beta', 'internal'];
 const ALLOWED_STATUSES = ['draft', 'published', 'deprecated'];
 const ID_PATTERN = /^[a-z0-9_][a-z0-9_-]{1,63}$/;
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
 
 function compareSemver(a, b) {
   const parse = (value) => {
@@ -58,6 +63,120 @@ function normalizeStringArray(input) {
     .filter((item) => typeof item === 'string')
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function normalizeTenantId(input) {
+  if (typeof input === 'string' && input.trim().length > 0) {
+    return input.trim();
+  }
+  return DEFAULT_TENANT_ID;
+}
+
+function resolveCatalogDomainByKind(kind) {
+  if (kind === 'template') return 'planning_template';
+  if (kind === 'agent') return 'agent';
+  if (kind === 'skill') return 'skill';
+  return null;
+}
+
+function ensureNonEmptyString(value, fallbackValue) {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim();
+  }
+  return fallbackValue;
+}
+
+function buildRuntimeManifestFromCatalogRevision(kind, revision) {
+  const revisionManifest =
+    revision && revision.manifest && typeof revision.manifest === 'object'
+      ? cloneValue(revision.manifest)
+      : {};
+  const extensionId = ensureNonEmptyString(revisionManifest.id, revision.itemId);
+  const version = ensureNonEmptyString(revision.version, revisionManifest.version || '');
+  const name = ensureNonEmptyString(revisionManifest.name, extensionId);
+  const descriptionFallback =
+    kind === 'template'
+      ? 'Planning template managed by Admin Studio'
+      : `${kind} manifest managed by Admin Studio`;
+  const description = ensureNonEmptyString(revisionManifest.description, descriptionFallback);
+
+  return {
+    ...revisionManifest,
+    kind,
+    id: extensionId,
+    version,
+    name,
+    description,
+  };
+}
+
+function mapCatalogRevisionToRuntimeRecord(kind, revision) {
+  if (!revision) return null;
+
+  const manifest = buildRuntimeManifestFromCatalogRevision(kind, revision);
+  return {
+    kind,
+    extensionId: manifest.id,
+    version: manifest.version,
+    name: manifest.name,
+    description: manifest.description,
+    manifest,
+    channel: revision.channel,
+    status: revision.status,
+    checksum: revision.checksum || checksumFromManifest(manifest),
+    publishedAt: revision.publishedAt || null,
+    updatedAt: revision.updatedAt || revision.createdAt || new Date().toISOString(),
+  };
+}
+
+async function resolveManifestFromCatalog(kind, extensionId, options = {}) {
+  const domain = resolveCatalogDomainByKind(kind);
+  if (!domain) return null;
+
+  const tenantId = normalizeTenantId(options.tenantId);
+  const statuses =
+    Array.isArray(options.statuses) && options.statuses.length > 0
+      ? options.statuses.map((status) => normalizeStatus(status, status))
+      : ['published'];
+  const channel = options.channel ? normalizeChannel(options.channel, '') : '';
+
+  if (options.version) {
+    const revision = await getCatalogRevisionByVersion({
+      domain,
+      tenantId,
+      itemId: extensionId,
+      version: options.version,
+    });
+    if (!revision) return null;
+    if (channel && revision.channel !== channel) return null;
+    if (statuses.length > 0 && !statuses.includes(revision.status)) return null;
+    return mapCatalogRevisionToRuntimeRecord(kind, revision);
+  }
+
+  if (!channel) {
+    for (const candidate of ALLOWED_CHANNELS) {
+      const revision = await getLatestPublishedRevision({
+        domain,
+        tenantId,
+        itemId: extensionId,
+        channel: candidate,
+      });
+      if (!revision) continue;
+      if (statuses.length > 0 && !statuses.includes(revision.status)) continue;
+      return mapCatalogRevisionToRuntimeRecord(kind, revision);
+    }
+    return null;
+  }
+
+  const revision = await getLatestPublishedRevision({
+    domain,
+    tenantId,
+    itemId: extensionId,
+    channel,
+  });
+  if (!revision) return null;
+  if (statuses.length > 0 && !statuses.includes(revision.status)) return null;
+  return mapCatalogRevisionToRuntimeRecord(kind, revision);
 }
 
 function validateManifest(manifest) {
@@ -402,10 +521,28 @@ function mapDbRowToRecord(row) {
   };
 }
 
+function isExpectedCatalogFallbackError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  if (!message) return false;
+  if (message.includes('database not connected')) return true;
+  return message.includes('relation') && message.includes('_revisions');
+}
+
 async function getManifest(kindInput, extensionIdInput, options = {}) {
   const kind = normalizeKind(kindInput);
   const extensionId = String(extensionIdInput || '').trim();
   if (!ALLOWED_KINDS.includes(kind) || !extensionId) return null;
+
+  try {
+    const catalogRecord = await resolveManifestFromCatalog(kind, extensionId, options);
+    if (catalogRecord) {
+      return catalogRecord;
+    }
+  } catch (error) {
+    if (!isExpectedCatalogFallbackError(error)) {
+      console.warn('Failed to read runtime manifest from catalog revisions, fallback to extension DB:', error.message);
+    }
+  }
 
   try {
     const dbRow = await resolveManifestFromDb(kind, extensionId, options);
@@ -587,10 +724,11 @@ async function publishManifest(kindInput, extensionIdInput, versionInput) {
   });
 }
 
-async function getTemplateRequirements(templateId) {
+async function getTemplateRequirements(templateId, options = {}) {
   const record = await getManifest('template', templateId, {
     statuses: ['published'],
-    channel: 'stable',
+    channel: options.channel || 'stable',
+    tenantId: options.tenantId,
   });
 
   if (!record || !record.manifest || typeof record.manifest !== 'object') {
@@ -616,4 +754,3 @@ module.exports = {
   publishManifest,
   getTemplateRequirements,
 };
-

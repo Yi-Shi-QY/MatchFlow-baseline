@@ -878,3 +878,31 @@ Production hardening completed for datasource collection pipeline:
 5. Script production options:
    - upstream timeout, retry, backoff, minimum-row threshold
    - import supports `allowDuplicate` and `force`.
+
+## 7.15 Progress Update (as of 2026-03-02, runtime bridge and full gate pass)
+
+Runtime integration and production gate status update:
+
+1. Hub runtime manifest resolution is now bridged to published Admin Studio revisions first:
+   - `template` -> `planning_template_revisions`
+   - `agent` -> `agent_revisions`
+   - `skill` -> `skill_revisions`
+2. Runtime lookup is tenant-aware and channel-aware:
+   - uses tenant context from auth token when available
+   - defaults to `stable` channel in planning/runtime calls
+3. Added DB phase-gate coverage:
+   - `phase-gate 3b` verifies create -> validate -> publish -> rollback changes are reflected through:
+     - `/hub/templates/:id`
+     - `/hub/agents/:id`
+     - `/hub/skills/:id`
+4. Full production gate command chain has executable green baseline in local DB mode:
+   - `npm test`
+   - `npm run test:db-phase`
+   - `npm run test:phase-e`
+   - `npm run test:joint-smoke`
+   - `npm run test:web-joint-smoke`
+   - `npm run admin-web:e2e`
+   - `npm run test:prod-ready`
+   - `DB_SSL_MODE=disable npm run preflight:prod`
+5. Next objective:
+   - move into client-server integration scenarios focused on real datasource collection and release-distribution operations.

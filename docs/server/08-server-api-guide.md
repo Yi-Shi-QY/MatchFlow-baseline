@@ -93,6 +93,17 @@ Permission rules in account mode:
    - `template:use:<id>` or `template:use:*`
 2. Agent/skill manifest requires at least one template permission.
 
+Runtime resolution order (Server 2.0 bridge):
+
+1. Hub first resolves published catalog revisions from Admin Studio tables:
+   - `template` -> `planning_template_revisions`
+   - `agent` -> `agent_revisions`
+   - `skill` -> `skill_revisions`
+2. Tenant-aware lookup uses token tenant context when available; default channel is `stable`.
+3. If catalog revisions are unavailable, Hub falls back to legacy `extension_manifests`.
+4. In mock/no-DB mode, Hub falls back to in-memory default manifests.
+5. `analysis/config/resolve` template requirement expansion follows the same runtime resolution logic.
+
 ## 5. Admin APIs
 
 In account mode, all `/admin/*` endpoints require:
@@ -182,8 +193,10 @@ Operational notes:
    - `POST /admin/data-collections/collectors/:collectorId/import`
    - `GET /admin/data-collections/runs`
    - `GET /admin/data-collections/snapshots`
+   - `GET /admin/data-collections/health`
    - `POST /admin/data-collections/snapshots/:snapshotId/confirm`
    - `POST /admin/data-collections/snapshots/:snapshotId/release`
+   - `POST /admin/data-collections/snapshots/:snapshotId/replay`
 
 Domain values:
 
@@ -305,6 +318,8 @@ Reference runbook:
    - previous released snapshot in same `sourceId + channel` is marked `deprecated`
 4. Permission baseline:
    - collector/runs/snapshots read-write-confirm:
+     - `catalog:datasource:edit`
+   - collection health and snapshot replay:
      - `catalog:datasource:edit`
    - snapshot release:
      - `release:publish`

@@ -722,6 +722,37 @@ async function main() {
       assert.equal(pendingSnapshots.status, 200);
       const pendingRows = pendingSnapshots.body?.data || [];
       assert.ok(pendingRows.some((item) => item.id === importedSnapshotId));
+
+      const healthOverview = await requestJson(
+        baseUrl,
+        `/admin/data-collections/health?sourceId=${encodeURIComponent(sourceId)}&limit=20`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(healthOverview.status, 200);
+      const healthRows = healthOverview.body?.data || [];
+      const healthRecord = healthRows.find((item) => item?.collector?.id === collectorId);
+      assert.ok(healthRecord);
+      assert.equal(healthRecord.health?.status, 'healthy');
+
+      const replayResp = await requestJson(
+        baseUrl,
+        `/admin/data-collections/snapshots/${encodeURIComponent(firstSnapshotId)}/replay`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            allowDuplicate: true,
+          }),
+        },
+      );
+      assert.equal(replayResp.status, 202);
+      assert.equal(replayResp.body?.data?.sourceSnapshotId, firstSnapshotId);
+      assert.equal(replayResp.body?.data?.run?.status, 'succeeded');
+      assert.equal(replayResp.body?.data?.deduplicated, false);
+      assert.ok(replayResp.body?.data?.snapshot?.id);
     }, counters);
 
     const releaseItemId = `ds_release_${Date.now()}`;
@@ -966,6 +997,334 @@ async function main() {
       const actions = rows.filter((row) => row.itemId === releaseItemId).map((row) => row.action);
       assert.ok(actions.includes('publish'));
       assert.ok(actions.includes('rollback'));
+    }, counters);
+
+    await runCase('phase-gate 3b: hub endpoints resolve published catalog revisions for runtime', async () => {
+      const runTag = Date.now();
+
+      const templateItemId = `hub_tpl_${runTag}`;
+      const createTemplateV1 = await requestJson(baseUrl, '/admin/catalog/planning_template', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          itemId: templateItemId,
+          version: '1.0.0',
+          status: 'draft',
+          channel: 'internal',
+          manifest: {
+            id: templateItemId,
+            name: 'Hub Planning Template v1',
+            rule: 'Runtime should load published planning template from catalog revisions.',
+            requiredAgents: ['overview'],
+            requiredSkills: ['select_plan_template_v2'],
+            segments: [
+              {
+                id: 'segment_1',
+                agentType: 'overview',
+                title: { en: 'Overview', zh: '概览' },
+                focus: { en: 'Summarize baseline.', zh: '总结基础面。' },
+                contextMode: 'independent',
+              },
+            ],
+          },
+        }),
+      });
+      assert.equal(createTemplateV1.status, 201);
+
+      const validateTemplateV1 = await requestJson(baseUrl, '/admin/validate/run', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          runType: 'catalog_validate',
+          domain: 'planning_template',
+          scope: {
+            itemId: templateItemId,
+            version: '1.0.0',
+          },
+        }),
+      });
+      assert.equal(validateTemplateV1.status, 202);
+      assert.equal(validateTemplateV1.body?.data?.status, 'succeeded');
+
+      const publishTemplateV1 = await requestJson(
+        baseUrl,
+        `/admin/catalog/planning_template/${templateItemId}/publish`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            version: '1.0.0',
+            channel: 'stable',
+            validationRunId: validateTemplateV1.body?.data?.id,
+          }),
+        },
+      );
+      assert.equal(publishTemplateV1.status, 200);
+
+      const hubTemplateV1 = await requestJson(
+        baseUrl,
+        `/hub/templates/${encodeURIComponent(templateItemId)}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(hubTemplateV1.status, 200);
+      assert.equal(hubTemplateV1.body?.data?.kind, 'template');
+      assert.equal(hubTemplateV1.body?.data?.id, templateItemId);
+      assert.equal(hubTemplateV1.body?.data?.version, '1.0.0');
+      assert.ok(Array.isArray(hubTemplateV1.body?.data?.requiredAgents));
+      assert.ok(hubTemplateV1.body?.data?.requiredAgents.includes('overview'));
+
+      const createTemplateV2 = await requestJson(
+        baseUrl,
+        `/admin/catalog/planning_template/${templateItemId}/revisions`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            version: '1.1.0',
+            status: 'draft',
+            channel: 'internal',
+            manifest: {
+              id: templateItemId,
+              name: 'Hub Planning Template v2',
+              rule: 'Runtime should pick newest published stable version.',
+              requiredAgents: ['overview', 'momentum_agent'],
+              requiredSkills: ['select_plan_template_v2'],
+              segments: [
+                {
+                  id: 'segment_1',
+                  agentType: 'overview',
+                  title: { en: 'Overview', zh: '概览' },
+                  focus: { en: 'Summarize baseline.', zh: '总结基础面。' },
+                  contextMode: 'independent',
+                },
+                {
+                  id: 'segment_2',
+                  agentType: 'momentum_agent',
+                  title: { en: 'Momentum', zh: '动量' },
+                  focus: { en: 'Track pressure shifts.', zh: '观察压力变化。' },
+                  contextMode: 'build_upon',
+                },
+              ],
+            },
+          }),
+        },
+      );
+      assert.equal(createTemplateV2.status, 201);
+
+      const validateTemplateV2 = await requestJson(baseUrl, '/admin/validate/run', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          runType: 'catalog_validate',
+          domain: 'planning_template',
+          scope: {
+            itemId: templateItemId,
+            version: '1.1.0',
+          },
+        }),
+      });
+      assert.equal(validateTemplateV2.status, 202);
+      assert.equal(validateTemplateV2.body?.data?.status, 'succeeded');
+
+      const publishTemplateV2 = await requestJson(
+        baseUrl,
+        `/admin/catalog/planning_template/${templateItemId}/publish`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            version: '1.1.0',
+            channel: 'stable',
+            validationRunId: validateTemplateV2.body?.data?.id,
+          }),
+        },
+      );
+      assert.equal(publishTemplateV2.status, 200);
+
+      const hubTemplateV2 = await requestJson(
+        baseUrl,
+        `/hub/templates/${encodeURIComponent(templateItemId)}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(hubTemplateV2.status, 200);
+      assert.equal(hubTemplateV2.body?.data?.version, '1.1.0');
+      assert.ok(hubTemplateV2.body?.data?.requiredAgents.includes('momentum_agent'));
+
+      const rollbackTemplate = await requestJson(
+        baseUrl,
+        `/admin/catalog/planning_template/${templateItemId}/rollback`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            targetVersion: '1.0.0',
+            channel: 'stable',
+          }),
+        },
+      );
+      assert.equal(rollbackTemplate.status, 200);
+
+      const hubTemplateRollback = await requestJson(
+        baseUrl,
+        `/hub/templates/${encodeURIComponent(templateItemId)}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(hubTemplateRollback.status, 200);
+      assert.equal(hubTemplateRollback.body?.data?.version, '1.0.0');
+
+      const agentItemId = `hub_agent_${runTag}`;
+      const createAgent = await requestJson(baseUrl, '/admin/catalog/agent', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          itemId: agentItemId,
+          version: '1.0.0',
+          status: 'draft',
+          channel: 'internal',
+          manifest: {
+            kind: 'agent',
+            id: agentItemId,
+            name: 'Hub Agent v1',
+            description: 'Agent manifest exposed through /hub/agents.',
+            rolePrompt: {
+              en: 'You are a concise analyst.',
+              zh: '你是简洁分析师。',
+            },
+            skills: ['select_plan_template_v2'],
+            contextDependencies: 'all',
+          },
+        }),
+      });
+      assert.equal(createAgent.status, 201);
+
+      const validateAgent = await requestJson(baseUrl, '/admin/validate/run', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          runType: 'catalog_validate',
+          domain: 'agent',
+          scope: {
+            itemId: agentItemId,
+            version: '1.0.0',
+          },
+        }),
+      });
+      assert.equal(validateAgent.status, 202);
+      assert.equal(validateAgent.body?.data?.status, 'succeeded');
+
+      const publishAgent = await requestJson(
+        baseUrl,
+        `/admin/catalog/agent/${agentItemId}/publish`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            version: '1.0.0',
+            channel: 'stable',
+            validationRunId: validateAgent.body?.data?.id,
+          }),
+        },
+      );
+      assert.equal(publishAgent.status, 200);
+
+      const hubAgent = await requestJson(
+        baseUrl,
+        `/hub/agents/${encodeURIComponent(agentItemId)}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(hubAgent.status, 200);
+      assert.equal(hubAgent.body?.data?.kind, 'agent');
+      assert.equal(hubAgent.body?.data?.id, agentItemId);
+      assert.equal(hubAgent.body?.data?.version, '1.0.0');
+
+      const skillItemId = `hub_skill_${runTag}`;
+      const createSkill = await requestJson(baseUrl, '/admin/catalog/skill', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          itemId: skillItemId,
+          version: '1.0.0',
+          status: 'draft',
+          channel: 'internal',
+          manifest: {
+            kind: 'skill',
+            id: skillItemId,
+            name: 'Hub Skill v1',
+            description: 'Skill manifest exposed through /hub/skills.',
+            declaration: {
+              name: skillItemId,
+              description: 'Delegates to builtin selector',
+              parameters: {
+                type: 'object',
+                properties: {
+                  matchId: { type: 'string' },
+                },
+                required: ['matchId'],
+              },
+            },
+            runtime: {
+              mode: 'builtin_alias',
+              targetSkill: 'select_plan_template',
+            },
+          },
+        }),
+      });
+      assert.equal(createSkill.status, 201);
+
+      const validateSkill = await requestJson(baseUrl, '/admin/validate/run', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          runType: 'catalog_validate',
+          domain: 'skill',
+          scope: {
+            itemId: skillItemId,
+            version: '1.0.0',
+          },
+        }),
+      });
+      assert.equal(validateSkill.status, 202);
+      assert.equal(validateSkill.body?.data?.status, 'succeeded');
+
+      const publishSkill = await requestJson(
+        baseUrl,
+        `/admin/catalog/skill/${skillItemId}/publish`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            version: '1.0.0',
+            channel: 'stable',
+            validationRunId: validateSkill.body?.data?.id,
+          }),
+        },
+      );
+      assert.equal(publishSkill.status, 200);
+
+      const hubSkill = await requestJson(
+        baseUrl,
+        `/hub/skills/${encodeURIComponent(skillItemId)}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(hubSkill.status, 200);
+      assert.equal(hubSkill.body?.data?.kind, 'skill');
+      assert.equal(hubSkill.body?.data?.id, skillItemId);
+      assert.equal(hubSkill.body?.data?.version, '1.0.0');
     }, counters);
 
     await runCase('phase-gate 4: permission matrix (user tokens + DB sessions)', async () => {

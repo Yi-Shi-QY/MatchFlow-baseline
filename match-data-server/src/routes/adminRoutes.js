@@ -51,8 +51,10 @@ const {
   importDatasourceCollectionSnapshotForAdmin,
   listDatasourceCollectionRunsForAdmin,
   listDatasourceCollectionSnapshotsForAdmin,
+  listDatasourceCollectionHealthForAdmin,
   confirmDatasourceCollectionSnapshotForAdmin,
   releaseDatasourceCollectionSnapshotForAdmin,
+  replayDatasourceCollectionSnapshotForAdmin,
 } = require('../services/datasourceCollectionService');
 
 function parseStatuses(input) {
@@ -627,6 +629,18 @@ function registerAdminRoutes(app, authenticate) {
     }
   }));
 
+  app.get('/admin/data-collections/health', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const result = await listDatasourceCollectionHealthForAdmin({
+        query: req.query,
+        authContext: req.authContext,
+      });
+      return res.json(result);
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to list datasource collection health');
+    }
+  }));
+
   app.post('/admin/data-collections/snapshots/:snapshotId/confirm', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
     try {
       const data = await confirmDatasourceCollectionSnapshotForAdmin({
@@ -650,6 +664,19 @@ function registerAdminRoutes(app, authenticate) {
       return res.json({ data });
     } catch (error) {
       return handleStudioCatalogError(res, error, 'Failed to release datasource collection snapshot');
+    }
+  }));
+
+  app.post('/admin/data-collections/snapshots/:snapshotId/replay', authenticate, withRequiredPermission(() => getCatalogEditPermission('datasource'), async (req, res) => {
+    try {
+      const data = await replayDatasourceCollectionSnapshotForAdmin({
+        snapshotId: req.params.snapshotId,
+        body: req.body || {},
+        authContext: req.authContext,
+      });
+      return res.status(202).json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to replay datasource collection snapshot');
     }
   }));
 

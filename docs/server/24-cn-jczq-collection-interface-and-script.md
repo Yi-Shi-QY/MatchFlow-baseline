@@ -132,7 +132,35 @@ Release requires snapshot status:
 
 1. `confirmationStatus = confirmed`
 
-### 3.5 Common Error Codes
+### 3.5 Replay Snapshot
+
+1. `POST /admin/data-collections/snapshots/:snapshotId/replay`
+
+Request:
+
+```json
+{
+  "triggerType": "retry",
+  "allowDuplicate": true,
+  "force": false
+}
+```
+
+### 3.6 Collection Health Overview
+
+1. `GET /admin/data-collections/health`
+2. Query options:
+   - `sourceId`
+   - `includeDisabled`
+   - `staleAfterMinutes`
+3. Response includes per-collector health and summary counters:
+   - `healthy`
+   - `stale`
+   - `failed`
+   - `neverRun`
+   - `disabled`
+
+### 3.7 Common Error Codes
 
 1. `CATALOG_DB_REQUIRED`
 2. `COLLECTION_COLLECTOR_NOT_FOUND`
@@ -140,6 +168,7 @@ Release requires snapshot status:
 4. `COLLECTION_IMPORT_PAYLOAD_INVALID`
 5. `COLLECTION_RELEASE_BLOCKED_BY_CONFIRMATION`
 6. `COLLECTION_RELEASE_CHANNEL_INVALID`
+7. `COLLECTION_SNAPSHOT_NOT_FOUND`
 
 ## 4. Script Example
 
@@ -184,6 +213,40 @@ node scripts/collectCnJczqSample.js \
   --server-url http://127.0.0.1:3001 \
   --api-key <API_KEY>
 ```
+
+### 4.3 Production Daemon Mode (Scheduled Loop + Alert)
+
+```bash
+cd match-data-server
+npm run collect:jczq:daemon -- \
+  --interval-ms 600000 \
+  --max-consecutive-failures 3 \
+  --metrics-out dist/collections/jczq-daemon-metrics.json \
+  --alert-webhook-url https://example.com/hooks/collection-alert \
+  --upload --auto-confirm --auto-release --channel internal \
+  --server-url http://127.0.0.1:3001 \
+  --api-key <API_KEY> \
+  --min-rows 5
+```
+
+Daemon behavior:
+
+1. Runs one-shot collector script periodically.
+2. Tracks consecutive failures and triggers alert webhook once threshold is reached.
+3. Writes daemon metrics JSON for ops monitoring.
+
+### 4.4 Optional Server Scheduler for Match Snapshot Collectors
+
+Enable background scheduler in server process:
+
+1. `ENABLE_COLLECTION_SCHEDULER=true`
+2. Optional env:
+   - `COLLECTION_SCHEDULER_TICK_MS`
+   - `COLLECTION_SCHEDULER_STARTUP_DELAY_MS`
+   - `COLLECTION_SCHEDULER_MAX_RUNS_PER_TICK`
+   - `COLLECTION_ALERT_WEBHOOK_URL`
+   - `COLLECTION_ALERT_MIN_INTERVAL_MS`
+   - `COLLECTION_SLA_MAX_LAG_MINUTES`
 
 ## 5. Real Execution Record (2026-03-02)
 

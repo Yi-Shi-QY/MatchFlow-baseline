@@ -363,6 +363,22 @@ async function main() {
         assert.equal(createCollectorDbRequired.status, 503);
         assert.equal(createCollectorDbRequired.body?.error?.code, 'CATALOG_DB_REQUIRED');
 
+        const deniedHealth = await requestJson(
+          baseUrl,
+          '/admin/data-collections/health',
+          noCatalogPermissionToken,
+        );
+        assert.equal(deniedHealth.status, 403);
+        assert.equal(deniedHealth.body?.error?.code, 'AUTH_FORBIDDEN');
+
+        const healthDbRequired = await requestJson(
+          baseUrl,
+          '/admin/data-collections/health',
+          catalogEditorToken,
+        );
+        assert.equal(healthDbRequired.status, 503);
+        assert.equal(healthDbRequired.body?.error?.code, 'CATALOG_DB_REQUIRED');
+
         const deniedImport = await requestJsonWithBody(
           baseUrl,
           '/admin/data-collections/collectors/00000000-0000-4000-8000-000000000001/import',
@@ -390,6 +406,26 @@ async function main() {
         );
         assert.equal(importDbRequired.status, 503);
         assert.equal(importDbRequired.body?.error?.code, 'CATALOG_DB_REQUIRED');
+
+        const deniedReplay = await requestJsonWithBody(
+          baseUrl,
+          '/admin/data-collections/snapshots/demo/replay',
+          noCatalogPermissionToken,
+          'POST',
+          {},
+        );
+        assert.equal(deniedReplay.status, 403);
+        assert.equal(deniedReplay.body?.error?.code, 'AUTH_FORBIDDEN');
+
+        const replayDbRequired = await requestJsonWithBody(
+          baseUrl,
+          '/admin/data-collections/snapshots/00000000-0000-4000-8000-000000000001/replay',
+          catalogEditorToken,
+          'POST',
+          {},
+        );
+        assert.equal(replayDbRequired.status, 503);
+        assert.equal(replayDbRequired.body?.error?.code, 'CATALOG_DB_REQUIRED');
 
         const deniedRelease = await requestJsonWithBody(
           baseUrl,

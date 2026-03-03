@@ -4,6 +4,28 @@
 
 All notable platform-level changes should be recorded here.
 
+## 2026-03-02
+
+### Added
+
+1. Server 2.0 Admin Studio governance stack across datasource/planning/animation/agent/skill with validation + publish/rollback + release history.
+2. Standalone Admin Studio web app colocated with server (`match-data-server/admin-studio-web`) and browser-level Playwright E2E matrix.
+3. Datasource collection governance lifecycle APIs with confirmation/release workflow and production safety limits.
+4. Production readiness gates and runtime hardening:
+   - `/livez` + `/readyz`
+   - startup strict config checks
+   - security headers
+   - preflight/readiness scripts.
+
+### Changed
+
+1. Hub runtime manifest resolution now prioritizes published Admin Studio catalog revisions (`planning_template_revisions`, `agent_revisions`, `skill_revisions`) before legacy `extension_manifests`.
+2. Planning template requirement resolution is now tenant-aware to align runtime behavior with account context.
+
+### Fixed
+
+1. Suppressed expected fallback warning noise in mock/no-DB mode when catalog revision lookup is unavailable by design.
+
 ## 2026-03-01
 
 ### Added
@@ -49,4 +71,3 @@ All notable platform-level changes should be recorded here.
 
 1. mock 模式下服务端可在缺少本地 DB 依赖时启动。
 2. 文档分散问题已收敛为单目录管理。
-

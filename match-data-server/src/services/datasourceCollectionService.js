@@ -42,6 +42,13 @@ const MAX_IMPORT_PAYLOAD_BYTES = (() => {
   }
   return Math.max(256 * 1024, Math.min(parsed, 64 * 1024 * 1024));
 })();
+const DEFAULT_COLLECTION_SLA_MAX_LAG_MINUTES = (() => {
+  const parsed = Number.parseInt(process.env.COLLECTION_SLA_MAX_LAG_MINUTES, 10);
+  if (!Number.isFinite(parsed)) {
+    return 180;
+  }
+  return Math.max(5, Math.min(parsed, 7 * 24 * 60));
+})();
 
 function normalizeString(value) {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
@@ -233,6 +240,14 @@ function normalizeSampleLimit(limitInput, fallback = 20) {
   return Math.max(1, Math.min(parsed, 200));
 }
 
+function normalizePositiveInteger(input, fallbackValue, min, max) {
+  const parsed = Number.parseInt(input, 10);
+  if (!Number.isFinite(parsed)) {
+    return fallbackValue;
+  }
+  return Math.max(min, Math.min(parsed, max));
+}
+
 function resolveTenantId(authContext, requestedTenantId) {
   const requested = normalizeString(requestedTenantId);
   if (requested) {
@@ -320,6 +335,49 @@ function ensureAllowedStatus(value, allowedSet, codePrefix, fieldName) {
     );
   }
   return normalized;
+}
+
+function resolveCollectorSlaMaxLagMinutes(collector, fallbackValue) {
+  const collectorConfig = isPlainObject(collector?.config) ? collector.config : {};
+  const configured = normalizePositiveInteger(
+    collectorConfig.slaMaxLagMinutes,
+    fallbackValue,
+    5,
+    7 * 24 * 60,
+  );
+  return configured;
+}
+
+function resolveCollectorHealth(collector, latestRun, now, fallbackSlaMinutes) {
+  const lastRunAtValue = collector?.lastRunAt || latestRun?.finishedAt || latestRun?.startedAt || null;
+  const lastRunAt = lastRunAtValue ? new Date(lastRunAtValue) : null;
+  const lagMinutes = lastRunAt ? Math.floor((now - lastRunAt.getTime()) / 60000) : null;
+  const slaMaxLagMinutes = resolveCollectorSlaMaxLagMinutes(collector, fallbackSlaMinutes);
+  let status = 'healthy';
+  const reasons = [];
+
+  if (!collector?.isEnabled) {
+    status = 'disabled';
+    reasons.push('collector_disabled');
+  } else if (!lastRunAt) {
+    status = 'never_run';
+    reasons.push('collector_never_run');
+  } else if (collector?.lastRunStatus === 'failed' || latestRun?.status === 'failed') {
+    status = 'failed';
+    reasons.push('last_run_failed');
+  } else if (lagMinutes !== null && lagMinutes > slaMaxLagMinutes) {
+    status = 'stale';
+    reasons.push('run_lag_exceeded');
+  }
+
+  return {
+    status,
+    reasons,
+    lastRunStatus: latestRun?.status || collector?.lastRunStatus || 'idle',
+    lastRunAt: lastRunAt ? lastRunAt.toISOString() : null,
+    lagMinutes,
+    slaMaxLagMinutes,
+  };
 }
 
 async function listDatasourceCollectorsForAdmin({ query, authContext }) {
@@ -964,6 +1022,93 @@ async function listDatasourceCollectionSnapshotsForAdmin({ query, authContext })
   }
 }
 
+async function listDatasourceCollectionHealthForAdmin({ query, authContext }) {
+  try {
+    const tenantId = resolveTenantId(authContext, query?.tenantId);
+    const includeDisabled = parseBooleanInput(query?.includeDisabled) === true;
+    const limit = normalizeSampleLimit(query?.limit, 50);
+    const offset = Math.max(0, normalizePositiveInteger(query?.offset, 0, 0, 100000));
+    const staleAfterMinutes = normalizePositiveInteger(
+      query?.staleAfterMinutes,
+      DEFAULT_COLLECTION_SLA_MAX_LAG_MINUTES,
+      5,
+      7 * 24 * 60,
+    );
+
+    const collectorsResult = await listCollectors({
+      tenantId,
+      sourceId: query?.sourceId,
+      isEnabled: includeDisabled ? undefined : true,
+      limit,
+      offset,
+    });
+    const collectors = Array.isArray(collectorsResult?.data) ? collectorsResult.data : [];
+
+    const data = await Promise.all(
+      collectors.map(async (collector) => {
+        const latestRunResult = await listCollectionRuns({
+          tenantId,
+          collectorId: collector.id,
+          limit: 1,
+          offset: 0,
+        });
+        const latestRun =
+          Array.isArray(latestRunResult?.data) && latestRunResult.data.length > 0
+            ? latestRunResult.data[0]
+            : null;
+        const health = resolveCollectorHealth(
+          collector,
+          latestRun,
+          Date.now(),
+          staleAfterMinutes,
+        );
+        return {
+          collector,
+          latestRun,
+          health,
+        };
+      }),
+    );
+
+    const summary = data.reduce(
+      (accumulator, item) => {
+        const status = item.health.status;
+        if (status === 'healthy') accumulator.healthy += 1;
+        if (status === 'stale') accumulator.stale += 1;
+        if (status === 'failed') accumulator.failed += 1;
+        if (status === 'never_run') accumulator.neverRun += 1;
+        if (status === 'disabled') accumulator.disabled += 1;
+        return accumulator;
+      },
+      {
+        total: data.length,
+        healthy: 0,
+        stale: 0,
+        failed: 0,
+        neverRun: 0,
+        disabled: 0,
+      },
+    );
+
+    return {
+      generatedAt: new Date().toISOString(),
+      staleAfterMinutes,
+      summary,
+      data,
+      pagination: collectorsResult?.pagination || {
+        limit,
+        offset,
+        count: data.length,
+      },
+    };
+  } catch (error) {
+    if (String(error?.message || '').includes('Database not connected')) {
+      throw new StudioCatalogError('Database not connected', 'CATALOG_DB_REQUIRED', 503);
+    }
+    throw error;
+  }
+}
+
 async function confirmDatasourceCollectionSnapshotForAdmin({ snapshotId, body, authContext }) {
   const normalizedSnapshotId = ensureSnapshotId(snapshotId);
   const tenantId = resolveTenantId(authContext, body?.tenantId);
@@ -1124,6 +1269,64 @@ async function releaseDatasourceCollectionSnapshotForAdmin({ snapshotId, body, a
   }
 }
 
+async function replayDatasourceCollectionSnapshotForAdmin({ snapshotId, body, authContext }) {
+  const normalizedSnapshotId = ensureSnapshotId(snapshotId);
+  const tenantId = resolveTenantId(authContext, body?.tenantId);
+
+  try {
+    const sourceSnapshot = await getCollectionSnapshotById({
+      tenantId,
+      snapshotId: normalizedSnapshotId,
+    });
+    if (!sourceSnapshot) {
+      throw new StudioCatalogError('snapshot not found', 'COLLECTION_SNAPSHOT_NOT_FOUND', 404);
+    }
+
+    const replayResult = await importDatasourceCollectionSnapshotForAdmin({
+      collectorId: sourceSnapshot.collectorId,
+      body: {
+        tenantId,
+        triggerType: body?.triggerType || 'retry',
+        sourceId: sourceSnapshot.sourceId,
+        payload: sourceSnapshot.payload,
+        recordCount: sourceSnapshot.recordCount,
+        contentHash: sourceSnapshot.contentHash || undefined,
+        allowDuplicate: body?.allowDuplicate,
+        force: body?.force,
+      },
+      authContext,
+    });
+
+    await writeAuditEvent({
+      authContext,
+      tenantId,
+      action: 'datasource.collection.snapshot.replay',
+      targetType: 'datasource_snapshot',
+      targetId: sourceSnapshot.id,
+      beforeState: sourceSnapshot,
+      afterState: {
+        replayRunId: replayResult?.run?.id || null,
+        replaySnapshotId: replayResult?.snapshot?.id || null,
+        deduplicated: replayResult?.deduplicated === true,
+      },
+      metadata: {
+        collectorId: sourceSnapshot.collectorId,
+        sourceId: sourceSnapshot.sourceId,
+      },
+    });
+
+    return {
+      sourceSnapshotId: sourceSnapshot.id,
+      ...replayResult,
+    };
+  } catch (error) {
+    if (String(error?.message || '').includes('Database not connected')) {
+      throw new StudioCatalogError('Database not connected', 'CATALOG_DB_REQUIRED', 503);
+    }
+    throw error;
+  }
+}
+
 module.exports = {
   listDatasourceCollectorsForAdmin,
   createDatasourceCollectorForAdmin,
@@ -1132,6 +1335,8 @@ module.exports = {
   importDatasourceCollectionSnapshotForAdmin,
   listDatasourceCollectionRunsForAdmin,
   listDatasourceCollectionSnapshotsForAdmin,
+  listDatasourceCollectionHealthForAdmin,
   confirmDatasourceCollectionSnapshotForAdmin,
   releaseDatasourceCollectionSnapshotForAdmin,
+  replayDatasourceCollectionSnapshotForAdmin,
 };

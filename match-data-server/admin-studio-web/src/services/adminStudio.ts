@@ -1,4 +1,10 @@
-import { getSettings } from './settings';
+import {
+  clearAuthSession,
+  getSettings,
+  saveSettings,
+  type AdminStudioAuthMode,
+  type AdminStudioAuthUser,
+} from './settings';
 
 export type AdminCatalogDomain =
   | 'datasource'
@@ -137,6 +143,56 @@ export interface ReleaseRecord {
   triggeredByUserId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AdminUser {
+  id: string;
+  tenantId: string;
+  username: string;
+  email: string;
+  displayName: string | null;
+  status: 'active' | 'disabled';
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  roles: string[];
+}
+
+export interface AdminRole {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  permissions: string[];
+}
+
+export interface AdminPermission {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminAuditLog {
+  id: string;
+  actorUserId: string | null;
+  actorUsername: string | null;
+  tenantId: string | null;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  beforeState: unknown;
+  afterState: unknown;
+  metadata: Record<string, unknown>;
+  createdAt: string;
 }
 
 export type DatasourcePreviewPathSlot = 'value' | 'home' | 'draw' | 'away';
@@ -279,6 +335,28 @@ export interface DatasourceCollectionSnapshot {
   updatedAt: string;
 }
 
+export interface DatasourceCollectionHealthItem {
+  collector: DatasourceCollector;
+  latestRun: DatasourceCollectionRun | null;
+  health: {
+    status: 'healthy' | 'stale' | 'failed' | 'never_run' | 'disabled';
+    reasons: string[];
+    lastRunStatus: string;
+    lastRunAt: string | null;
+    lagMinutes: number | null;
+    slaMaxLagMinutes: number;
+  };
+}
+
+export interface DatasourceCollectionHealthSummary {
+  total: number;
+  healthy: number;
+  stale: number;
+  failed: number;
+  neverRun: number;
+  disabled: number;
+}
+
 interface CatalogListResponse {
   data: CatalogEntry[];
   pagination: Pagination;
@@ -309,7 +387,66 @@ interface DatasourceCollectionSnapshotListResponse {
   pagination: Pagination;
 }
 
-function buildBaseUrl() {
+interface DatasourceCollectionHealthResponse {
+  generatedAt: string;
+  staleAfterMinutes: number;
+  summary: DatasourceCollectionHealthSummary;
+  data: DatasourceCollectionHealthItem[];
+  pagination: Pagination;
+}
+
+interface AdminUserListResponse {
+  data: AdminUser[];
+  pagination: Pagination;
+}
+
+interface AdminRoleListResponse {
+  data: AdminRole[];
+  count: number;
+}
+
+interface AdminPermissionListResponse {
+  data: AdminPermission[];
+  count: number;
+}
+
+interface AdminAuditLogListResponse {
+  data: AdminAuditLog[];
+  pagination: Pagination;
+}
+
+interface AuthSessionResponse {
+  tokenType: 'Bearer';
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  refreshExpiresIn: number;
+  user: AdminStudioAuthUser;
+}
+
+export interface CapabilitiesResponse {
+  user: AdminStudioAuthUser;
+  availableDataSources: string[];
+  availableTemplates: string[];
+  recommendedTemplates: string[];
+  canUseAdminConsole: boolean;
+}
+
+interface ApiRequestOptions {
+  method?: 'GET' | 'POST' | 'PUT';
+  query?: Record<string, string | number | boolean | undefined | null>;
+  body?: unknown;
+}
+
+const REFRESH_RETRY_ERROR_CODES = new Set([
+  'AUTH_INVALID_ACCESS',
+  'AUTH_SESSION_EXPIRED',
+  'AUTH_SESSION_REVOKED',
+  'AUTH_SESSION_NOT_FOUND',
+  'AUTH_USER_INACTIVE',
+]);
+
+function buildBaseConfig() {
   const settings = getSettings();
   const baseUrl = String(settings.matchDataServerUrl || '').trim();
   if (!baseUrl) {
@@ -322,7 +459,11 @@ function buildBaseUrl() {
   }
   return {
     baseUrl,
+    settings,
     apiKey: String(settings.matchDataApiKey || '').trim(),
+    accessToken: String(settings.accessToken || '').trim(),
+    refreshToken: String(settings.refreshToken || '').trim(),
+    authMode: (settings.authMode || 'api_key') as AdminStudioAuthMode,
   };
 }
 
@@ -337,8 +478,11 @@ function toQueryString(query?: Record<string, string | number | boolean | undefi
   return searchParams.toString();
 }
 
-function buildUrl(path: string, query?: Record<string, string | number | boolean | undefined | null>) {
-  const { baseUrl } = buildBaseUrl();
+function buildUrl(
+  baseUrl: string,
+  path: string,
+  query?: Record<string, string | number | boolean | undefined | null>,
+) {
   const url = new URL(path, baseUrl);
   const queryString = toQueryString(query);
   if (queryString) {
@@ -347,21 +491,145 @@ function buildUrl(path: string, query?: Record<string, string | number | boolean
   return url.toString();
 }
 
-async function requestJson<T>(
-  path: string,
+function parseJsonSafe(responseText: string) {
+  if (!responseText) return null;
+  try {
+    return JSON.parse(responseText) as unknown;
+  } catch {
+    return responseText;
+  }
+}
+
+function toApiError(payload: unknown, status: number) {
+  const errorPayload = payload as ApiErrorPayload | null;
+  const message =
+    errorPayload?.error?.message ||
+    `Request failed with status ${status}`;
+  const code = errorPayload?.error?.code || null;
+  const details = errorPayload?.error?.details ?? payload;
+  return new AdminStudioApiError(message, status, code, details);
+}
+
+function resolveAuthBearerToken(config: ReturnType<typeof buildBaseConfig>) {
+  if (config.authMode === 'account') {
+    return config.accessToken;
+  }
+  if (config.apiKey) {
+    return config.apiKey;
+  }
+  if (config.accessToken) {
+    return config.accessToken;
+  }
+  return '';
+}
+
+function toExpiryIsoString(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '';
+  }
+  return new Date(Date.now() + seconds * 1000).toISOString();
+}
+
+function persistAuthSession(
+  data: AuthSessionResponse,
   options: {
-    method?: 'GET' | 'POST' | 'PUT';
-    query?: Record<string, string | number | boolean | undefined | null>;
-    body?: unknown;
+    accountIdentifier?: string;
   } = {},
+) {
+  const currentSettings = getSettings();
+  saveSettings({
+    authMode: 'account',
+    accountIdentifier:
+      typeof options.accountIdentifier === 'string' && options.accountIdentifier.trim().length > 0
+        ? options.accountIdentifier.trim()
+        : currentSettings.accountIdentifier,
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    accessTokenExpiresAt: toExpiryIsoString(data.expiresIn),
+    refreshTokenExpiresAt: toExpiryIsoString(data.refreshExpiresIn),
+    authUser: data.user,
+  });
+}
+
+async function requestPublicJson<T>(
+  path: string,
+  options: ApiRequestOptions = {},
 ): Promise<T> {
-  const { apiKey } = buildBaseUrl();
-  const url = buildUrl(path, options.query);
+  const { baseUrl } = buildBaseConfig();
+  const url = buildUrl(baseUrl, path, options.query);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
+
+  const response = await fetch(url, {
+    method: options.method || 'GET',
+    headers,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+  });
+
+  const responseText = await response.text();
+  const payload = parseJsonSafe(responseText);
+
+  if (!response.ok) {
+    throw toApiError(payload, response.status);
+  }
+
+  return payload as T;
+}
+
+async function tryRefreshAccessToken() {
+  const config = buildBaseConfig();
+  if (config.authMode !== 'account' || !config.refreshToken) {
+    return false;
+  }
+
+  try {
+    const refreshed = await requestPublicJson<{ data: AuthSessionResponse }>('/auth/refresh', {
+      method: 'POST',
+      body: {
+        refreshToken: config.refreshToken,
+      },
+    });
+    persistAuthSession(refreshed.data);
+    return true;
+  } catch (error) {
+    clearAuthSession();
+    throw error;
+  }
+}
+
+function shouldAttemptRefresh(
+  config: ReturnType<typeof buildBaseConfig>,
+  error: AdminStudioApiError,
+) {
+  if (config.authMode !== 'account') {
+    return false;
+  }
+  if (!config.refreshToken) {
+    return false;
+  }
+  if (error.status !== 401) {
+    return false;
+  }
+  if (!error.code) {
+    return true;
+  }
+  return REFRESH_RETRY_ERROR_CODES.has(error.code);
+}
+
+async function requestJson<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+  allowRefreshRetry = true,
+): Promise<T> {
+  const config = buildBaseConfig();
+  const url = buildUrl(config.baseUrl, path, options.query);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  const bearerToken = resolveAuthBearerToken(config);
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`;
   }
 
   const response = await fetch(url, {
@@ -371,24 +639,82 @@ async function requestJson<T>(
   });
 
   const responseText = await response.text();
-  let payload: unknown = null;
-  try {
-    payload = responseText ? JSON.parse(responseText) : null;
-  } catch {
-    payload = responseText;
-  }
+  const payload = parseJsonSafe(responseText);
 
   if (!response.ok) {
-    const errorPayload = payload as ApiErrorPayload | null;
-    const message =
-      errorPayload?.error?.message ||
-      `Request failed with status ${response.status}`;
-    const code = errorPayload?.error?.code || null;
-    const details = errorPayload?.error?.details ?? payload;
-    throw new AdminStudioApiError(message, response.status, code, details);
+    const requestError = toApiError(payload, response.status);
+    if (allowRefreshRetry && shouldAttemptRefresh(config, requestError)) {
+      await tryRefreshAccessToken();
+      return requestJson<T>(path, options, false);
+    }
+    throw requestError;
   }
 
   return payload as T;
+}
+
+export async function loginWithAccount(input: { identifier: string; password: string }) {
+  const identifier = String(input.identifier || '').trim();
+  const password = String(input.password || '');
+  if (!identifier || !password) {
+    throw new AdminStudioApiError(
+      'identifier and password are required',
+      400,
+      'AUTH_INVALID_REQUEST',
+      null,
+    );
+  }
+
+  const response = await requestPublicJson<{ data: AuthSessionResponse }>('/auth/login', {
+    method: 'POST',
+    body: {
+      identifier,
+      password,
+    },
+  });
+  persistAuthSession(response.data, {
+    accountIdentifier: identifier,
+  });
+  return response.data;
+}
+
+export async function logoutAccount() {
+  const config = buildBaseConfig();
+  try {
+    if (config.accessToken) {
+      const url = buildUrl(config.baseUrl, '/auth/logout');
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.accessToken}`,
+        },
+        body: JSON.stringify({
+          refreshToken: config.refreshToken || undefined,
+        }),
+      });
+    }
+  } finally {
+    clearAuthSession();
+  }
+}
+
+export async function getCurrentUserProfile() {
+  const response = await requestJson<{ data: AdminStudioAuthUser }>('/auth/me', {
+    method: 'GET',
+  });
+  saveSettings({
+    authMode: 'account',
+    authUser: response.data,
+  });
+  return response.data;
+}
+
+export async function getMyCapabilities() {
+  const response = await requestJson<{ data: CapabilitiesResponse }>('/capabilities/me', {
+    method: 'GET',
+  });
+  return response.data;
 }
 
 export async function listCatalogEntries(
@@ -650,6 +976,19 @@ export async function listDatasourceCollectionSnapshots(params: {
   });
 }
 
+export async function listDatasourceCollectionHealth(params: {
+  sourceId?: string;
+  includeDisabled?: boolean;
+  staleAfterMinutes?: number;
+  limit?: number;
+  offset?: number;
+} = {}) {
+  return requestJson<DatasourceCollectionHealthResponse>('/admin/data-collections/health', {
+    method: 'GET',
+    query: params,
+  });
+}
+
 export async function confirmDatasourceCollectionSnapshot(
   snapshotId: string,
   payload: {
@@ -680,6 +1019,32 @@ export async function releaseDatasourceCollectionSnapshot(
     };
   }>(
     `/admin/data-collections/snapshots/${encodeURIComponent(snapshotId)}/release`,
+    {
+      method: 'POST',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function replayDatasourceCollectionSnapshot(
+  snapshotId: string,
+  payload: {
+    triggerType?: 'manual' | 'scheduled' | 'retry';
+    allowDuplicate?: boolean;
+    force?: boolean;
+  } = {},
+) {
+  const response = await requestJson<{
+    data: {
+      sourceSnapshotId: string;
+      collector: DatasourceCollector;
+      run: DatasourceCollectionRun;
+      snapshot: DatasourceCollectionSnapshot;
+      deduplicated?: boolean;
+    };
+  }>(
+    `/admin/data-collections/snapshots/${encodeURIComponent(snapshotId)}/replay`,
     {
       method: 'POST',
       body: payload,
@@ -764,6 +1129,151 @@ export async function listReleaseHistory(params: {
   offset?: number;
 } = {}) {
   return requestJson<ReleaseHistoryResponse>('/admin/release/history', {
+    method: 'GET',
+    query: params,
+  });
+}
+
+export async function listAdminUsers(params: {
+  tenantId?: string;
+  status?: 'active' | 'disabled';
+  search?: string;
+  limit?: number;
+  offset?: number;
+} = {}) {
+  return requestJson<AdminUserListResponse>('/admin/users', {
+    method: 'GET',
+    query: params,
+  });
+}
+
+export async function createAdminUser(payload: {
+  tenantId?: string;
+  username: string;
+  email: string;
+  password: string;
+  displayName?: string;
+  status?: 'active' | 'disabled';
+  roleCodes?: string[];
+}) {
+  const response = await requestJson<{ data: AdminUser }>('/admin/users', {
+    method: 'POST',
+    body: payload,
+  });
+  return response.data;
+}
+
+export async function updateAdminUser(
+  userId: string,
+  payload: {
+    email?: string;
+    displayName?: string;
+    status?: 'active' | 'disabled';
+    password?: string;
+  },
+) {
+  const response = await requestJson<{ data: AdminUser }>(
+    `/admin/users/${encodeURIComponent(userId)}`,
+    {
+      method: 'PUT',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function setAdminUserRoles(userId: string, roleCodes: string[]) {
+  const response = await requestJson<{ data: AdminUser }>(
+    `/admin/users/${encodeURIComponent(userId)}/roles`,
+    {
+      method: 'POST',
+      body: {
+        roleCodes,
+      },
+    },
+  );
+  return response.data;
+}
+
+export async function listAdminRoles() {
+  return requestJson<AdminRoleListResponse>('/admin/roles', {
+    method: 'GET',
+  });
+}
+
+export async function createAdminRole(payload: {
+  code: string;
+  name: string;
+  description?: string;
+  isActive?: boolean;
+  permissionCodes?: string[];
+}) {
+  const response = await requestJson<{ data: AdminRole }>('/admin/roles', {
+    method: 'POST',
+    body: payload,
+  });
+  return response.data;
+}
+
+export async function updateAdminRole(
+  roleId: string,
+  payload: {
+    name?: string;
+    description?: string;
+    isActive?: boolean;
+    permissionCodes?: string[];
+  },
+) {
+  const response = await requestJson<{ data: AdminRole }>(
+    `/admin/roles/${encodeURIComponent(roleId)}`,
+    {
+      method: 'PUT',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function setAdminRolePermissions(roleId: string, permissionCodes: string[]) {
+  const response = await requestJson<{ data: AdminRole }>(
+    `/admin/roles/${encodeURIComponent(roleId)}/permissions`,
+    {
+      method: 'POST',
+      body: {
+        permissionCodes,
+      },
+    },
+  );
+  return response.data;
+}
+
+export async function listAdminPermissions() {
+  return requestJson<AdminPermissionListResponse>('/admin/permissions', {
+    method: 'GET',
+  });
+}
+
+export async function createAdminPermission(payload: {
+  code: string;
+  name: string;
+  description?: string;
+  isActive?: boolean;
+}) {
+  const response = await requestJson<{ data: AdminPermission }>('/admin/permissions', {
+    method: 'POST',
+    body: payload,
+  });
+  return response.data;
+}
+
+export async function listAdminAuditLogs(params: {
+  tenantId?: string;
+  action?: string;
+  actorUserId?: string;
+  limit?: number;
+  offset?: number;
+} = {}) {
+  return requestJson<AdminAuditLogListResponse>('/admin/audit-logs', {
     method: 'GET',
     query: params,
   });

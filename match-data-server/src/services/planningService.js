@@ -144,6 +144,13 @@ function deriveSourceSignals(matchData) {
 
 async function recommendPlanning(matchData, req) {
   const planningInput = matchData?.sourceContext?.planning || matchData?.analysisConfig?.planning || {};
+  const templateRuntimeOptions = {
+    tenantId:
+      typeof req?.authContext?.tenantId === 'string' && req.authContext.tenantId.trim().length > 0
+        ? req.authContext.tenantId.trim()
+        : undefined,
+    channel: 'stable',
+  };
   const overrideHub =
     planningInput?.hub && typeof planningInput.hub === 'object'
       ? planningInput.hub
@@ -175,7 +182,10 @@ async function recommendPlanning(matchData, req) {
   }
 
   if (forcedTemplateId) {
-    const templateRequirements = await getTemplateRequirements(forcedTemplateId);
+    const templateRequirements = await getTemplateRequirements(
+      forcedTemplateId,
+      templateRuntimeOptions,
+    );
     return {
       mode: 'template',
       templateId: forcedTemplateId,
@@ -218,7 +228,7 @@ async function recommendPlanning(matchData, req) {
     reason = signals.status === 'live' ? 'live_stats' : 'stats_only';
   }
 
-  const templateRequirements = await getTemplateRequirements(templateId);
+  const templateRequirements = await getTemplateRequirements(templateId, templateRuntimeOptions);
   return {
     mode: 'template',
     templateId,
@@ -274,4 +284,3 @@ module.exports = {
   buildAnalysisConfigPayload,
   withAnalysisConfig,
 };
-

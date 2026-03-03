@@ -17,6 +17,7 @@ const { registerMatchRoutes } = require('./src/routes/matchRoutes');
 const { registerAnalysisConfigRoutes } = require('./src/routes/analysisConfigRoutes');
 const { registerHubRoutes } = require('./src/routes/hubRoutes');
 const { registerAdminRoutes } = require('./src/routes/adminRoutes');
+const { startDatasourceCollectionScheduler } = require('./src/services/datasourceCollectionScheduler');
 
 let cors;
 try {
@@ -163,7 +164,12 @@ function createApp() {
   return app;
 }
 
-function installGracefulShutdown(server, timeoutMs = SHUTDOWN_TIMEOUT_MS) {
+function installGracefulShutdown(server, options = {}) {
+  const timeoutMs = Number.isFinite(options?.timeoutMs)
+    ? options.timeoutMs
+    : SHUTDOWN_TIMEOUT_MS;
+  const beforeShutdown =
+    typeof options?.beforeShutdown === 'function' ? options.beforeShutdown : null;
   let shuttingDown = false;
 
   const shutdown = (signal) => {
@@ -182,6 +188,16 @@ function installGracefulShutdown(server, timeoutMs = SHUTDOWN_TIMEOUT_MS) {
 
     server.close(async (error) => {
       clearTimeout(forceExitTimer);
+
+      try {
+        if (beforeShutdown) {
+          await beforeShutdown();
+        }
+      } catch (hookError) {
+        console.error('[shutdown] pre-shutdown hook failed', hookError.message);
+        process.exit(1);
+        return;
+      }
 
       try {
         await db.close();
@@ -212,6 +228,16 @@ function startServer(port = PORT, options = {}) {
     console.warn(`[startup-warning] ${warning}`);
   });
 
+  const shouldEnableCollectionScheduler =
+    options.enableCollectionScheduler === true
+    || String(process.env.ENABLE_COLLECTION_SCHEDULER || '').trim().toLowerCase() === 'true';
+  let stopCollectionScheduler = null;
+  if (shouldEnableCollectionScheduler) {
+    stopCollectionScheduler = startDatasourceCollectionScheduler({
+      tenantId: options.collectionSchedulerTenantId,
+    });
+  }
+
   const app = createApp();
   const server = app.listen(port, () => {
     const address = server.address();
@@ -225,10 +251,17 @@ function startServer(port = PORT, options = {}) {
   });
 
   if (options.installSignalHandlers === true) {
-    installGracefulShutdown(server);
+    installGracefulShutdown(server, {
+      timeoutMs: SHUTDOWN_TIMEOUT_MS,
+      beforeShutdown: async () => {
+        if (typeof stopCollectionScheduler === 'function') {
+          await stopCollectionScheduler();
+        }
+      },
+    });
   }
 
-  return { app, server, startupReport };
+  return { app, server, startupReport, stopCollectionScheduler };
 }
 
 if (require.main === module) {

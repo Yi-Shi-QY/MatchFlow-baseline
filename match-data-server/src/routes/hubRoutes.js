@@ -24,6 +24,7 @@ async function sendHubManifest(kind, req, res) {
       version,
       channel: channel || 'stable',
       statuses: ['published'],
+      tenantId: req.authContext?.tenantId,
     });
     if (!record) {
       return res.status(404).json({ error: { message: `${kind} manifest not found` } });

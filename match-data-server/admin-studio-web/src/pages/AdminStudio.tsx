@@ -3,7 +3,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
-  ArrowLeft,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -26,9 +25,12 @@ import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
 import {
   AdminCatalogDomain,
+  CapabilitiesResponse,
   AdminStudioApiError,
   CatalogRevision,
   DatasourceCollector,
+  DatasourceCollectionHealthItem,
+  DatasourceCollectionHealthSummary,
   DatasourceCollectionRun,
   DatasourceCollectionSnapshot,
   DatasourceDataPreview,
@@ -40,8 +42,12 @@ import {
   createDatasourceCollector,
   createCatalogEntry,
   createCatalogRevision,
+  getCurrentUserProfile,
+  getMyCapabilities,
   getCatalogRevisionDiff,
   getValidationRun,
+  loginWithAccount,
+  listDatasourceCollectionHealth,
   listDatasourceCollectionRuns,
   listDatasourceCollectionSnapshots,
   listDatasourceCollectors,
@@ -51,13 +57,20 @@ import {
   previewDatasourceData,
   previewDatasourceStructure,
   releaseDatasourceCollectionSnapshot,
+  replayDatasourceCollectionSnapshot,
+  logoutAccount,
   publishCatalogRevision,
   rollbackCatalogRevision,
   runCatalogValidation,
   triggerDatasourceCollectorRun,
   updateCatalogDraftRevision,
 } from '@/src/services/adminStudio';
-import { getSettings, saveSettings } from '@/src/services/settings';
+import {
+  getSettings,
+  saveSettings,
+  type AdminStudioAuthMode,
+  type AdminStudioAuthUser,
+} from '@/src/services/settings';
 
 const DOMAIN_OPTIONS: Array<{ value: AdminCatalogDomain; label: string }> = [
   { value: 'datasource', label: 'Datasource' },
@@ -77,6 +90,11 @@ const VALIDATION_TYPE_OPTIONS = [
   { value: 'catalog_validate', label: 'catalog_validate' },
   { value: 'pre_publish', label: 'pre_publish' },
   { value: 'post_publish', label: 'post_publish' },
+];
+
+const AUTH_MODE_OPTIONS: Array<{ value: AdminStudioAuthMode; label: string }> = [
+  { value: 'account', label: 'account token' },
+  { value: 'api_key', label: 'api key' },
 ];
 
 const CONTEXT_MODE_OPTIONS = [
@@ -109,6 +127,56 @@ const DATASOURCE_SECTION_COLUMN_OPTIONS = [
   { value: '1', label: '1 column' },
   { value: '2', label: '2 columns' },
 ];
+
+type DatasourceEditorStep =
+  | 'basics'
+  | 'fields'
+  | 'layout'
+  | 'validate'
+  | 'operations'
+  | 'all';
+
+type DatasourceFieldViewMode = 'all' | 'issues' | 'ready';
+
+const DATASOURCE_EDITOR_STEP_OPTIONS: Array<{
+  value: DatasourceEditorStep;
+  label: string;
+  hint: string;
+}> = [
+  { value: 'basics', label: '1) Basics', hint: 'source id/name/permissions' },
+  { value: 'fields', label: '2) Fields', hint: 'field mapping paths' },
+  { value: 'layout', label: '3) Layout', hint: 'form sections and rules' },
+  { value: 'validate', label: '4) Validate', hint: 'precheck + server preview' },
+  { value: 'operations', label: '5) Ops', hint: 'collector/snapshot governance' },
+  { value: 'all', label: 'All', hint: 'show every block' },
+];
+
+const DATASOURCE_FIELD_VIEW_MODE_OPTIONS: Array<{
+  value: DatasourceFieldViewMode;
+  label: string;
+}> = [
+  { value: 'all', label: 'all fields' },
+  { value: 'issues', label: 'issues only' },
+  { value: 'ready', label: 'ready only' },
+];
+
+const DATASOURCE_FIELD_TYPE_HINTS: Record<DatasourceFieldType, string> = {
+  text: 'Use one path, e.g. league.name',
+  number: 'Use one numeric path, e.g. stats.rank',
+  textarea: 'Use one long-text path',
+  csv_array: 'Use one array path',
+  versus_number: 'Need homePath + awayPath',
+  odds_triplet: 'Need homePath + drawPath + awayPath',
+};
+
+const EMPTY_DATASOURCE_HEALTH_SUMMARY: DatasourceCollectionHealthSummary = {
+  total: 0,
+  healthy: 0,
+  stale: 0,
+  failed: 0,
+  neverRun: 0,
+  disabled: 0,
+};
 
 type FeedbackTone = 'success' | 'error' | 'info';
 
@@ -254,6 +322,50 @@ function parsePathText(pathText: string) {
     .split('.')
     .map((segment) => segment.trim())
     .filter((segment) => segment.length > 0);
+}
+
+function isFilledText(value: string) {
+  return value.trim().length > 0;
+}
+
+function getDatasourceFieldRequiredPathCount(field: DatasourceFieldDraft) {
+  if (field.type === 'versus_number') {
+    return 2;
+  }
+  if (field.type === 'odds_triplet') {
+    return 3;
+  }
+  return 1;
+}
+
+function getDatasourceFieldProvidedPathCount(field: DatasourceFieldDraft) {
+  if (field.type === 'versus_number') {
+    return Number(isFilledText(field.homePathText)) + Number(isFilledText(field.awayPathText));
+  }
+  if (field.type === 'odds_triplet') {
+    return (
+      Number(isFilledText(field.homePathText))
+      + Number(isFilledText(field.drawPathText))
+      + Number(isFilledText(field.awayPathText))
+    );
+  }
+  return Number(isFilledText(field.pathText));
+}
+
+function isDatasourceStepVisible(active: DatasourceEditorStep, section: DatasourceEditorStep) {
+  return active === 'all' || active === section;
+}
+
+function normalizeDatasourcePathToken(value: string) {
+  return value.trim().replace(/\.+/g, '.').replace(/^\./, '').replace(/\.$/, '');
+}
+
+function composeDatasourcePathWithPrefix(prefix: string, suffix: string) {
+  const normalizedPrefix = normalizeDatasourcePathToken(prefix);
+  const normalizedSuffix = normalizeDatasourcePathToken(suffix);
+  if (!normalizedPrefix) return normalizedSuffix;
+  if (!normalizedSuffix) return normalizedPrefix;
+  return `${normalizedPrefix}.${normalizedSuffix}`;
 }
 
 function toPathText(value: unknown) {
@@ -991,6 +1103,15 @@ function summarizeError(error: unknown) {
   return 'Unknown error';
 }
 
+function formatAuthUserLabel(user: AdminStudioAuthUser | null) {
+  if (!user) {
+    return 'Not logged in';
+  }
+  const primary = user.username || user.email || user.id;
+  const tenant = user.tenantId ? `tenant=${user.tenantId}` : 'tenant=unknown';
+  return `${primary} (${tenant})`;
+}
+
 function starterManifest(domain: AdminCatalogDomain, itemIdSeed = 'new_item') {
   if (domain === 'datasource') {
     return {
@@ -1104,6 +1225,14 @@ export default function AdminStudio() {
   const initialSettings = getSettings();
   const [serverUrlInput, setServerUrlInput] = useState(initialSettings.matchDataServerUrl);
   const [apiKeyInput, setApiKeyInput] = useState(initialSettings.matchDataApiKey);
+  const [authModeInput, setAuthModeInput] = useState<AdminStudioAuthMode>(initialSettings.authMode);
+  const [accountIdentifierInput, setAccountIdentifierInput] = useState(initialSettings.accountIdentifier);
+  const [accountPasswordInput, setAccountPasswordInput] = useState('');
+  const [currentAuthUser, setCurrentAuthUser] = useState<AdminStudioAuthUser | null>(
+    initialSettings.authUser,
+  );
+  const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [domain, setDomain] = useState<AdminCatalogDomain>('datasource');
   const [entrySearch, setEntrySearch] = useState('');
   const [entries, setEntries] = useState<Array<{
@@ -1123,6 +1252,10 @@ export default function AdminStudio() {
   const [manifestEditor, setManifestEditor] = useState(prettyJson(starterManifest('datasource')));
   const [showRawManifestEditor, setShowRawManifestEditor] = useState(true);
   const [datasourceDraft, setDatasourceDraft] = useState<DatasourceManifestDraft | null>(null);
+  const [datasourceEditorStep, setDatasourceEditorStep] = useState<DatasourceEditorStep>('all');
+  const [datasourceFieldViewMode, setDatasourceFieldViewMode] = useState<DatasourceFieldViewMode>('all');
+  const [datasourceFieldFilterText, setDatasourceFieldFilterText] = useState('');
+  const [datasourceFieldPathPrefixInput, setDatasourceFieldPathPrefixInput] = useState('');
   const [datasourceStructurePreview, setDatasourceStructurePreview] = useState<DatasourceStructurePreview | null>(null);
   const [datasourceDataPreview, setDatasourceDataPreview] = useState<DatasourceDataPreview | null>(null);
   const [datasourcePreviewLimitInput, setDatasourcePreviewLimitInput] = useState('5');
@@ -1130,6 +1263,9 @@ export default function AdminStudio() {
   const [datasourceCollectorSourceIdInput, setDatasourceCollectorSourceIdInput] = useState('');
   const [datasourceCollectorNameInput, setDatasourceCollectorNameInput] = useState('Match Snapshot Collector');
   const [datasourceCollectors, setDatasourceCollectors] = useState<DatasourceCollector[]>([]);
+  const [datasourceCollectionHealth, setDatasourceCollectionHealth] = useState<DatasourceCollectionHealthItem[]>([]);
+  const [datasourceCollectionHealthSummary, setDatasourceCollectionHealthSummary] = useState<DatasourceCollectionHealthSummary>(EMPTY_DATASOURCE_HEALTH_SUMMARY);
+  const [datasourceCollectionHealthGeneratedAt, setDatasourceCollectionHealthGeneratedAt] = useState('');
   const [datasourceCollectionRuns, setDatasourceCollectionRuns] = useState<DatasourceCollectionRun[]>([]);
   const [datasourceCollectionSnapshots, setDatasourceCollectionSnapshots] = useState<DatasourceCollectionSnapshot[]>([]);
   const [planningDraft, setPlanningDraft] = useState<PlanningTemplateDraft | null>(null);
@@ -1168,6 +1304,7 @@ export default function AdminStudio() {
   const [runningCollectorId, setRunningCollectorId] = useState('');
   const [confirmingSnapshotId, setConfirmingSnapshotId] = useState('');
   const [releasingSnapshotId, setReleasingSnapshotId] = useState('');
+  const [replayingSnapshotId, setReplayingSnapshotId] = useState('');
   const [isFetchingValidationRun, setIsFetchingValidationRun] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isRollbacking, setIsRollbacking] = useState(false);
@@ -1182,13 +1319,107 @@ export default function AdminStudio() {
     saveSettings({
       matchDataServerUrl: serverUrl,
       matchDataApiKey: apiKey,
+      authMode: authModeInput,
+      accountIdentifier: accountIdentifierInput.trim(),
+      ...(authModeInput === 'api_key'
+        ? {
+            accessToken: '',
+            refreshToken: '',
+            accessTokenExpiresAt: '',
+            refreshTokenExpiresAt: '',
+            authUser: null,
+          }
+        : {}),
     });
+
+    if (authModeInput === 'api_key') {
+      setCurrentAuthUser(null);
+      setCapabilities(null);
+    }
 
     setFeedback({
       tone: 'success',
       message: 'Admin Studio connection settings saved.',
     });
   }
+
+  async function handleAccountLogin() {
+    const identifier = accountIdentifierInput.trim();
+    const password = accountPasswordInput;
+    if (!identifier || !password) {
+      setFeedback({
+        tone: 'error',
+        message: 'Account login requires identifier and password.',
+      });
+      return;
+    }
+
+    setIsAuthenticating(true);
+    try {
+      const data = await loginWithAccount({
+        identifier,
+        password,
+      });
+      setCurrentAuthUser(data.user || null);
+      setAuthModeInput('account');
+      setAccountPasswordInput('');
+      setFeedback({
+        tone: 'success',
+        message: `Logged in as ${formatAuthUserLabel(data.user || null)}.`,
+      });
+    } catch (error) {
+      setFeedback({ tone: 'error', message: summarizeError(error) });
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }
+
+  async function handleLogout() {
+    setIsAuthenticating(true);
+    try {
+      await logoutAccount();
+      setCurrentAuthUser(null);
+      setCapabilities(null);
+      setFeedback({
+        tone: 'info',
+        message: 'Account session cleared.',
+      });
+    } catch (error) {
+      setFeedback({ tone: 'error', message: summarizeError(error) });
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }
+
+  async function handleRefreshIdentity() {
+    setIsAuthenticating(true);
+    try {
+      const user = await getCurrentUserProfile();
+      setCurrentAuthUser(user);
+      const capabilityData = await getMyCapabilities();
+      setCapabilities(capabilityData);
+      setFeedback({
+        tone: 'success',
+        message: `Account profile refreshed: ${formatAuthUserLabel(user)}.`,
+      });
+    } catch (error) {
+      setFeedback({ tone: 'error', message: summarizeError(error) });
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }
+
+  useEffect(() => {
+    if (authModeInput !== 'account') {
+      return;
+    }
+    const settings = getSettings();
+    if (!settings.accessToken) {
+      return;
+    }
+    void handleRefreshIdentity();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectedRevision = useMemo(
     () => revisions.find((revision) => revision.version === selectedVersion) || null,
@@ -1246,6 +1477,173 @@ export default function AdminStudio() {
     () => datasourceLocalChecks.filter((check) => check.status === 'failed'),
     [datasourceLocalChecks],
   );
+
+  const datasourceEditorSummary = useMemo(() => {
+    if (!datasourceDraft) {
+      return {
+        fieldCount: 0,
+        mappedReadyCount: 0,
+        missingMappingCount: 0,
+        duplicateFieldIdCount: 0,
+        duplicatePathCount: 0,
+        sectionCount: 0,
+        permissionCount: 0,
+        ruleCount: 0,
+      };
+    }
+
+    const fieldIds = datasourceDraft.fields
+      .map((field) => field.id.trim().toLowerCase())
+      .filter((fieldId) => fieldId.length > 0);
+    const uniqueFieldIds = new Set(fieldIds);
+    const duplicateFieldIdCount = fieldIds.length - uniqueFieldIds.size;
+
+    let mappedReadyCount = 0;
+    const pathCounter = new Map<string, number>();
+    datasourceDraft.fields.forEach((field) => {
+      const requiredCount = getDatasourceFieldRequiredPathCount(field);
+      const providedCount = getDatasourceFieldProvidedPathCount(field);
+      if (providedCount >= requiredCount) {
+        mappedReadyCount += 1;
+      }
+
+      const pathCandidates =
+        field.type === 'versus_number'
+          ? [field.homePathText, field.awayPathText]
+          : field.type === 'odds_triplet'
+            ? [field.homePathText, field.drawPathText, field.awayPathText]
+            : [field.pathText];
+      pathCandidates
+        .map((path) => path.trim().toLowerCase())
+        .filter((path) => path.length > 0)
+        .forEach((path) => {
+          pathCounter.set(path, (pathCounter.get(path) || 0) + 1);
+        });
+    });
+
+    let duplicatePathCount = 0;
+    pathCounter.forEach((count) => {
+      if (count > 1) {
+        duplicatePathCount += 1;
+      }
+    });
+
+    return {
+      fieldCount: datasourceDraft.fields.length,
+      mappedReadyCount,
+      missingMappingCount: Math.max(0, datasourceDraft.fields.length - mappedReadyCount),
+      duplicateFieldIdCount,
+      duplicatePathCount,
+      sectionCount: datasourceDraft.formSections.length,
+      permissionCount: parseCsvText(datasourceDraft.requiredPermissionsText).length,
+      ruleCount: datasourceDraft.applyRules.length + datasourceDraft.removeRules.length,
+    };
+  }, [datasourceDraft]);
+
+  const datasourceFieldDiagnostics = useMemo(() => {
+    if (!datasourceDraft) {
+      return [] as Array<{
+        index: number;
+        field: DatasourceFieldDraft;
+        mappingReady: boolean;
+        hasIssue: boolean;
+        duplicateId: boolean;
+        duplicatePath: boolean;
+      }>;
+    }
+
+    const idCounter = new Map<string, number>();
+    const pathCounter = new Map<string, number>();
+
+    datasourceDraft.fields.forEach((field) => {
+      const normalizedId = field.id.trim().toLowerCase();
+      if (normalizedId) {
+        idCounter.set(normalizedId, (idCounter.get(normalizedId) || 0) + 1);
+      }
+
+      const candidates =
+        field.type === 'versus_number'
+          ? [field.homePathText, field.awayPathText]
+          : field.type === 'odds_triplet'
+            ? [field.homePathText, field.drawPathText, field.awayPathText]
+            : [field.pathText];
+      candidates
+        .map((path) => normalizeDatasourcePathToken(path).toLowerCase())
+        .filter((path) => path.length > 0)
+        .forEach((path) => {
+          pathCounter.set(path, (pathCounter.get(path) || 0) + 1);
+        });
+    });
+
+    return datasourceDraft.fields.map((field, index) => {
+      const normalizedId = field.id.trim().toLowerCase();
+      const mappingReady =
+        getDatasourceFieldProvidedPathCount(field) >= getDatasourceFieldRequiredPathCount(field);
+      const duplicateId = normalizedId.length > 0 && (idCounter.get(normalizedId) || 0) > 1;
+      const candidates =
+        field.type === 'versus_number'
+          ? [field.homePathText, field.awayPathText]
+          : field.type === 'odds_triplet'
+            ? [field.homePathText, field.drawPathText, field.awayPathText]
+            : [field.pathText];
+      const duplicatePath = candidates
+        .map((path) => normalizeDatasourcePathToken(path).toLowerCase())
+        .filter((path) => path.length > 0)
+        .some((path) => (pathCounter.get(path) || 0) > 1);
+
+      const hasIssue =
+        !mappingReady
+        || !normalizedId
+        || duplicateId
+        || duplicatePath;
+
+      return {
+        index,
+        field,
+        mappingReady,
+        hasIssue,
+        duplicateId,
+        duplicatePath,
+      };
+    });
+  }, [datasourceDraft]);
+
+  const datasourceVisibleFieldRows = useMemo(() => {
+    const keyword = datasourceFieldFilterText.trim().toLowerCase();
+    return datasourceFieldDiagnostics.filter((row) => {
+      if (datasourceFieldViewMode === 'issues' && !row.hasIssue) {
+        return false;
+      }
+      if (datasourceFieldViewMode === 'ready' && row.hasIssue) {
+        return false;
+      }
+      if (!keyword) {
+        return true;
+      }
+      const searchText = [
+        row.field.id,
+        row.field.type,
+        row.field.pathText,
+        row.field.homePathText,
+        row.field.drawPathText,
+        row.field.awayPathText,
+      ]
+        .join(' ')
+        .toLowerCase();
+      return searchText.includes(keyword);
+    });
+  }, [datasourceFieldDiagnostics, datasourceFieldFilterText, datasourceFieldViewMode]);
+
+  const datasourceFieldVisibilitySummary = useMemo(() => {
+    const total = datasourceFieldDiagnostics.length;
+    const issueCount = datasourceFieldDiagnostics.filter((row) => row.hasIssue).length;
+    return {
+      total,
+      issueCount,
+      readyCount: Math.max(0, total - issueCount),
+      visibleCount: datasourceVisibleFieldRows.length,
+    };
+  }, [datasourceFieldDiagnostics, datasourceVisibleFieldRows]);
 
   const datasourceSourceContextPreview = useMemo(() => {
     if (!datasourceManifestPreview) {
@@ -1425,6 +1823,10 @@ export default function AdminStudio() {
     setDatasourceCollectors([]);
     setDatasourceCollectionRuns([]);
     setDatasourceCollectionSnapshots([]);
+    setDatasourceEditorStep('all');
+    setDatasourceFieldViewMode('all');
+    setDatasourceFieldFilterText('');
+    setDatasourceFieldPathPrefixInput('');
     setFeedback(null);
   }
 
@@ -1782,6 +2184,212 @@ export default function AdminStudio() {
     });
   }
 
+  function appendDatasourcePresetFields(presetFields: DatasourceFieldDraft[], presetName: string) {
+    let addedCount = 0;
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const existingIds = new Set(
+        previous.fields
+          .map((field) => field.id.trim().toLowerCase())
+          .filter((fieldId) => fieldId.length > 0),
+      );
+      const nextFields = [...previous.fields];
+      presetFields.forEach((field) => {
+        const normalizedId = field.id.trim().toLowerCase();
+        if (!normalizedId || existingIds.has(normalizedId)) {
+          return;
+        }
+        existingIds.add(normalizedId);
+        nextFields.push(field);
+        addedCount += 1;
+      });
+
+      return {
+        ...previous,
+        fields: nextFields,
+      };
+    });
+
+    setFeedback({
+      tone: 'info',
+      message:
+        addedCount > 0
+          ? `Preset "${presetName}" added ${addedCount} field(s).`
+          : `Preset "${presetName}" skipped (all field ids already exist).`,
+    });
+  }
+
+  function handleApplyPresetBasicFields() {
+    appendDatasourcePresetFields(
+      [
+        {
+          id: 'league',
+          type: 'text',
+          pathText: 'league',
+          homePathText: '',
+          drawPathText: '',
+          awayPathText: '',
+        },
+        {
+          id: 'status',
+          type: 'text',
+          pathText: 'status',
+          homePathText: '',
+          drawPathText: '',
+          awayPathText: '',
+        },
+        {
+          id: 'home_team',
+          type: 'text',
+          pathText: 'homeTeam.name',
+          homePathText: '',
+          drawPathText: '',
+          awayPathText: '',
+        },
+        {
+          id: 'away_team',
+          type: 'text',
+          pathText: 'awayTeam.name',
+          homePathText: '',
+          drawPathText: '',
+          awayPathText: '',
+        },
+      ],
+      'basic fields',
+    );
+  }
+
+  function handleApplyPresetOddsTriplet() {
+    appendDatasourcePresetFields(
+      [
+        {
+          id: 'odds_1x2',
+          type: 'odds_triplet',
+          pathText: '',
+          homePathText: 'odds.home',
+          drawPathText: 'odds.draw',
+          awayPathText: 'odds.away',
+        },
+      ],
+      '1X2 odds',
+    );
+  }
+
+  function handleAutoBuildMainSection() {
+    setDatasourceDraft((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      const fieldIds = previous.fields
+        .map((field) => field.id.trim())
+        .filter((fieldId) => fieldId.length > 0);
+      if (fieldIds.length === 0) {
+        return previous;
+      }
+
+      const nextSection: DatasourceFormSectionDraft = {
+        id: 'main',
+        titleKey: 'datasource.main',
+        title: 'Main',
+        columns: '2',
+        fieldIdsText: fieldIds.join(', '),
+      };
+
+      const existingIndex = previous.formSections.findIndex(
+        (section) => section.id.trim().toLowerCase() === 'main',
+      );
+      const nextSections =
+        existingIndex >= 0
+          ? previous.formSections.map((section, index) => (
+              index === existingIndex ? nextSection : section
+            ))
+          : [...previous.formSections, nextSection];
+
+      return {
+        ...previous,
+        formSections: nextSections,
+      };
+    });
+
+    setFeedback({
+      tone: 'success',
+      message: 'Main section rebuilt from current field ids.',
+    });
+  }
+
+  function handleAutoFillEmptyFieldPaths() {
+    if (!datasourceDraft) {
+      setFeedback({
+        tone: 'info',
+        message: 'No datasource draft loaded.',
+      });
+      return;
+    }
+
+    const prefix = datasourceFieldPathPrefixInput.trim();
+    let updatedCount = 0;
+    const nextFields = datasourceDraft.fields.map((field) => {
+      const normalizedId = normalizeDatasourcePathToken(field.id);
+      if (!normalizedId) {
+        return field;
+      }
+
+      let nextField = field;
+      if (field.type === 'versus_number') {
+        const homeCandidate = composeDatasourcePathWithPrefix(prefix, `${normalizedId}.home`);
+        const awayCandidate = composeDatasourcePathWithPrefix(prefix, `${normalizedId}.away`);
+        if (!field.homePathText.trim() || !field.awayPathText.trim()) {
+          nextField = {
+            ...field,
+            homePathText: field.homePathText.trim() || homeCandidate,
+            awayPathText: field.awayPathText.trim() || awayCandidate,
+          };
+        }
+      } else if (field.type === 'odds_triplet') {
+        const homeCandidate = composeDatasourcePathWithPrefix(prefix, `${normalizedId}.home`);
+        const drawCandidate = composeDatasourcePathWithPrefix(prefix, `${normalizedId}.draw`);
+        const awayCandidate = composeDatasourcePathWithPrefix(prefix, `${normalizedId}.away`);
+        if (!field.homePathText.trim() || !field.drawPathText.trim() || !field.awayPathText.trim()) {
+          nextField = {
+            ...field,
+            homePathText: field.homePathText.trim() || homeCandidate,
+            drawPathText: field.drawPathText.trim() || drawCandidate,
+            awayPathText: field.awayPathText.trim() || awayCandidate,
+          };
+        }
+      } else {
+        const pathCandidate = composeDatasourcePathWithPrefix(prefix, normalizedId);
+        if (!field.pathText.trim()) {
+          nextField = {
+            ...field,
+            pathText: pathCandidate,
+          };
+        }
+      }
+
+      if (nextField !== field) {
+        updatedCount += 1;
+      }
+      return nextField;
+    });
+
+    setDatasourceDraft({
+      ...datasourceDraft,
+      fields: nextFields,
+    });
+
+    setFeedback({
+      tone: 'info',
+      message:
+        updatedCount > 0
+          ? `Auto-filled empty mapping paths for ${updatedCount} field(s).`
+          : 'No empty mapping path to auto-fill.',
+    });
+  }
+
   function updatePlanningDraft(patch: Partial<PlanningTemplateDraft>) {
     setPlanningDraft((previous) => {
       if (!previous) {
@@ -1959,6 +2567,9 @@ export default function AdminStudio() {
     const sourceId = resolveDatasourceCollectionSourceId();
     if (!sourceId) {
       setDatasourceCollectors([]);
+      setDatasourceCollectionHealth([]);
+      setDatasourceCollectionHealthSummary(EMPTY_DATASOURCE_HEALTH_SUMMARY);
+      setDatasourceCollectionHealthGeneratedAt('');
       setDatasourceCollectionRuns([]);
       setDatasourceCollectionSnapshots([]);
       return;
@@ -1966,8 +2577,12 @@ export default function AdminStudio() {
 
     setIsDatasourceCollectionLoading(true);
     try {
-      const [collectorsResult, runsResult, snapshotsResult] = await Promise.all([
+      const [collectorsResult, healthResult, runsResult, snapshotsResult] = await Promise.all([
         listDatasourceCollectors({
+          sourceId,
+          limit: 20,
+        }),
+        listDatasourceCollectionHealth({
           sourceId,
           limit: 20,
         }),
@@ -1982,6 +2597,11 @@ export default function AdminStudio() {
       ]);
 
       setDatasourceCollectors(collectorsResult.data || []);
+      setDatasourceCollectionHealth(healthResult.data || []);
+      setDatasourceCollectionHealthSummary(
+        healthResult.summary || EMPTY_DATASOURCE_HEALTH_SUMMARY,
+      );
+      setDatasourceCollectionHealthGeneratedAt(healthResult.generatedAt || '');
       setDatasourceCollectionRuns(runsResult.data || []);
       setDatasourceCollectionSnapshots(snapshotsResult.data || []);
     } catch (error) {
@@ -2073,6 +2693,27 @@ export default function AdminStudio() {
       setFeedback({ tone: 'error', message: summarizeError(error) });
     } finally {
       setReleasingSnapshotId('');
+    }
+  }
+
+  async function handleReplayDatasourceSnapshot(snapshotId: string) {
+    setReplayingSnapshotId(snapshotId);
+    try {
+      const data = await replayDatasourceCollectionSnapshot(snapshotId, {
+        triggerType: 'retry',
+        allowDuplicate: true,
+      });
+      setFeedback({
+        tone: 'success',
+        message: data.deduplicated
+          ? `Snapshot replay deduplicated, reused snapshot ${data.snapshot.id}.`
+          : `Snapshot replay created new snapshot ${data.snapshot.id}.`,
+      });
+      await refreshDatasourceCollectionGovernance();
+    } catch (error) {
+      setFeedback({ tone: 'error', message: summarizeError(error) });
+    } finally {
+      setReplayingSnapshotId('');
     }
   }
 
@@ -2342,12 +2983,13 @@ export default function AdminStudio() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 rounded-full border border-white/10 bg-zinc-900"
-                onClick={() => navigate('/')}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => navigate('/identity')}
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ShieldCheck className="h-4 w-4" />
+                Identity Center
               </Button>
               <div>
                 <h1 className="text-base font-bold tracking-tight text-white">Admin Studio 2.0</h1>
@@ -2369,31 +3011,87 @@ export default function AdminStudio() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_auto]">
-            <input
-              type="text"
-              value={serverUrlInput}
-              onChange={(event) => setServerUrlInput(event.target.value)}
-              placeholder="Server URL (e.g. http://127.0.0.1:3001)"
-              data-testid="settings-server-url"
-              className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
-            />
-            <input
-              type="password"
-              value={apiKeyInput}
-              onChange={(event) => setApiKeyInput(event.target.value)}
-              placeholder="API Key"
-              data-testid="settings-api-key"
-              className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
-            />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleSaveConnectionSettings}
-              data-testid="settings-save-connection"
-            >
-              Save Connection
-            </Button>
+          <div className="space-y-2">
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_auto]">
+              <input
+                type="text"
+                value={serverUrlInput}
+                onChange={(event) => setServerUrlInput(event.target.value)}
+                placeholder="Server URL (e.g. http://127.0.0.1:3001)"
+                data-testid="settings-server-url"
+                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+              />
+              <input
+                type="password"
+                value={apiKeyInput}
+                onChange={(event) => setApiKeyInput(event.target.value)}
+                placeholder="API Key"
+                data-testid="settings-api-key"
+                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleSaveConnectionSettings}
+                data-testid="settings-save-connection"
+              >
+                Save Connection
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[170px_1fr_1fr_auto_auto_auto]">
+              <Select
+                value={authModeInput}
+                onChange={(value) => setAuthModeInput(value as AdminStudioAuthMode)}
+                options={AUTH_MODE_OPTIONS}
+              />
+              <input
+                type="text"
+                value={accountIdentifierInput}
+                onChange={(event) => setAccountIdentifierInput(event.target.value)}
+                placeholder="Account (username/email)"
+                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+              />
+              <input
+                type="password"
+                value={accountPasswordInput}
+                onChange={(event) => setAccountPasswordInput(event.target.value)}
+                placeholder="Account Password"
+                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleAccountLogin()}
+                disabled={isAuthenticating}
+              >
+                {isAuthenticating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Login'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleRefreshIdentity()}
+                disabled={isAuthenticating}
+              >
+                Me
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleLogout()}
+                disabled={isAuthenticating}
+              >
+                Logout
+              </Button>
+            </div>
+            <div className="text-xs text-zinc-500">
+              Auth status: {authModeInput === 'account' ? 'account mode' : 'api key mode'} | {formatAuthUserLabel(currentAuthUser)}
+              {capabilities && (
+                <span>
+                  {' '}
+                  | adminConsole={String(capabilities.canUseAdminConsole)} | templates={capabilities.availableTemplates.length}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -2616,11 +3314,89 @@ export default function AdminStudio() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-                        <input
-                          type="text"
-                          value={datasourceDraft.id}
-                          onChange={(event) => updateDatasourceDraft({ id: event.target.value })}
+                      <div className="space-y-3 rounded-lg border border-emerald-500/20 bg-black/30 p-3">
+                        <div className="flex flex-wrap gap-2">
+                          {DATASOURCE_EDITOR_STEP_OPTIONS.map((step) => (
+                            <button
+                              key={`datasource-editor-step-${step.value}`}
+                              type="button"
+                              onClick={() => setDatasourceEditorStep(step.value)}
+                              className={`rounded-full border px-3 py-1 text-[11px] transition ${
+                                datasourceEditorStep === step.value
+                                  ? 'border-emerald-400/40 bg-emerald-500/20 text-emerald-200'
+                                  : 'border-white/10 bg-zinc-900 text-zinc-400 hover:border-white/20 hover:text-zinc-200'
+                              }`}
+                            >
+                              {step.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="text-[11px] text-zinc-500">
+                          Current focus: {DATASOURCE_EDITOR_STEP_OPTIONS.find((step) => step.value === datasourceEditorStep)?.hint || '-'}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4 xl:grid-cols-8">
+                          <div className="rounded border border-white/10 bg-zinc-900 px-2 py-1.5 text-zinc-300">
+                            fields: {datasourceEditorSummary.fieldCount}
+                          </div>
+                          <div className="rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-1.5 text-emerald-300">
+                            mapped: {datasourceEditorSummary.mappedReadyCount}
+                          </div>
+                          <div className="rounded border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-amber-300">
+                            missing: {datasourceEditorSummary.missingMappingCount}
+                          </div>
+                          <div className="rounded border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-red-300">
+                            dup paths: {datasourceEditorSummary.duplicatePathCount}
+                          </div>
+                          <div className="rounded border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-red-300">
+                            dup ids: {datasourceEditorSummary.duplicateFieldIdCount}
+                          </div>
+                          <div className="rounded border border-white/10 bg-zinc-900 px-2 py-1.5 text-zinc-300">
+                            sections: {datasourceEditorSummary.sectionCount}
+                          </div>
+                          <div className="rounded border border-white/10 bg-zinc-900 px-2 py-1.5 text-zinc-300">
+                            permissions: {datasourceEditorSummary.permissionCount}
+                          </div>
+                          <div className="rounded border border-white/10 bg-zinc-900 px-2 py-1.5 text-zinc-300">
+                            rules: {datasourceEditorSummary.ruleCount}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={handleApplyPresetBasicFields}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add Basic Preset
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={handleApplyPresetOddsTriplet}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add 1X2 Odds Preset
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={handleAutoBuildMainSection}
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Auto Build Main Section
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className={isDatasourceStepVisible(datasourceEditorStep, 'basics') ? 'space-y-3' : 'hidden'}>
+                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+                          <input
+                            type="text"
+                            value={datasourceDraft.id}
+                            onChange={(event) => updateDatasourceDraft({ id: event.target.value })}
                           placeholder="datasource id"
                           className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                         />
@@ -2638,9 +3414,9 @@ export default function AdminStudio() {
                           placeholder="labelKey (optional)"
                           className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                         />
-                      </div>
+                        </div>
 
-                      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                         <input
                           type="text"
                           value={datasourceDraft.requiredPermissionsText}
@@ -2662,25 +3438,131 @@ export default function AdminStudio() {
                           />
                           defaultSelected
                         </label>
+                        </div>
+                        <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[11px] text-zinc-400">
+                          Step 1 guidance: use stable `id` + clear `name`; permissions usually start with
+                          {' '}
+                          <span className="font-mono text-zinc-300">datasource:use:</span>
+                          {' '}
+                          (comma-separated).
+                        </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] uppercase tracking-wider text-zinc-500">
-                            Fields ({datasourceDraft.fields.length})
-                          </p>
-                          <Button variant="outline" size="sm" className="gap-1" onClick={addDatasourceField}>
-                            <Plus className="h-3.5 w-3.5" />
-                            Add Field
-                          </Button>
+                      <div className={isDatasourceStepVisible(datasourceEditorStep, 'fields') ? 'space-y-2' : 'hidden'}>
+                        <div className="space-y-2 rounded-lg border border-white/10 bg-black/20 p-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+                              Step 2: Fields ({datasourceDraft.fields.length})
+                            </p>
+                            <Button variant="outline" size="sm" className="gap-1" onClick={addDatasourceField}>
+                              <Plus className="h-3.5 w-3.5" />
+                              Add Field
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 xl:grid-cols-[170px_1fr_170px_auto]">
+                            <Select
+                              value={datasourceFieldViewMode}
+                              onChange={(value) => setDatasourceFieldViewMode(value as DatasourceFieldViewMode)}
+                              options={DATASOURCE_FIELD_VIEW_MODE_OPTIONS}
+                            />
+                            <input
+                              type="text"
+                              value={datasourceFieldFilterText}
+                              onChange={(event) => setDatasourceFieldFilterText(event.target.value)}
+                              placeholder="Filter by id/type/path"
+                              className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                            />
+                            <input
+                              type="text"
+                              value={datasourceFieldPathPrefixInput}
+                              onChange={(event) => setDatasourceFieldPathPrefixInput(event.target.value)}
+                              placeholder="path prefix (optional)"
+                              className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1"
+                              onClick={handleAutoFillEmptyFieldPaths}
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                              Auto Fill Empty Paths
+                            </Button>
+                          </div>
+                          <div className="text-[10px] text-zinc-500">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
+                              <div className="flex flex-wrap items-center gap-2 text-zinc-400">
+                                <span className="rounded border border-white/10 bg-zinc-900 px-2 py-0.5">
+                                  visible: {datasourceFieldVisibilitySummary.visibleCount}/{datasourceFieldVisibilitySummary.total}
+                                </span>
+                                <span className="rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-amber-300">
+                                  issues: {datasourceFieldVisibilitySummary.issueCount}
+                                </span>
+                                <span className="rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                                  ready: {datasourceFieldVisibilitySummary.readyCount}
+                                </span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-[10px] text-zinc-400 hover:text-zinc-100"
+                                onClick={() => {
+                                  setDatasourceFieldViewMode('all');
+                                  setDatasourceFieldFilterText('');
+                                }}
+                                disabled={datasourceFieldViewMode === 'all' && datasourceFieldFilterText.trim().length === 0}
+                              >
+                                Clear Filters
+                              </Button>
+                            </div>
+                            <div className="mt-1">
+                              Tip: choose <span className="text-zinc-300">issues only</span> to focus on missing id/path and duplicate rows.
+                            </div>
+                          </div>
                         </div>
 
                         <div className="max-h-[420px] space-y-2 overflow-auto pr-1">
-                          {datasourceDraft.fields.map((field, fieldIndex) => (
+                          {datasourceVisibleFieldRows.length === 0 && (
+                            <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
+                              No rows match current field filters. Clear filters or switch to all fields.
+                            </div>
+                          )}
+                          {datasourceVisibleFieldRows.map((row) => {
+                            const { field, index: fieldIndex, hasIssue, duplicateId, duplicatePath, mappingReady } = row;
+                            return (
                             <div key={`${field.id}-${fieldIndex}`} className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
                               <div className="flex items-center justify-between">
-                                <div className="text-xs font-semibold text-zinc-200">
-                                  Field {fieldIndex + 1}
+                                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-200">
+                                  <span>Field {fieldIndex + 1}</span>
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                      hasIssue
+                                        ? 'bg-amber-500/15 text-amber-300'
+                                        : 'bg-emerald-500/15 text-emerald-300'
+                                    }`}
+                                  >
+                                    {hasIssue ? 'needs attention' : 'ready'}
+                                  </span>
+                                  {!field.id.trim() && (
+                                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                                      missing id
+                                    </span>
+                                  )}
+                                  {!mappingReady && (
+                                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                                      missing path
+                                    </span>
+                                  )}
+                                  {duplicateId && (
+                                    <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-300">
+                                      duplicate id
+                                    </span>
+                                  )}
+                                  {duplicatePath && (
+                                    <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-300">
+                                      duplicate path
+                                    </span>
+                                  )}
                                 </div>
                                 <Button
                                   variant="ghost"
@@ -2707,6 +3589,20 @@ export default function AdminStudio() {
                                   onChange={(value) => updateDatasourceField(fieldIndex, { type: value as DatasourceFieldType })}
                                   options={DATASOURCE_FIELD_TYPE_OPTIONS}
                                 />
+                              </div>
+                              <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
+                                <span className="text-zinc-500">
+                                  {DATASOURCE_FIELD_TYPE_HINTS[field.type]}
+                                </span>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 font-semibold ${
+                                    getDatasourceFieldProvidedPathCount(field) >= getDatasourceFieldRequiredPathCount(field)
+                                      ? 'bg-emerald-500/15 text-emerald-300'
+                                      : 'bg-amber-500/15 text-amber-300'
+                                  }`}
+                                >
+                                  mapping {getDatasourceFieldProvidedPathCount(field)}/{getDatasourceFieldRequiredPathCount(field)}
+                                </span>
                               </div>
 
                               {(field.type === 'text'
@@ -2767,14 +3663,15 @@ export default function AdminStudio() {
                                 </div>
                               )}
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className={isDatasourceStepVisible(datasourceEditorStep, 'layout') ? 'space-y-2' : 'hidden'}>
                         <div className="flex items-center justify-between">
                           <p className="text-[11px] uppercase tracking-wider text-zinc-500">
-                            Form Sections ({datasourceDraft.formSections.length})
+                            Step 3: Form Sections ({datasourceDraft.formSections.length})
                           </p>
                           <Button variant="outline" size="sm" className="gap-1" onClick={addDatasourceSection}>
                             <Plus className="h-3.5 w-3.5" />
@@ -2845,11 +3742,11 @@ export default function AdminStudio() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                      <div className={isDatasourceStepVisible(datasourceEditorStep, 'layout') ? 'grid grid-cols-1 gap-3 xl:grid-cols-2' : 'hidden'}>
                         <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
                           <div className="flex items-center justify-between">
                             <p className="text-[11px] uppercase tracking-wider text-zinc-500">
-                              Apply Rules ({datasourceDraft.applyRules.length})
+                              Step 3: Apply Rules ({datasourceDraft.applyRules.length})
                             </p>
                             <Button variant="outline" size="sm" className="gap-1" onClick={() => addDatasourceRule('applyRules')}>
                               <Plus className="h-3.5 w-3.5" />
@@ -2899,7 +3796,7 @@ export default function AdminStudio() {
                         <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
                           <div className="flex items-center justify-between">
                             <p className="text-[11px] uppercase tracking-wider text-zinc-500">
-                              Remove Rules ({datasourceDraft.removeRules.length})
+                              Step 3: Remove Rules ({datasourceDraft.removeRules.length})
                             </p>
                             <Button variant="outline" size="sm" className="gap-1" onClick={() => addDatasourceRule('removeRules')}>
                               <Plus className="h-3.5 w-3.5" />
@@ -2947,11 +3844,11 @@ export default function AdminStudio() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                      <div className={isDatasourceStepVisible(datasourceEditorStep, 'validate') ? 'grid grid-cols-1 gap-3 xl:grid-cols-2' : 'hidden'}>
                         <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
                           <div className="flex items-center justify-between">
                             <p className="text-[11px] uppercase tracking-wider text-zinc-500">
-                              Local Contract Precheck
+                              Step 4: Local Contract Precheck
                             </p>
                             <span
                               className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -2988,9 +3885,9 @@ export default function AdminStudio() {
                         </div>
 
                         <div className="space-y-1 rounded-lg border border-white/10 bg-zinc-900 p-3">
-                          <label className="text-[11px] uppercase tracking-wider text-zinc-500">
-                            sourceContext Preview
-                          </label>
+                        <label className="text-[11px] uppercase tracking-wider text-zinc-500">
+                          Step 4: sourceContext Preview
+                        </label>
                           <textarea
                             value={prettyJson(datasourceSourceContextPreview || {})}
                             readOnly
@@ -3000,9 +3897,9 @@ export default function AdminStudio() {
                         </div>
                       </div>
 
-                      <div className="space-y-1 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                      <div className={isDatasourceStepVisible(datasourceEditorStep, 'validate') ? 'space-y-1 rounded-lg border border-white/10 bg-zinc-900 p-3' : 'hidden'}>
                         <label className="text-[11px] uppercase tracking-wider text-zinc-500">
-                          Payload Skeleton Preview
+                          Step 4: Payload Skeleton Preview
                         </label>
                         <textarea
                           value={prettyJson(datasourcePayloadPreview || {})}
@@ -3012,11 +3909,11 @@ export default function AdminStudio() {
                         />
                       </div>
 
-                      <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                      <div className={isDatasourceStepVisible(datasourceEditorStep, 'validate') ? 'space-y-3 rounded-lg border border-white/10 bg-zinc-900 p-3' : 'hidden'}>
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <h4 className="text-[11px] uppercase tracking-wider text-zinc-500">
-                              Server Preview
+                              Step 4: Server Preview
                             </h4>
                             <p className="text-[11px] text-zinc-400">
                               Query server-side structure and live DB samples using current datasource draft.
@@ -3169,11 +4066,11 @@ export default function AdminStudio() {
                         </div>
                       </div>
 
-                      <div className="space-y-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                      <div className={isDatasourceStepVisible(datasourceEditorStep, 'operations') ? 'space-y-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3' : 'hidden'}>
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <h4 className="text-[11px] uppercase tracking-wider text-emerald-300">
-                              Datasource Collection Governance
+                              Step 5: Datasource Collection Governance
                             </h4>
                             <p className="text-[11px] text-zinc-400">
                               Collect, confirm, and release lifecycle for datasource snapshots.
@@ -3257,6 +4154,69 @@ export default function AdminStudio() {
                           </div>
 
                           <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                                Collection Health ({datasourceCollectionHealthSummary.total})
+                              </div>
+                              <div className="text-[10px] text-zinc-500">
+                                {datasourceCollectionHealthGeneratedAt
+                                  ? `updated ${formatTime(datasourceCollectionHealthGeneratedAt)}`
+                                  : 'not available'}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1 text-[10px] text-zinc-400 sm:grid-cols-5">
+                              <div className="rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-1">
+                                healthy: {datasourceCollectionHealthSummary.healthy}
+                              </div>
+                              <div className="rounded border border-amber-500/20 bg-amber-500/10 px-2 py-1">
+                                stale: {datasourceCollectionHealthSummary.stale}
+                              </div>
+                              <div className="rounded border border-red-500/20 bg-red-500/10 px-2 py-1">
+                                failed: {datasourceCollectionHealthSummary.failed}
+                              </div>
+                              <div className="rounded border border-sky-500/20 bg-sky-500/10 px-2 py-1">
+                                never: {datasourceCollectionHealthSummary.neverRun}
+                              </div>
+                              <div className="rounded border border-zinc-500/20 bg-zinc-500/10 px-2 py-1">
+                                disabled: {datasourceCollectionHealthSummary.disabled}
+                              </div>
+                            </div>
+                            {datasourceCollectionHealth.length === 0 && (
+                              <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
+                                No collector health records for current source.
+                              </div>
+                            )}
+                            {datasourceCollectionHealth.length > 0 && (
+                              <div className="max-h-[180px] space-y-1 overflow-auto pr-1">
+                                {datasourceCollectionHealth.map((item) => {
+                                  const status = item.health.status;
+                                  const statusClass =
+                                    status === 'healthy'
+                                      ? 'text-emerald-300 border-emerald-500/20 bg-emerald-500/10'
+                                      : status === 'stale'
+                                        ? 'text-amber-300 border-amber-500/20 bg-amber-500/10'
+                                        : status === 'failed'
+                                          ? 'text-red-300 border-red-500/20 bg-red-500/10'
+                                          : status === 'never_run'
+                                            ? 'text-sky-300 border-sky-500/20 bg-sky-500/10'
+                                            : 'text-zinc-300 border-zinc-500/20 bg-zinc-500/10';
+                                  return (
+                                    <div
+                                      key={`collection-health-${item.collector.id}`}
+                                      className={`rounded border px-2 py-1.5 text-[11px] ${statusClass}`}
+                                    >
+                                      <div className="font-mono">{item.collector.sourceId}</div>
+                                      <div className="opacity-90">
+                                        status={status} | lag={item.health.lagMinutes ?? '-'}m / sla={item.health.slaMaxLagMinutes}m
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-2 rounded-lg border border-white/10 bg-zinc-900 p-3">
                             <div className="text-[11px] uppercase tracking-wider text-zinc-500">
                               Snapshots ({datasourceCollectionSnapshots.length})
                             </div>
@@ -3309,6 +4269,16 @@ export default function AdminStudio() {
                                       >
                                         {releasingSnapshotId === snapshot.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                                         Release
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1"
+                                        onClick={() => handleReplayDatasourceSnapshot(snapshot.id)}
+                                        disabled={replayingSnapshotId === snapshot.id}
+                                      >
+                                        {replayingSnapshotId === snapshot.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                        Replay
                                       </Button>
                                     </div>
                                   </div>
