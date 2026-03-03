@@ -32,6 +32,7 @@ If you are new to client work, read in this order:
 8. [skill-runtime-modes.md](./skill-runtime-modes.md)
 9. [30-client-architecture-overview-and-rationale-2026-03-03.md](./30-client-architecture-overview-and-rationale-2026-03-03.md)
 10. [31-client-maintenance-and-extension-guide-2026-03-03.md](./31-client-maintenance-and-extension-guide-2026-03-03.md)
+11. [32-stocks-pilot-client-server-contract-draft-2026-03-03.md](./32-stocks-pilot-client-server-contract-draft-2026-03-03.md)
 
 ## 4. Related Shared Docs
 
@@ -71,6 +72,7 @@ If you are new to client work, read in this order:
 8. [skill-runtime-modes.md](./skill-runtime-modes.md)
 9. [30-client-architecture-overview-and-rationale-2026-03-03.md](./30-client-architecture-overview-and-rationale-2026-03-03.md)
 10. [31-client-maintenance-and-extension-guide-2026-03-03.md](./31-client-maintenance-and-extension-guide-2026-03-03.md)
+11. [32-stocks-pilot-client-server-contract-draft-2026-03-03.md](./32-stocks-pilot-client-server-contract-draft-2026-03-03.md)
 
 ## 4. 关联公共文档
 
