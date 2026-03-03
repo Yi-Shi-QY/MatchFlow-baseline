@@ -1,6 +1,6 @@
 ﻿
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -1220,9 +1220,30 @@ function parseManifest(text: string) {
   return parsed as Record<string, unknown>;
 }
 
-export default function AdminStudio() {
+interface AdminStudioProps {
+  lockedDomain?: AdminCatalogDomain;
+  showConnectionAndAuthPanel?: boolean;
+  showIdentityShortcut?: boolean;
+  showDomainSelector?: boolean;
+  headerTitle?: string;
+  headerDescription?: string;
+  domainSectionBasePath?: string;
+  activeDomainSection?: 'design' | 'manage' | 'publish';
+}
+
+export default function AdminStudio({
+  lockedDomain,
+  showConnectionAndAuthPanel = true,
+  showIdentityShortcut = true,
+  showDomainSelector = true,
+  headerTitle = 'Admin Studio 2.0',
+  headerDescription = 'Standalone server admin web: catalog + validation + release workflow',
+  domainSectionBasePath,
+  activeDomainSection = 'design',
+}: AdminStudioProps = {}) {
   const navigate = useNavigate();
   const initialSettings = getSettings();
+  const initialDomain = lockedDomain || 'datasource';
   const [serverUrlInput, setServerUrlInput] = useState(initialSettings.matchDataServerUrl);
   const [apiKeyInput, setApiKeyInput] = useState(initialSettings.matchDataApiKey);
   const [authModeInput, setAuthModeInput] = useState<AdminStudioAuthMode>(initialSettings.authMode);
@@ -1233,7 +1254,7 @@ export default function AdminStudio() {
   );
   const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [domain, setDomain] = useState<AdminCatalogDomain>('datasource');
+  const [domain, setDomain] = useState<AdminCatalogDomain>(initialDomain);
   const [entrySearch, setEntrySearch] = useState('');
   const [entries, setEntries] = useState<Array<{
     itemId: string;
@@ -1420,6 +1441,14 @@ export default function AdminStudio() {
     void handleRefreshIdentity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!lockedDomain || domain === lockedDomain) {
+      return;
+    }
+    setDomain(lockedDomain);
+    resetEditorForDomain(lockedDomain);
+  }, [domain, lockedDomain]);
 
   const selectedRevision = useMemo(
     () => revisions.find((revision) => revision.version === selectedVersion) || null,
@@ -2976,123 +3005,154 @@ export default function AdminStudio() {
     return releaseHistory.filter((record) => record.itemId.toLowerCase().includes(query));
   }, [releaseHistory, releaseHistorySearch]);
 
+  const activeDomainLabel =
+    DOMAIN_OPTIONS.find((option) => option.value === domain)?.label || domain;
+
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans pb-10">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-black/85 px-4 pb-4 pt-4 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => navigate('/identity')}
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Identity Center
-              </Button>
+              {showIdentityShortcut && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => navigate('/app/identity')}
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  Identity Center
+                </Button>
+              )}
               <div>
-                <h1 className="text-base font-bold tracking-tight text-white">Admin Studio 2.0</h1>
+                <h1 className="text-base font-bold tracking-tight text-white">{headerTitle}</h1>
                 <p className="text-xs text-zinc-500">
-                  Standalone server admin web: catalog + validation + release workflow
+                  {headerDescription}
                 </p>
               </div>
             </div>
             <div className="min-w-[220px] sm:w-72">
-              <Select
-                value={domain}
-                onChange={(value) => {
-                  const nextDomain = value as AdminCatalogDomain;
-                  setDomain(nextDomain);
-                  resetEditorForDomain(nextDomain);
-                }}
-                options={DOMAIN_OPTIONS}
-                testId="domain-select"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_auto]">
-              <input
-                type="text"
-                value={serverUrlInput}
-                onChange={(event) => setServerUrlInput(event.target.value)}
-                placeholder="Server URL (e.g. http://127.0.0.1:3001)"
-                data-testid="settings-server-url"
-                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
-              />
-              <input
-                type="password"
-                value={apiKeyInput}
-                onChange={(event) => setApiKeyInput(event.target.value)}
-                placeholder="API Key"
-                data-testid="settings-api-key"
-                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleSaveConnectionSettings}
-                data-testid="settings-save-connection"
-              >
-                Save Connection
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[170px_1fr_1fr_auto_auto_auto]">
-              <Select
-                value={authModeInput}
-                onChange={(value) => setAuthModeInput(value as AdminStudioAuthMode)}
-                options={AUTH_MODE_OPTIONS}
-              />
-              <input
-                type="text"
-                value={accountIdentifierInput}
-                onChange={(event) => setAccountIdentifierInput(event.target.value)}
-                placeholder="Account (username/email)"
-                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
-              />
-              <input
-                type="password"
-                value={accountPasswordInput}
-                onChange={(event) => setAccountPasswordInput(event.target.value)}
-                placeholder="Account Password"
-                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void handleAccountLogin()}
-                disabled={isAuthenticating}
-              >
-                {isAuthenticating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Login'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void handleRefreshIdentity()}
-                disabled={isAuthenticating}
-              >
-                Me
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void handleLogout()}
-                disabled={isAuthenticating}
-              >
-                Logout
-              </Button>
-            </div>
-            <div className="text-xs text-zinc-500">
-              Auth status: {authModeInput === 'account' ? 'account mode' : 'api key mode'} | {formatAuthUserLabel(currentAuthUser)}
-              {capabilities && (
-                <span>
-                  {' '}
-                  | adminConsole={String(capabilities.canUseAdminConsole)} | templates={capabilities.availableTemplates.length}
-                </span>
+              {showDomainSelector && !lockedDomain ? (
+                <Select
+                  value={domain}
+                  onChange={(value) => {
+                    const nextDomain = value as AdminCatalogDomain;
+                    setDomain(nextDomain);
+                    resetEditorForDomain(nextDomain);
+                  }}
+                  options={DOMAIN_OPTIONS}
+                  testId="domain-select"
+                />
+              ) : (
+                <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-zinc-200">
+                  Domain: <span className="font-semibold text-white">{activeDomainLabel}</span>
+                </div>
               )}
             </div>
           </div>
+          {showConnectionAndAuthPanel && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_auto]">
+                <input
+                  type="text"
+                  value={serverUrlInput}
+                  onChange={(event) => setServerUrlInput(event.target.value)}
+                  placeholder="Server URL (e.g. http://127.0.0.1:3001)"
+                  data-testid="settings-server-url"
+                  className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                />
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(event) => setApiKeyInput(event.target.value)}
+                  placeholder="API Key"
+                  data-testid="settings-api-key"
+                  className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleSaveConnectionSettings}
+                  data-testid="settings-save-connection"
+                >
+                  Save Connection
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 gap-2 lg:grid-cols-[170px_1fr_1fr_auto_auto_auto]">
+                <Select
+                  value={authModeInput}
+                  onChange={(value) => setAuthModeInput(value as AdminStudioAuthMode)}
+                  options={AUTH_MODE_OPTIONS}
+                />
+                <input
+                  type="text"
+                  value={accountIdentifierInput}
+                  onChange={(event) => setAccountIdentifierInput(event.target.value)}
+                  placeholder="Account (username/email)"
+                  className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                />
+                <input
+                  type="password"
+                  value={accountPasswordInput}
+                  onChange={(event) => setAccountPasswordInput(event.target.value)}
+                  placeholder="Account Password"
+                  className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleAccountLogin()}
+                  disabled={isAuthenticating}
+                >
+                  {isAuthenticating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Login'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleRefreshIdentity()}
+                  disabled={isAuthenticating}
+                >
+                  Me
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleLogout()}
+                  disabled={isAuthenticating}
+                >
+                  Logout
+                </Button>
+              </div>
+              <div className="text-xs text-zinc-500">
+                Auth status: {authModeInput === 'account' ? 'account mode' : 'api key mode'} | {formatAuthUserLabel(currentAuthUser)}
+                {capabilities && (
+                  <span>
+                    {' '}
+                    | adminConsole={String(capabilities.canUseAdminConsole)} | templates={capabilities.availableTemplates.length}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          {domainSectionBasePath && (
+            <div className="flex flex-wrap gap-2">
+              {(['design', 'manage', 'publish'] as const).map((section) => (
+                <NavLink
+                  key={`domain-stage-${section}`}
+                  to={`${domainSectionBasePath}/${section}`}
+                  data-testid={`domain-stage-${section}`}
+                  className={({ isActive }) => `rounded-full border px-3 py-1 text-[11px] transition ${
+                    isActive || activeDomainSection === section
+                      ? 'border-emerald-400/40 bg-emerald-500/20 text-emerald-200'
+                      : 'border-white/10 bg-zinc-900 text-zinc-400 hover:border-white/20 hover:text-zinc-200'
+                  }`}
+                >
+                  {section}
+                </NavLink>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 

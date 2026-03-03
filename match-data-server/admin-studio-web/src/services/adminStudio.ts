@@ -11,7 +11,8 @@ export type AdminCatalogDomain =
   | 'planning_template'
   | 'animation_template'
   | 'agent'
-  | 'skill';
+  | 'skill'
+  | 'domain_pack';
 
 type ValidationRunType = 'catalog_validate' | 'pre_publish' | 'post_publish';
 type CatalogStatus = 'draft' | 'validated' | 'published' | 'deprecated';
@@ -279,6 +280,55 @@ export interface DatasourceDataPreview {
   };
   fieldCatalog: DatasourcePreviewField[];
   rows: DatasourceDataPreviewRow[];
+}
+
+export interface CatalogPreviewValidationCheck {
+  name: string;
+  status: string;
+  message: string;
+  details?: unknown;
+}
+
+export interface AgentModelPreviewResult {
+  provider: string;
+  model: string;
+  latencyMs: number;
+  request: {
+    locale: string;
+    input: string;
+    context: Record<string, unknown>;
+  };
+  output: {
+    content: string;
+    finishReason: string;
+  };
+  usage: Record<string, unknown>;
+  validation: {
+    status: string;
+    checks: CatalogPreviewValidationCheck[];
+  };
+}
+
+export interface SkillModelPreviewResult {
+  provider: string;
+  model: string;
+  latencyMs: number;
+  invocation: {
+    targetSkill: string | null;
+    requiredKeys: string[];
+    payloadKeys: string[];
+    missingRequiredKeys: string[];
+    warnings: string[];
+  };
+  output: {
+    content: string;
+    finishReason: string;
+  };
+  usage: Record<string, unknown>;
+  validation: {
+    status: string;
+    checks: CatalogPreviewValidationCheck[];
+  };
 }
 
 export interface DatasourceCollector {
@@ -834,6 +884,42 @@ export async function previewDatasourceData(payload: {
 }) {
   const response = await requestJson<{ data: DatasourceDataPreview }>(
     '/admin/catalog/datasource/preview/data',
+    {
+      method: 'POST',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function previewAgentModelRun(payload: {
+  manifest: Record<string, unknown>;
+  input?: string;
+  context?: Record<string, unknown>;
+  locale?: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}) {
+  const response = await requestJson<{ data: AgentModelPreviewResult }>(
+    '/admin/catalog/agent/preview/model',
+    {
+      method: 'POST',
+      body: payload,
+    },
+  );
+  return response.data;
+}
+
+export async function previewSkillModelInvocation(payload: {
+  manifest: Record<string, unknown>;
+  invocationPayload?: Record<string, unknown>;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}) {
+  const response = await requestJson<{ data: SkillModelPreviewResult }>(
+    '/admin/catalog/skill/preview/model',
     {
       method: 'POST',
       body: payload,

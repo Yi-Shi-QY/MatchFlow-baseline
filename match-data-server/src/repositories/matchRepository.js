@@ -3,17 +3,47 @@ const { MOCK_MATCHES } = require('../mock/matches');
 
 const SOURCE_DB = 'server-db';
 const SOURCE_MOCK = 'server-mock';
+const DEFAULT_DOMAIN_ID = 'football';
 
 function toInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeDomainId(value) {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : '';
+}
+
+function withDefaultDomainContext(match, fallbackDomainId = DEFAULT_DOMAIN_ID) {
+  if (!isPlainObject(match)) return match;
+  const sourceContext = isPlainObject(match.sourceContext) ? { ...match.sourceContext } : {};
+  const domainId = normalizeDomainId(sourceContext.domainId) || fallbackDomainId;
+  sourceContext.domainId = domainId;
+
+  return {
+    ...match,
+    sourceContext,
+  };
+}
+
+function matchesDomain(match, domainId) {
+  if (!domainId) return true;
+  const resolvedDomainId = normalizeDomainId(match?.sourceContext?.domainId) || DEFAULT_DOMAIN_ID;
+  return resolvedDomainId === domainId;
+}
+
 function mapDbRowToMatch(row) {
   const homeTeam = row?.homeTeam || row?.hometeam || {};
   const awayTeam = row?.awayTeam || row?.awayteam || {};
+  const sourceContextRaw = row?.sourceContext || row?.source_context;
 
-  return {
+  return withDefaultDomainContext({
     id: row.id,
     league: row.league_name,
     date: row.match_date,
@@ -33,13 +63,15 @@ function mapDbRowToMatch(row) {
       logo: awayTeam.logo_url,
       form: awayTeam.recent_form,
     },
-  };
+    sourceContext: isPlainObject(sourceContextRaw) ? sourceContextRaw : undefined,
+  });
 }
 
 async function listMatches(params = {}) {
   const date = params.date;
   const status = params.status;
   const search = params.search;
+  const domainId = normalizeDomainId(params.domainId);
   const limit = toInt(params.limit, 50);
   const offset = toInt(params.offset, 0);
 
@@ -79,7 +111,9 @@ async function listMatches(params = {}) {
     query += ` OFFSET $${sqlParams.length}`;
 
     const result = await db.query(query, sqlParams);
-    const data = result.rows.map(mapDbRowToMatch);
+    const data = result.rows
+      .map(mapDbRowToMatch)
+      .filter((item) => matchesDomain(item, domainId));
     return {
       data,
       source: SOURCE_DB,
@@ -87,7 +121,7 @@ async function listMatches(params = {}) {
     };
   }
 
-  let filtered = [...MOCK_MATCHES];
+  let filtered = [...MOCK_MATCHES].map((item) => withDefaultDomainContext(item));
 
   if (status) {
     filtered = filtered.filter((item) => item.status === status);
@@ -105,6 +139,10 @@ async function listMatches(params = {}) {
         item.awayTeam.name.toLowerCase().includes(normalizedSearch) ||
         item.league.toLowerCase().includes(normalizedSearch),
     );
+  }
+
+  if (domainId) {
+    filtered = filtered.filter((item) => matchesDomain(item, domainId));
   }
 
   const data = filtered.slice(offset, offset + limit);
@@ -136,7 +174,9 @@ async function listLiveMatches() {
     };
   }
 
-  const data = MOCK_MATCHES.filter((item) => item.status === 'live');
+  const data = MOCK_MATCHES
+    .filter((item) => item.status === 'live')
+    .map((item) => withDefaultDomainContext(item));
   return {
     data,
     source: SOURCE_MOCK,
@@ -229,7 +269,9 @@ async function listTeamMatches(teamId, params = {}) {
 
   const teamMatches = MOCK_MATCHES.filter(
     (item) => item.homeTeam.id === teamId || item.awayTeam.id === teamId,
-  ).sort((a, b) => new Date(b.date) - new Date(a.date));
+  )
+    .map((item) => withDefaultDomainContext(item))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const data = teamMatches.slice(offset, offset + limit);
   return {
@@ -260,7 +302,7 @@ async function getMatchById(matchId) {
 
   const match = MOCK_MATCHES.find((item) => item.id === matchId);
   if (!match) return null;
-  return { match, source: SOURCE_MOCK };
+  return { match: withDefaultDomainContext(match), source: SOURCE_MOCK };
 }
 
 async function upsertTeam(payload) {
@@ -461,4 +503,3 @@ module.exports = {
   deleteMatch,
   deleteTeam,
 };
-

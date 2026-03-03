@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { loginWithApiKey, openLegacyStudio } from './support/auth';
 
 function buildDatasourceManifest(itemId: string) {
   return {
@@ -56,13 +57,11 @@ test.describe('Admin Studio permission guards', () => {
     expect(typeof analystAccessToken).toBe('string');
     expect((analystAccessToken || '').length).toBeGreaterThan(20);
 
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Admin Studio 2.0' })).toBeVisible();
-
-    await page.getByTestId('settings-server-url').fill(serverUrl);
-    await page.getByTestId('settings-api-key').fill(analystAccessToken || '');
-    await page.getByTestId('settings-save-connection').click();
-    await expect(page.getByTestId('feedback-banner')).toContainText('Admin Studio connection settings saved.');
+    await loginWithApiKey(page, {
+      serverUrl,
+      apiKey: analystAccessToken || '',
+    });
+    await openLegacyStudio(page);
 
     await page.getByTestId('create-item-id').fill(itemId);
     await page.getByTestId('create-item-version').fill('1.0.0');

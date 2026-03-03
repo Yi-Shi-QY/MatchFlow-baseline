@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { loginWithApiKey, openLegacyStudio } from './support/auth';
 
 function buildDatasourceManifest(itemId: string) {
   return {
@@ -91,13 +92,13 @@ async function createUserAndLogin(
   return accessToken;
 }
 
-async function configureStudioToken(page: { goto: (url: string) => Promise<void>; getByRole: (role: string, options: { name: string }) => { toBeVisible: () => Promise<void> }; getByTestId: (id: string) => { fill: (value: string) => Promise<void>; click: () => Promise<void> }; }, serverUrl: string, accessToken: string) {
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Admin Studio 2.0' })).toBeVisible();
-  await page.getByTestId('settings-server-url').fill(serverUrl);
-  await page.getByTestId('settings-api-key').fill(accessToken);
-  await page.getByTestId('settings-save-connection').click();
-  await expect(page.getByTestId('feedback-banner')).toContainText('Admin Studio connection settings saved.');
+async function configureStudioToken(
+  page: Parameters<typeof loginWithApiKey>[0],
+  serverUrl: string,
+  accessToken: string,
+) {
+  await loginWithApiKey(page, { serverUrl, apiKey: accessToken });
+  await openLegacyStudio(page);
 }
 
 test.describe('Admin Studio role matrix for release boundaries', () => {

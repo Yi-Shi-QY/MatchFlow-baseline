@@ -25,13 +25,14 @@ function registerMatchRoutes(app, authenticate) {
       return;
     }
 
-    const { date, status, search, limit = 50, offset = 0 } = req.query;
+    const { date, status, search, domainId, limit = 50, offset = 0 } = req.query;
 
     try {
       const result = await matchRepository.listMatches({
         date,
         status,
         search,
+        domainId,
         limit,
         offset,
       });

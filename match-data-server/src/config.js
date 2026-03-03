@@ -37,6 +37,11 @@ const REFRESH_TOKEN_TTL_SECONDS = parseIntegerEnv(
 const JSON_BODY_LIMIT = normalizeEnvText(process.env.JSON_BODY_LIMIT) || '1mb';
 const SHUTDOWN_TIMEOUT_MS = parseIntegerEnv('SHUTDOWN_TIMEOUT_MS', 10_000);
 const CORS_ALLOWED_ORIGINS = parseCsvEnv('CORS_ALLOWED_ORIGINS', '*');
+const DEEPSEEK_API_BASE_URL =
+  normalizeEnvText(process.env.DEEPSEEK_API_BASE_URL) || 'https://api.deepseek.com';
+const DEEPSEEK_API_KEY = normalizeEnvText(process.env.DEEPSEEK_API_KEY);
+const DEEPSEEK_MODEL = normalizeEnvText(process.env.DEEPSEEK_MODEL) || 'deepseek-chat';
+const DEEPSEEK_TIMEOUT_MS = parseIntegerEnv('DEEPSEEK_TIMEOUT_MS', 20_000);
 
 function validateSecretLength(secretValue, secretName, report, mode) {
   if (secretValue.length >= 32) {
@@ -131,6 +136,10 @@ function buildStartupValidationReport(options = {}) {
     report.warnings.push('CORS_ALLOWED_ORIGINS includes wildcard (*), verify this is intentional');
   }
 
+  if (!DEEPSEEK_API_KEY) {
+    report.warnings.push('DEEPSEEK_API_KEY not configured, model preview endpoints will be unavailable');
+  }
+
   return report;
 }
 
@@ -157,6 +166,10 @@ module.exports = {
   JSON_BODY_LIMIT,
   SHUTDOWN_TIMEOUT_MS,
   CORS_ALLOWED_ORIGINS,
+  DEEPSEEK_API_BASE_URL,
+  DEEPSEEK_API_KEY,
+  DEEPSEEK_MODEL,
+  DEEPSEEK_TIMEOUT_MS,
   buildStartupValidationReport,
   assertStartupConfig,
 };

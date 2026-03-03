@@ -37,7 +37,7 @@ async function sendHubManifest(kind, req, res) {
 }
 
 function registerHubRoutes(app, authenticate) {
-  ['agent', 'skill', 'template'].forEach((kind) => {
+  ['agent', 'skill', 'template', 'domain'].forEach((kind) => {
     const plural = `${kind}s`;
     const paths = [
       `/hub/${plural}/:id`,
@@ -45,6 +45,9 @@ function registerHubRoutes(app, authenticate) {
       `/extensions/${plural}/:id`,
       `/extensions/${kind}/:id`,
     ];
+    if (kind === 'domain') {
+      paths.push('/domains/:id');
+    }
 
     paths.forEach((routePath) => {
       app.get(routePath, authenticate, (req, res) => sendHubManifest(kind, req, res));

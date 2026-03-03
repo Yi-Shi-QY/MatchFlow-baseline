@@ -29,6 +29,8 @@ const {
   getCatalogEditPermission,
   previewDatasourceStructureForAdmin,
   previewDatasourceDataForAdmin,
+  previewAgentModelRunForAdmin,
+  previewSkillInvocationForAdmin,
   listCatalogEntriesForAdmin,
   createCatalogEntryForAdmin,
   listCatalogRevisionsForAdmin,
@@ -539,6 +541,28 @@ function registerAdminRoutes(app, authenticate) {
       return res.json({ data });
     } catch (error) {
       return handleStudioCatalogError(res, error, 'Failed to build datasource data preview');
+    }
+  }));
+
+  app.post('/admin/catalog/agent/preview/model', authenticate, withRequiredPermission(() => getCatalogEditPermission('agent'), async (req, res) => {
+    try {
+      const data = await previewAgentModelRunForAdmin({
+        body: req.body || {},
+      });
+      return res.json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to run agent model preview');
+    }
+  }));
+
+  app.post('/admin/catalog/skill/preview/model', authenticate, withRequiredPermission(() => getCatalogEditPermission('skill'), async (req, res) => {
+    try {
+      const data = await previewSkillInvocationForAdmin({
+        body: req.body || {},
+      });
+      return res.json({ data });
+    } catch (error) {
+      return handleStudioCatalogError(res, error, 'Failed to run skill invocation preview');
     }
   }));
 

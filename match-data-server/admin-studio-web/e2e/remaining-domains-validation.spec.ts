@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { loginWithApiKey, openLegacyStudio } from './support/auth';
 
 type Domain = 'animation_template' | 'agent' | 'skill';
 
@@ -74,13 +75,8 @@ test.describe('Admin Studio remaining domain validation matrix', () => {
     const apiKey = process.env.E2E_MATCH_DATA_API_KEY || process.env.API_KEY || 'your-secret-key';
     const domains: Domain[] = ['animation_template', 'agent', 'skill'];
 
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Admin Studio 2.0' })).toBeVisible();
-
-    await page.getByTestId('settings-server-url').fill(serverUrl);
-    await page.getByTestId('settings-api-key').fill(apiKey);
-    await page.getByTestId('settings-save-connection').click();
-    await expect(page.getByTestId('feedback-banner')).toContainText('Admin Studio connection settings saved.');
+    await loginWithApiKey(page, { serverUrl, apiKey });
+    await openLegacyStudio(page);
 
     for (const domain of domains) {
       const itemId = `e2e_${domain}_${runTag}`;
