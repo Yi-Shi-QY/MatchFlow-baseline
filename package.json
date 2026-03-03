@@ -15,7 +15,9 @@
     "cap:add:android": "npx cap add android",
     "cap:add:ios": "npx cap add ios",
     "cap:assets": "npx capacitor-assets generate",
-    "verify:tool-calls": "node scripts/verifyToolCalls.mjs"
+    "verify:tool-calls": "node scripts/verifyToolCalls.mjs",
+    "domain:scaffold": "node scripts/scaffoldDomain.mjs",
+    "verify:domain-extension": "node scripts/verifyDomainExtension.mjs"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.20",

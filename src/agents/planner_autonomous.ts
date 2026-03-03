@@ -1,53 +1,114 @@
-import { AgentConfig } from "./types";
+import { AgentConfig, AgentContext } from "./types";
 
-function buildEnglishPrompt(primary: string, secondary: string, matchData: string) {
+function dedupeNonEmptyStrings(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const normalized = input
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
+  return Array.from(new Set(normalized));
+}
+
+function resolveDomainId(matchData: any): string {
+  if (typeof matchData?.sourceContext?.domainId === "string" && matchData.sourceContext.domainId.trim()) {
+    return matchData.sourceContext.domainId.trim();
+  }
+  if (typeof matchData?.analysisConfig?.domainId === "string" && matchData.analysisConfig.domainId.trim()) {
+    return matchData.analysisConfig.domainId.trim();
+  }
+  return "default";
+}
+
+function resolveAnalysisTarget(matchData: any, language: "en" | "zh"): string {
+  const home = typeof matchData?.homeTeam?.name === "string" ? matchData.homeTeam.name.trim() : "";
+  const away = typeof matchData?.awayTeam?.name === "string" ? matchData.awayTeam.name.trim() : "";
+  if (home && away) {
+    return `${home} vs ${away}`;
+  }
+
+  const candidates = [
+    matchData?.analysisSubject,
+    matchData?.subject,
+    matchData?.title,
+    matchData?.name,
+    matchData?.customInfo?.title,
+    matchData?.customInfo?.name,
+    matchData?.asset?.ticker,
+    matchData?.asset?.name,
+    matchData?.entity?.name,
+    matchData?.league,
+  ]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value) => value.length > 0);
+
+  if (candidates.length > 0) {
+    return candidates[0];
+  }
+
+  return language === "zh" ? "当前分析对象" : "Current analysis target";
+}
+
+function resolveAllowedAgentTypes(context: AgentContext): string[] {
+  const fromRoute = dedupeNonEmptyStrings(context.allowedAgentTypes);
+  if (fromRoute.length > 0) return fromRoute;
+
+  const fromPlanning = dedupeNonEmptyStrings(context.matchData?.sourceContext?.planning?.allowedAgentTypes);
+  if (fromPlanning.length > 0) return fromPlanning;
+
+  const requiredAgents = dedupeNonEmptyStrings(context.requiredAgentIds);
+  if (requiredAgents.length > 0) return requiredAgents;
+
+  const requiredFromPlanning = dedupeNonEmptyStrings(context.matchData?.sourceContext?.planning?.requiredAgents);
+  if (requiredFromPlanning.length > 0) return requiredFromPlanning;
+
+  return ["general"];
+}
+
+function resolveAllowedAnimationTypes(context: AgentContext): string[] {
+  if (!context.includeAnimations) {
+    return ["none"];
+  }
+
+  const fromPlanning = dedupeNonEmptyStrings(context.matchData?.sourceContext?.planning?.allowedAnimationTypes);
+  if (fromPlanning.length > 0) return [...fromPlanning, "none"];
+
+  const fromLegacy = dedupeNonEmptyStrings(context.matchData?.sourceContext?.planning?.animationTypes);
+  if (fromLegacy.length > 0) return [...fromLegacy, "none"];
+
+  return ["none"];
+}
+
+function buildPrompt(
+  target: string,
+  domainId: string,
+  matchData: string,
+  language: "en" | "zh",
+  allowedAgentTypes: string[],
+  allowedAnimationTypes: string[],
+  planningReason: string,
+) {
   return `
-You are a Senior Football Analysis Director. Manually plan the analysis structure for ${primary} vs ${secondary}.
+You are a Domain Analysis Planning Director.
+Design a custom analysis segment plan as a strict JSON array.
 
-TASK:
-The user requested a custom structure that does not fit standard templates.
+Target: ${target}
+Domain: ${domainId}
+Language: ${language}
+Allowed agentType values: ${allowedAgentTypes.join(", ")}
+Allowed animationType values: ${allowedAnimationTypes.join(", ")}
+Route reason: ${planningReason}
 
 RULES:
-1. Logical Flow: Overview -> Form -> Tactics/Stats -> Odds Analysis -> Key Factors -> Conclusion.
-2. Segment Count: 3 to 6 segments.
-3. Agent Types (strict): Use only "overview", "stats", "tactical", "odds", "prediction", "general".
-4. Animation Strategy (strict mapping):
-   - Form / team stats => "stats"
-   - Tactics / lineups / matchups => "tactical"
-   - Odds / market / betting => "odds"
-   - Overview / prediction => "none"
-5. Context Strategy: Set "contextMode" to one of "build_upon", "independent", "compare", or "all".
+1. Return 3 to 6 segments.
+2. Every segment must include exactly: "title", "focus", "animationType", "agentType", "contextMode".
+3. "agentType" must be one of: ${allowedAgentTypes.join(", ")}.
+4. "animationType" must be one of: ${allowedAnimationTypes.join(", ")}.
+5. "contextMode" must be one of: "build_upon", "independent", "compare", "all".
+6. Output JSON array only. No markdown, no explanation.
+7. If language is "zh", use Chinese for "title" and "focus".
 
-OUTPUT FORMAT:
-Return a strict JSON array only (no markdown code block).
-Each object MUST contain: "title", "focus", "animationType", "agentType", "contextMode".
-
-Match Data: ${matchData}
-  `;
-}
-
-function buildChinesePrompt(primary: string, secondary: string, matchData: string) {
-  return `
-请使用中文输出，且 title 与 focus 必须为中文。
-${buildEnglishPrompt(primary, secondary, matchData)}
+INPUT DATA:
+${matchData}
 `;
-}
-
-function resolvePlannerTargets(
-  matchData: any,
-  language: "en" | "zh",
-): { primary: string; secondary: string } {
-  const fallbackPrimary = language === "zh" ? "主队" : "Home Team";
-  const fallbackSecondary = language === "zh" ? "客队" : "Away Team";
-
-  return {
-    primary: String(
-      matchData?.homeTeam?.name || matchData?.participants?.home?.name || fallbackPrimary,
-    ),
-    secondary: String(
-      matchData?.awayTeam?.name || matchData?.participants?.away?.name || fallbackSecondary,
-    ),
-  };
 }
 
 export const plannerAutonomousAgent: AgentConfig = {
@@ -55,11 +116,25 @@ export const plannerAutonomousAgent: AgentConfig = {
   name: "Autonomous Planner",
   description: "Manually plans the analysis structure for custom requests.",
   skills: [],
-  systemPrompt: ({ matchData, language }) => {
-    const lang = language === "zh" ? "zh" : "en";
-    const { primary, secondary } = resolvePlannerTargets(matchData, lang);
-    return lang === "zh"
-      ? buildChinesePrompt(primary, secondary, JSON.stringify(matchData))
-      : buildEnglishPrompt(primary, secondary, JSON.stringify(matchData));
+  systemPrompt: (context) => {
+    const lang = context.language === "zh" ? "zh" : "en";
+    const domainId = context.domainId || resolveDomainId(context.matchData);
+    const target = resolveAnalysisTarget(context.matchData, lang);
+    const allowedAgentTypes = resolveAllowedAgentTypes(context);
+    const allowedAnimationTypes = resolveAllowedAnimationTypes(context);
+    const planningReason =
+      typeof context.planningReason === "string" && context.planningReason.trim()
+        ? context.planningReason.trim()
+        : "unspecified";
+
+    return buildPrompt(
+      target,
+      domainId,
+      JSON.stringify(context.matchData),
+      lang,
+      allowedAgentTypes,
+      allowedAnimationTypes,
+      planningReason,
+    );
   },
 };

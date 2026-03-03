@@ -159,13 +159,13 @@ function buildFallbackTags(language: "zh" | "en"): NormalizedTag[] {
   if (language === "zh") {
     return [
       { label: "关键观察", team: "neutral", color: "zinc" },
-      { label: "比赛节奏", team: "neutral", color: "zinc" },
+      { label: "核心趋势", team: "neutral", color: "zinc" },
     ];
   }
 
   return [
     { label: "Key Insight", team: "neutral", color: "zinc" },
-    { label: "Match Tempo", team: "neutral", color: "zinc" },
+    { label: "Core Trend", team: "neutral", color: "zinc" },
   ];
 }
 
@@ -249,15 +249,26 @@ export async function generateAnalysisPlan(
     }
 
     // Fallback path: ask planner agent to generate plan.
-    const agentId =
-      route.plannerAgentId ||
-      (route.mode === "autonomous" ? "planner_autonomous" : "planner_template");
+    const agentId = route.plannerAgentId;
+    if (!agentId) {
+      throw new Error(
+        `Planning route missing plannerAgentId (mode=${route.mode}, reason=${route.reason})`,
+      );
+    }
     const agent = getAgent(agentId);
 
     const prompt = agent.systemPrompt({
       matchData,
       language,
       includeAnimations,
+      planningMode: route.mode,
+      planningReason: route.reason,
+      allowedAgentTypes: route.allowedAgentTypes,
+      requiredAgentIds: route.requiredAgentIds,
+      domainId:
+        typeof matchData?.sourceContext?.domainId === "string"
+          ? matchData.sourceContext.domainId
+          : undefined,
     });
 
     let responseText = "";

@@ -12,12 +12,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
 import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
 import { getBuiltinDomainLocalTestCases } from '@/src/services/domains/builtinModules';
-import { getAnalysisOutcomeDistribution } from '@/src/services/analysisSummary';
 import {
-  getDomainHomePresenter,
+  getDomainUiPresenter,
   type HomeCenterDisplay,
+  type HistoryPresenterContext,
   type HomePresenterContext,
-} from '@/src/services/domains/home/presenter';
+} from '@/src/services/domains/ui/presenter';
 
 function toneClassForMetric(tone?: 'neutral' | 'positive' | 'negative') {
   if (tone === 'positive') return 'text-emerald-400';
@@ -27,10 +27,12 @@ function toneClassForMetric(tone?: 'neutral' | 'positive' | 'negative') {
 
 export default function Home() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const activeDomain = getActiveAnalysisDomain();
   const activeDomainId = activeDomain.id;
-  const homePresenter = getDomainHomePresenter(activeDomain);
+  const domainUiPresenter = getDomainUiPresenter(activeDomain);
+  const homePresenter = domainUiPresenter.home;
+  const historyPresenter = domainUiPresenter.history;
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [savedMatches, setSavedMatches] = useState<SavedMatchRecord[]>([]);
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
@@ -61,6 +63,14 @@ export default function Home() {
       formatDate,
     };
   }, [t]);
+
+  const historyPresenterContext = useMemo<HistoryPresenterContext>(
+    () => ({
+      t: (key, options) => String(t(key, options as any)),
+      language: i18n.language.startsWith('zh') ? 'zh' : 'en',
+    }),
+    [t, i18n.language],
+  );
 
   const loadMatches = async () => {
     setIsLoadingMatches(true);
@@ -342,8 +352,11 @@ export default function Home() {
               <div className="flex overflow-x-auto gap-3 pb-4 snap-x snap-mandatory hide-scrollbar px-1">
                 {filteredAndSortedHistory.map((record: any) => {
                   const pair = homePresenter.getDisplayPair(record.match, presenterContext);
-                  const outcomeLabels = homePresenter.getOutcomeLabels(record.match, presenterContext);
-                  const outcomeDistribution = getAnalysisOutcomeDistribution(record.analysis, outcomeLabels);
+                  const outcomeDistribution = historyPresenter.getOutcomeDistribution(
+                    record.analysis,
+                    record.match,
+                    historyPresenterContext,
+                  );
                   const isActive = record.isActive;
                   const parsedStream = record.parsedStream;
 

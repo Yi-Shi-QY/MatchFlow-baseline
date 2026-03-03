@@ -5,6 +5,7 @@ import {
   oddsFocusedTemplate,
   standardTemplate,
 } from "./templates/football";
+// DOMAIN_TEMPLATE_IMPORT_MARKER
 import { PlanTemplate } from "./types";
 import { listInstalledTemplateManifests } from "@/src/services/extensions/store";
 import { TemplateExtensionManifest } from "@/src/services/extensions/types";
@@ -14,6 +15,7 @@ const BUILTIN_TEMPLATES: PlanTemplate[] = [
   standardTemplate,
   oddsFocusedTemplate,
   comprehensiveTemplate,
+  // DOMAIN_TEMPLATE_REGISTRATION_MARKER
 ];
 
 function manifestToTemplate(manifest: TemplateExtensionManifest): PlanTemplate {

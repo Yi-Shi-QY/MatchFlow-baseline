@@ -5,7 +5,7 @@ import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCir
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
-import { getSettings, saveSettings, AppSettings, AIProvider } from '@/src/services/settings';
+import { getSettings, saveSettings, AppSettings, AIProvider, DEFAULT_SETTINGS } from '@/src/services/settings';
 import { testConnection } from '@/src/services/ai';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
@@ -28,22 +28,7 @@ function parseHostAllowlist(input: string): string[] {
 export default function Settings() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
-  const [settings, setLocalSettings] = useState<AppSettings>({
-    provider: 'gemini',
-    model: 'gemini-3-flash-preview',
-    agentModelMode: 'global',
-    activeDomainId: 'football',
-    skillHttpAllowedHosts: [],
-    deepseekApiKey: '',
-    geminiApiKey: '',
-    openaiCompatibleBaseUrl: 'https://api.openai.com/v1',
-    openaiCompatibleApiKey: '',
-    matchDataServerUrl: '',
-    matchDataApiKey: '',
-    language: 'en',
-    enableBackgroundMode: false,
-    enableAutonomousPlanning: false,
-  });
+  const [settings, setLocalSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
   const [aiTestStatus, setAiTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [aiTestMessage, setAiTestMessage] = useState('');
@@ -557,7 +542,7 @@ export default function Settings() {
                 {isZh ? '分析领域' : 'Analysis Domain'}
               </label>
               <Select
-                value={settings.activeDomainId || 'football'}
+                value={settings.activeDomainId || DEFAULT_SETTINGS.activeDomainId}
                 onChange={(value) => setLocalSettings({ ...settings, activeDomainId: value })}
                 options={domainOptions}
               />

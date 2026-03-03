@@ -6,6 +6,7 @@ import {
   buildFallbackAnimationPayload,
   buildTemplatePromptSpec,
   getTemplateDeclaration,
+  type ValidationResult,
   validateAndNormalizeAnimationPayload,
 } from "../remotion/templateParams";
 import { streamAIRequest } from "./streamRequest";
@@ -138,6 +139,54 @@ export async function* streamFixAnimationParams(
   `;
 
   yield* streamAIRequest(prompt, false, undefined, false, "animation", abortSignal);
+}
+
+export async function retryAnimationPayloadWithModel(
+  matchData: any,
+  segmentPlan: any,
+  analysisText: string,
+  wrongAnimation: any,
+  validationErrors: string[],
+  abortSignal?: AbortSignal,
+): Promise<ValidationResult> {
+  throwIfAborted(abortSignal);
+  const expectedType = segmentPlan?.animationType || wrongAnimation?.type || "stats";
+  const wrongOutput =
+    typeof wrongAnimation === "string"
+      ? wrongAnimation
+      : JSON.stringify(wrongAnimation || {}, null, 2);
+
+  const candidateText = await collectStreamText(
+    streamFixAnimationParams(
+      matchData,
+      {
+        animationType: expectedType,
+        title: segmentPlan?.title || wrongAnimation?.title || "Data Visualization",
+      },
+      analysisText || "",
+      wrongOutput,
+      Array.isArray(validationErrors) ? validationErrors : [],
+      abortSignal,
+    ),
+    abortSignal,
+  );
+
+  const rawPayload = extractAnimationPayload(candidateText);
+  const validation = validateAndNormalizeAnimationPayload(rawPayload, expectedType);
+
+  if (!validation.payload.title) {
+    validation.payload.title =
+      segmentPlan?.title || wrongAnimation?.title || "Data Visualization";
+  }
+  if (
+    !validation.payload.narration &&
+    typeof rawPayload?.narration === "string" &&
+    rawPayload.narration.trim().length > 0
+  ) {
+    validation.payload.narration = rawPayload.narration.trim();
+  }
+
+  return validation;
 }
 
 export async function generateValidatedAnimationBlock(

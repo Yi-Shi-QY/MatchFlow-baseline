@@ -35,9 +35,12 @@ import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
 import {
   formatConclusionCardValue,
   getAnalysisConclusionCards,
-  getAnalysisOutcomeDistribution,
 } from '@/src/services/analysisSummary';
 import { findBuiltinDomainLocalTestCaseById } from '@/src/services/domains/builtinModules';
+import {
+  getDomainUiPresenter,
+  type ResultPresenterContext,
+} from '@/src/services/domains/ui/presenter';
 
 interface ExportSegmentOption {
   includeSegment: boolean;
@@ -153,6 +156,15 @@ export default function MatchDetail() {
   const [includeAnimations, setIncludeAnimations] = useState(true);
   const [selectedSources, setSelectedSources] = useState<Partial<SourceSelection>>({});
   const activeDomain = getActiveAnalysisDomain();
+  const domainUiPresenter = getDomainUiPresenter(activeDomain);
+  const resultPresenter = domainUiPresenter.result;
+  const resultPresenterContext = React.useMemo<ResultPresenterContext>(
+    () => ({
+      t: (key, options) => String(t(key, options as any)),
+      language: i18n.language.startsWith('zh') ? 'zh' : 'en',
+    }),
+    [t, i18n.language],
+  );
   const domainSourceCatalog = activeDomain.dataSources;
 
   const [editableData, setEditableData] = useState("");
@@ -164,6 +176,11 @@ export default function MatchDetail() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportSegments, setExportSegments] = useState<Record<string, ExportSegmentOption>>({});
   const [includeSummaryInExport, setIncludeSummaryInExport] = useState(true);
+  const [segmentAnimationOverrides, setSegmentAnimationOverrides] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    setSegmentAnimationOverrides({});
+  }, [id]);
 
   useEffect(() => {
     setSelectedSources({});
@@ -220,6 +237,23 @@ export default function MatchDetail() {
   const handleExportPDF = async (stream: AgentResult | null, summary: MatchAnalysis | null) => {
     if (!match || isExporting) return;
 
+    let exportDraftData: any = null;
+    try {
+      exportDraftData = editableData ? JSON.parse(editableData) : null;
+    } catch (e) {
+      exportDraftData = null;
+    }
+    const exportMeta = resultPresenter.getExportMeta(
+      match,
+      exportDraftData,
+      resultPresenterContext,
+    );
+    const exportHeader = resultPresenter.getHeader(
+      match,
+      exportDraftData,
+      resultPresenterContext,
+    );
+
     const selectedSegments = (stream?.segments || []).filter(
       seg => exportSegments[seg.id]?.includeSegment
     );
@@ -268,20 +302,14 @@ export default function MatchDetail() {
 
       const locale = i18n.language.startsWith('zh') ? 'zh-CN' : 'en-US';
       const timestamp = new Date().toLocaleString(locale);
-      const homeName = match.homeTeam.name;
-      const awayName = match.awayTeam.name;
-      const title = `${homeName} vs ${awayName}`;
-      const statusLabel =
-        match.status === 'live'
-          ? t('home.live')
-          : match.status === 'finished'
-            ? t('home.finished')
-            : match.status === 'upcoming'
-              ? t('home.upcoming')
-              : match.status;
+      const title = exportMeta.reportTitle;
+      const statusLabel = exportMeta.statusLabel;
+      const metadataLabel = exportHeader.subtitle || match.league;
+      const primaryName = exportMeta.primaryEntityName;
+      const secondaryName = exportMeta.secondaryEntityName;
 
       writeParagraph(title, { fontSize: 16, bold: true, spacingAfter: 2 });
-      writeParagraph(`${match.league} | ${match.date} | ${statusLabel}`, { fontSize: 10 });
+      writeParagraph(`${metadataLabel} | ${match.date} | ${statusLabel}`, { fontSize: 10 });
       writeParagraph(t('match.generated_by', { time: timestamp }), { fontSize: 9, spacingAfter: 3 });
 
       selectedSegments.forEach((seg, index) => {
@@ -314,11 +342,12 @@ export default function MatchDetail() {
           writeParagraph(`${t('match.pdf_prediction')}: ${normalizeTextForPdf(summary.prediction)}`, { fontSize: 10.5 });
         }
         const isZh = i18n.language.startsWith('zh');
-        const summaryDistribution = getAnalysisOutcomeDistribution(summary, {
-          homeLabel: homeName,
-          drawLabel: t('match.draw'),
-          awayLabel: awayName,
-        });
+        const summaryDistribution = resultPresenter.getSummaryDistribution(
+          summary,
+          match,
+          exportDraftData,
+          resultPresenterContext,
+        );
         if (summaryDistribution.length > 0) {
           writeParagraph(
             `${isZh ? '结果分布' : 'Outcome Distribution'}: ${summaryDistribution
@@ -361,8 +390,8 @@ export default function MatchDetail() {
       const safeFilePart = (value: string) =>
         value.replace(/[\\/:*?"<>|]/g, '_').trim() || 'match';
       const fileName = t('match.export_file_name', {
-        home: safeFilePart(homeName),
-        away: safeFilePart(awayName),
+        home: safeFilePart(primaryName),
+        away: safeFilePart(secondaryName),
       }).replace(/[\\/:*?"<>|]/g, '_');
 
       if (Capacitor.isNativePlatform()) {
@@ -375,7 +404,7 @@ export default function MatchDetail() {
 
         await Share.share({
           title: t('match.share_report'),
-          text: t('match.share_text', { home: homeName, away: awayName }),
+          text: t('match.share_text', { home: primaryName, away: secondaryName }),
           url: fileResult.uri,
           dialogTitle: t('match.share_report')
         });
@@ -720,11 +749,15 @@ export default function MatchDetail() {
       return (
         <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center gap-2 text-sm">
           <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
-          <span>Loading analysis context...</span>
+          <span>{resultPresenter.getLoadingContextText(resultPresenterContext)}</span>
         </div>
       );
     }
-    return <div className="p-8 text-white text-center">Match not found</div>;
+    return (
+      <div className="p-8 text-white text-center">
+        {resultPresenter.getNotFoundText(resultPresenterContext)}
+      </div>
+    );
   }
 
   // Determine what to render based on activeAnalysis or history
@@ -770,6 +803,18 @@ export default function MatchDetail() {
     error
   } = displayData;
 
+  const retryMatchData = React.useMemo(() => {
+    try {
+      const parsed = editableData ? JSON.parse(editableData) : null;
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {
+      // Ignore parse failure and fallback to analyzed match object.
+    }
+    return analyzedMatch;
+  }, [editableData, analyzedMatch]);
+
   let editablePreviewData: any = null;
   try {
     editablePreviewData = editableData ? JSON.parse(editableData) : null;
@@ -777,17 +822,17 @@ export default function MatchDetail() {
     editablePreviewData = null;
   }
 
-  const summaryHomeLabel = editablePreviewData?.homeTeam?.name || match.homeTeam.name;
-  const summaryAwayLabel = editablePreviewData?.awayTeam?.name || match.awayTeam.name;
-  const summaryDistribution = getAnalysisOutcomeDistribution(analysis, {
-    homeLabel: summaryHomeLabel,
-    drawLabel: t('match.draw'),
-    awayLabel: summaryAwayLabel,
-  });
+  const summaryHeader = resultPresenter.getHeader(match, editablePreviewData, resultPresenterContext);
+  const summaryHero = resultPresenter.getSummaryHero(match, editablePreviewData, resultPresenterContext);
+  const summaryDistribution = resultPresenter.getSummaryDistribution(
+    analysis,
+    match,
+    editablePreviewData,
+    resultPresenterContext,
+  );
   const summaryCards = getAnalysisConclusionCards(analysis);
   const summaryBarPalette = ['#10b981', '#71717a', '#3b82f6', '#f59e0b', '#ef4444'];
   const summaryIsZh = i18n.language.startsWith('zh');
-
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col pb-[calc(5rem+env(safe-area-inset-bottom))]">
       {/* Mobile App Header */}
@@ -798,20 +843,10 @@ export default function MatchDetail() {
           </Button>
           <div className="flex flex-col">
             <span className="text-[10px] text-zinc-500 uppercase font-mono">
-              {(() => {
-                try {
-                  const d = JSON.parse(editableData);
-                  return d.league || match.league;
-                } catch(e) { return match.league; }
-              })()}
+              {summaryHeader.subtitle}
             </span>
             <h1 className="text-sm font-bold tracking-tight text-white line-clamp-1">
-              {(() => {
-                try {
-                  const d = JSON.parse(editableData);
-                  return `${d.homeTeam?.name || match.homeTeam.name} vs ${d.awayTeam?.name || match.awayTeam.name}`;
-                } catch(e) { return `${match.homeTeam.name} vs ${match.awayTeam.name}`; }
-              })()}
+              {summaryHeader.title}
             </h1>
           </div>
         </div>
@@ -1001,6 +1036,7 @@ export default function MatchDetail() {
 
           {parsedStream?.segments.map((seg, i) => {
             const isCollapsed = collapsedSegments[seg.id];
+            const segmentAnimation = segmentAnimationOverrides[seg.id] || seg.animation;
             return (
               <motion.div 
                 key={seg.id}
@@ -1077,18 +1113,34 @@ export default function MatchDetail() {
                 </AnimatePresence>
 
                 {/* Animation Block */}
-                {seg.animation && (
+                {segmentAnimation && (
                   <div className="border-t border-zinc-800 bg-black p-4">
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-2 text-blue-400 text-xs font-bold border-b border-white/10 pb-2">
-                        <Video className="w-4 h-4" /> {seg.animation.title || t('match.data_visualization')}
+                        <Video className="w-4 h-4" /> {segmentAnimation.title || t('match.data_visualization')}
                       </div>
                       <div className="text-zinc-300 text-xs italic bg-zinc-900/50 p-3 rounded-lg border-l-2 border-blue-500">
-                        "{seg.animation.narration}"
+                        "{segmentAnimation.narration}"
                       </div>
                       
                       <div className="mt-2 w-full max-w-[300px] mx-auto">
-                        <RemotionPlayer animation={seg.animation} />
+                        <RemotionPlayer
+                          animation={segmentAnimation}
+                          retryContext={{
+                            matchData: retryMatchData,
+                            segmentPlan: {
+                              title: seg.title,
+                              animationType: segmentAnimation?.type || 'stats',
+                            },
+                            analysisText: seg.thoughts || '',
+                          }}
+                          onAnimationRepaired={(nextAnimation) =>
+                            setSegmentAnimationOverrides((prev) => ({
+                              ...prev,
+                              [seg.id]: nextAnimation,
+                            }))
+                          }
+                        />
                       </div>
                     </div>
                   </div>
@@ -1114,11 +1166,55 @@ export default function MatchDetail() {
                 
                 <CardContent className="p-0 flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-black relative overflow-hidden">
                   <div className="p-6 w-full flex flex-col items-center">
-                    <div className="flex items-center gap-6 mb-6">
-                      <img src={match.homeTeam.logo} className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5" />
-                      <div className="text-xl font-bold font-mono text-zinc-500">VS</div>
-                      <img src={match.awayTeam.logo} className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5" />
-                    </div>
+                    {summaryHero.kind === 'pair' && (
+                      <div className="flex items-center gap-6 mb-6">
+                        {summaryHero.primary.logo ? (
+                          <img
+                            src={summaryHero.primary.logo}
+                            alt={summaryHero.primary.name}
+                            className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xl font-bold text-zinc-300">
+                            {(summaryHero.primary.name || '?').slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="text-xl font-bold font-mono text-zinc-500">
+                          {summaryHero.connector}
+                        </div>
+                        {summaryHero.secondary.logo ? (
+                          <img
+                            src={summaryHero.secondary.logo}
+                            alt={summaryHero.secondary.name}
+                            className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xl font-bold text-zinc-300">
+                            {(summaryHero.secondary.name || '?').slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {summaryHero.kind === 'list' && summaryHero.entities.length > 0 && (
+                      <div className="mb-6 w-full flex flex-wrap items-center justify-center gap-2">
+                        {summaryHero.entities.map((entity, index) => (
+                          <div
+                            key={`${entity.id}_${index}`}
+                            className="px-2.5 py-1.5 rounded-full bg-zinc-800/70 border border-white/10 text-[10px] text-zinc-200 flex items-center gap-1.5"
+                          >
+                            {entity.logo ? (
+                              <img
+                                src={entity.logo}
+                                alt={entity.name}
+                                className="w-4 h-4 rounded-full object-contain bg-white/5"
+                              />
+                            ) : null}
+                            <span className="truncate max-w-[120px]">{entity.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {summaryDistribution.length > 0 && (
                       <div className="w-full max-w-[320px] space-y-3">

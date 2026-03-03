@@ -8,6 +8,7 @@ import {
   statsAgent,
   tacticalAgent,
 } from './domains/football';
+// DOMAIN_AGENT_IMPORT_MARKER
 import { plannerTemplateAgent } from './planner_template';
 import { plannerAutonomousAgent } from './planner_autonomous';
 import { tagAgent } from './tag';
@@ -32,6 +33,7 @@ export const BUILTIN_AGENTS: Record<string, AgentConfig> = {
   summary: summaryAgent,
   odds: oddsAgent,
   animation: animationAgent,
+  // DOMAIN_AGENT_REGISTRATION_MARKER
 };
 
 export const BUILTIN_AGENT_VERSIONS: Record<string, string> = {
@@ -48,6 +50,7 @@ export const BUILTIN_AGENT_VERSIONS: Record<string, string> = {
   summary: '1.0.0',
   odds: '1.0.0',
   animation: '1.0.0',
+  // DOMAIN_AGENT_VERSION_MARKER
 };
 
 function buildManifestAgent(manifest: AgentExtensionManifest): AgentConfig {

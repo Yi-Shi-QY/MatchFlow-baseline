@@ -1,6 +1,11 @@
 import type { HubEndpointHint } from "../extensions/types";
 import type { AppSettings } from "../settings";
-import { getPlanningStrategyForAnalysis } from "../domains/planning/registry";
+import { DEFAULT_DOMAIN_ID } from "../domains/builtinModules";
+import {
+  getPlanningStrategyByDomainId,
+  getPlanningStrategyForAnalysis,
+} from "../domains/planning/registry";
+import type { DomainPlanningStrategy } from "../domains/planning/types";
 import type { PlanningRouteDecision } from "../domains/planning/types";
 
 export type TemplateType = string;
@@ -46,8 +51,43 @@ function resolveDomainSettings(
     activeDomainId:
       typeof settings?.activeDomainId === "string" && settings.activeDomainId.trim().length > 0
         ? settings.activeDomainId
-        : "football",
+        : DEFAULT_DOMAIN_ID,
   };
+}
+
+function normalizePlannerAgentId(agentId: unknown): string | null {
+  if (typeof agentId !== "string") return null;
+  const normalized = agentId.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function resolvePlannerAgentIdForMode(
+  requestedPlannerAgentId: string | undefined,
+  strategy: DomainPlanningStrategy,
+  mode: "template" | "autonomous",
+): string {
+  const requested = normalizePlannerAgentId(requestedPlannerAgentId);
+  if (requested) return requested;
+
+  const strategyPlanner = normalizePlannerAgentId(strategy.getPlannerAgentId?.(mode));
+  if (strategyPlanner) return strategyPlanner;
+
+  const defaultStrategy = getPlanningStrategyByDomainId(DEFAULT_DOMAIN_ID);
+  const defaultPlanner = normalizePlannerAgentId(defaultStrategy?.getPlannerAgentId?.(mode));
+  if (defaultPlanner) {
+    console.warn(
+      `[planning] Missing planner agent for domain "${strategy.domainId}" mode "${mode}". ` +
+        `Fallback to default domain planner "${defaultPlanner}".`,
+    );
+    return defaultPlanner;
+  }
+
+  const legacyFallback = mode === "autonomous" ? "planner_autonomous" : "planner_template";
+  console.warn(
+    `[planning] No planner agent found for domain "${strategy.domainId}" mode "${mode}". ` +
+      `Fallback to legacy planner "${legacyFallback}".`,
+  );
+  return legacyFallback;
 }
 
 export function resolvePlanningRoute(
@@ -66,9 +106,7 @@ export function resolvePlanningRoute(
     resolveDomainSettings({ activeDomainId: settings.activeDomainId }),
   );
   const resolvePlannerAgentId = (mode: "template" | "autonomous") =>
-    requestedPlannerAgentId ||
-    strategy.getPlannerAgentId?.(mode) ||
-    (mode === "autonomous" ? "planner_autonomous" : "planner_template");
+    resolvePlannerAgentIdForMode(requestedPlannerAgentId, strategy, mode);
 
   if (settings.enableAutonomousPlanning) {
     return {

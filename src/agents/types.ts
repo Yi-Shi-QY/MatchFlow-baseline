@@ -8,6 +8,11 @@ export interface AgentContext {
   enableAutonomousPlanning?: boolean;
   includeAnimations?: boolean;
   animationSchema?: string;
+  planningMode?: 'template' | 'autonomous';
+  planningReason?: string;
+  allowedAgentTypes?: string[] | null;
+  requiredAgentIds?: string[];
+  domainId?: string;
 }
 
 export interface AgentConfig {

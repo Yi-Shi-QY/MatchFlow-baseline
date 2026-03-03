@@ -33,6 +33,9 @@ If you are new to client work, read in this order:
 9. [30-client-architecture-overview-and-rationale-2026-03-03.md](./30-client-architecture-overview-and-rationale-2026-03-03.md)
 10. [31-client-maintenance-and-extension-guide-2026-03-03.md](./31-client-maintenance-and-extension-guide-2026-03-03.md)
 11. [32-stocks-pilot-client-server-contract-draft-2026-03-03.md](./32-stocks-pilot-client-server-contract-draft-2026-03-03.md)
+12. [33-domain-onboarding-retro-and-playbook-2026-03-03.md](./33-domain-onboarding-retro-and-playbook-2026-03-03.md)
+13. [34-domain-extension-go-live-standard-v1-2026-03-03.md](./34-domain-extension-go-live-standard-v1-2026-03-03.md)
+14. [35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md](./35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md)
 
 ## 4. Related Shared Docs
 
@@ -73,6 +76,9 @@ If you are new to client work, read in this order:
 9. [30-client-architecture-overview-and-rationale-2026-03-03.md](./30-client-architecture-overview-and-rationale-2026-03-03.md)
 10. [31-client-maintenance-and-extension-guide-2026-03-03.md](./31-client-maintenance-and-extension-guide-2026-03-03.md)
 11. [32-stocks-pilot-client-server-contract-draft-2026-03-03.md](./32-stocks-pilot-client-server-contract-draft-2026-03-03.md)
+12. [33-domain-onboarding-retro-and-playbook-2026-03-03.md](./33-domain-onboarding-retro-and-playbook-2026-03-03.md)
+13. [34-domain-extension-go-live-standard-v1-2026-03-03.md](./34-domain-extension-go-live-standard-v1-2026-03-03.md)
+14. [35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md](./35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md)
 
 ## 4. 关联公共文档
 

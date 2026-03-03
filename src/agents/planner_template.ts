@@ -1,47 +1,105 @@
 import { AgentConfig } from "./types";
 
-const FOOTBALL_TEMPLATE_OPTIONS = ["basic", "standard", "odds_focused", "comprehensive"];
+const DEFAULT_TEMPLATE_OPTIONS = ["basic", "standard", "odds_focused", "comprehensive"];
 
-function resolvePlannerTargets(
-  matchData: any,
-  language: "en" | "zh",
-): { primary: string; secondary: string } {
-  const fallbackPrimary = language === "zh" ? "主队" : "Home Team";
-  const fallbackSecondary = language === "zh" ? "客队" : "Away Team";
+function dedupeNonEmptyStrings(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const normalized = input
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
+  return Array.from(new Set(normalized));
+}
 
-  return {
-    primary: String(
-      matchData?.homeTeam?.name || matchData?.participants?.home?.name || fallbackPrimary,
-    ),
-    secondary: String(
-      matchData?.awayTeam?.name || matchData?.participants?.away?.name || fallbackSecondary,
-    ),
-  };
+function resolveDomainId(matchData: any): string {
+  if (typeof matchData?.sourceContext?.domainId === "string" && matchData.sourceContext.domainId.trim()) {
+    return matchData.sourceContext.domainId.trim();
+  }
+  if (typeof matchData?.analysisConfig?.domainId === "string" && matchData.analysisConfig.domainId.trim()) {
+    return matchData.analysisConfig.domainId.trim();
+  }
+  return "default";
+}
+
+function resolveTemplateCandidates(matchData: any): string[] {
+  const planning = matchData?.sourceContext?.planning || {};
+  const candidates = dedupeNonEmptyStrings(planning?.templateCandidates);
+  if (candidates.length > 0) return candidates;
+
+  const available = dedupeNonEmptyStrings(planning?.availableTemplates);
+  if (available.length > 0) return available;
+
+  const forcedTemplate =
+    typeof planning?.templateId === "string" && planning.templateId.trim().length > 0
+      ? planning.templateId.trim()
+      : typeof planning?.templateType === "string" && planning.templateType.trim().length > 0
+        ? planning.templateType.trim()
+        : "";
+  if (forcedTemplate) return [forcedTemplate];
+
+  return [...DEFAULT_TEMPLATE_OPTIONS];
+}
+
+function resolveAnalysisTarget(matchData: any, language: "en" | "zh"): string {
+  const home = typeof matchData?.homeTeam?.name === "string" ? matchData.homeTeam.name.trim() : "";
+  const away = typeof matchData?.awayTeam?.name === "string" ? matchData.awayTeam.name.trim() : "";
+  if (home && away) {
+    return `${home} vs ${away}`;
+  }
+
+  const candidates = [
+    matchData?.analysisSubject,
+    matchData?.subject,
+    matchData?.title,
+    matchData?.name,
+    matchData?.customInfo?.title,
+    matchData?.customInfo?.name,
+    matchData?.asset?.ticker,
+    matchData?.asset?.name,
+    matchData?.entity?.name,
+    matchData?.league,
+  ]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value) => value.length > 0);
+
+  if (candidates.length > 0) {
+    return candidates[0];
+  }
+
+  return language === "zh" ? "当前分析对象" : "Current analysis target";
 }
 
 function buildPlannerPrompt(
-  primary: string,
-  secondary: string,
+  target: string,
   matchData: string,
   language: "en" | "zh",
+  domainId: string,
+  templateCandidates: string[],
+  includeAnimations: boolean,
 ) {
-  const templateOptions = FOOTBALL_TEMPLATE_OPTIONS.join(", ");
+  const templateOptions = templateCandidates.join(", ");
 
   return `
-You are a Senior Football Analysis Director. Select the best analysis template for ${primary} vs ${secondary}.
-${language === "zh" ? "Respond in Chinese if you need natural language, but you should output only tool call payload." : ""}
+You are a Domain Analysis Planning Director.
+Select the most appropriate plan template for the current target.
+
+Target: ${target}
+Domain: ${domainId}
+Template candidates: ${templateOptions}
+Language: ${language}
+Include Animations: ${includeAnimations ? "Yes" : "No"}
 
 TASK:
-Evaluate source richness and choose the most appropriate plan template via \`select_plan_template\`.
+Evaluate source richness and choose exactly one template id from the candidate list.
 
 INSTRUCTIONS:
 1. Analyze the provided data and sourceContext.
-2. Choose exactly one template from: (${templateOptions}).
-3. Call \`select_plan_template\` with \`templateType\`, \`language\` ("${language}"), and \`includeAnimations\` (true/false).
-4. IMPORTANT: Output only the tool call, no extra text.
+2. Call \`select_plan_template\` with \`templateType\`, \`language\` ("${language}"), and \`includeAnimations\` (${includeAnimations ? "true" : "false"}).
+3. The selected \`templateType\` must be one of: ${templateOptions}.
+4. Output only the tool call payload. Do not output extra prose.
 5. Stop after tool call.
 
-Match Data: ${matchData}
+INPUT DATA:
+${matchData}
 `;
 }
 
@@ -52,9 +110,16 @@ export const plannerTemplateAgent: AgentConfig = {
   skills: ["select_plan_template"],
   systemPrompt: ({ matchData, language, includeAnimations }) => {
     const lang = language === "zh" ? "zh" : "en";
-    const { primary, secondary } = resolvePlannerTargets(matchData, lang);
-    const basePrompt = buildPlannerPrompt(primary, secondary, JSON.stringify(matchData), lang);
-
-    return `${basePrompt}\n\nUSER PREFERENCE:\nInclude Animations: ${includeAnimations ? "Yes" : "No"}`;
+    const target = resolveAnalysisTarget(matchData, lang);
+    const domainId = resolveDomainId(matchData);
+    const templateCandidates = resolveTemplateCandidates(matchData);
+    return buildPlannerPrompt(
+      target,
+      JSON.stringify(matchData),
+      lang,
+      domainId,
+      templateCandidates,
+      Boolean(includeAnimations),
+    );
   },
 };
