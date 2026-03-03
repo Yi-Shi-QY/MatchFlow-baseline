@@ -568,7 +568,7 @@ export default function MatchDetail() {
                   .filter(Boolean)
               )
             }
-            placeholder={field.placeholder}
+            placeholder={placeholder ?? field.placeholder}
             className={inputClass}
           />
         </div>

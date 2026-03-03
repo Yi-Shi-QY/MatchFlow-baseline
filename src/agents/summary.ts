@@ -2,7 +2,7 @@
 
 const prompts = {
   en: (previousAnalysis: string, matchData: string) => `
-You are a Senior Data Analyst. Based on the detailed analysis segments below, generate a final conclusion that can work across different domains (sports, stocks, operations, etc.).
+You are a Senior Data Analyst. Based on the detailed analysis segments below, generate a final conclusion that can work across different domains (sports, operations, etc.).
 
 **PREVIOUS ANALYSIS:**
 ${previousAnalysis}
@@ -38,7 +38,7 @@ RULES:
 - winProbability/expectedGoals are OPTIONAL and should only be included when input is clearly a two-sided sports match.
   `,
   zh: (previousAnalysis: string, matchData: string) => `
-你是一位资深数据分析师。请基于以下分阶段分析内容，生成可用于通用场景（体育、股票、经营分析等）的最终结论。
+你是一位资深数据分析师。请基于以下分阶段分析内容，生成可用于通用场景（体育、经营分析等）的最终结论。
 
 **前序分析：**
 ${previousAnalysis}

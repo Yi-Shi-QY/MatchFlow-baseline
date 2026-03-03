@@ -116,6 +116,8 @@ function buildFootballTerminalSegment(language: "en" | "zh") {
 
 export const footballPlanningStrategy: DomainPlanningStrategy = {
   domainId: "football",
+  getPlannerAgentId: (mode) =>
+    mode === "autonomous" ? "football_planner_autonomous" : "football_planner_template",
   resolveRoute: (matchData: any) => {
     const signals = deriveSourceSignals(matchData);
 

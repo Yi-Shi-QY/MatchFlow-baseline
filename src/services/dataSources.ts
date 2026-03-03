@@ -40,6 +40,7 @@ export interface TextareaFieldSchema extends BaseFieldSchema {
 export interface CsvArrayFieldSchema extends BaseFieldSchema {
   type: "csv_array";
   path: Path;
+  placeholderKey?: string;
   placeholder?: string;
 }
 

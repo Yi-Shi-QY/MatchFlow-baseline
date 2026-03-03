@@ -236,7 +236,7 @@
     "domain_pack_title": "Installed Domain Packs",
     "domain_pack_desc": "Domain Packs create alias domains that reuse a base domain behavior while carrying recommended extension bundles.",
     "domain_pack_id": "Domain Pack ID",
-    "domain_pack_id_placeholder": "e.g. basketball_basic_pack",
+    "domain_pack_id_placeholder": "e.g. football_basic_pack",
     "domain_pack_empty": "No domain packs installed.",
     "install_domain_pack": "Install Domain Pack",
     "installing_domain_pack": "Installing domain pack...",
@@ -273,5 +273,10 @@
     "config_desc": "Includes team info, recent form, and custom data",
     "import_save": "Import & Save to History",
     "import_analyze": "Import Data & Start Analysis"
+  },
+  "domains": {
+    "football": {
+      "name": "Football Analysis"
+    }
   }
 }

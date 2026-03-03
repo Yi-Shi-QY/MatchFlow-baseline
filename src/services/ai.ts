@@ -38,7 +38,7 @@ export interface ConclusionCardEntry {
 export interface MatchAnalysis {
   prediction: string;
   keyFactors?: string[];
-  // Generic summary payload for non-versus domains (stocks, macro, operations, etc.)
+  // Generic summary payload for non-versus domains (macro, operations, etc.)
   outcomeDistribution?: OutcomeDistributionEntry[];
   conclusionCards?: ConclusionCardEntry[];
   // Backward-compatible fields for versus-match domains.
@@ -249,7 +249,9 @@ export async function generateAnalysisPlan(
     }
 
     // Fallback path: ask planner agent to generate plan.
-    const agentId = route.mode === "autonomous" ? "planner_autonomous" : "planner_template";
+    const agentId =
+      route.plannerAgentId ||
+      (route.mode === "autonomous" ? "planner_autonomous" : "planner_template");
     const agent = getAgent(agentId);
 
     const prompt = agent.systemPrompt({
@@ -259,7 +261,7 @@ export async function generateAnalysisPlan(
     });
 
     let responseText = "";
-    const stopAfterToolCall = agentId === "planner_template";
+    const stopAfterToolCall = route.mode === "template";
     const stream = streamAIRequest(
       prompt,
       false,

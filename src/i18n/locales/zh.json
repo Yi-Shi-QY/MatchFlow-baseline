@@ -236,7 +236,7 @@
     "domain_pack_title": "已安装领域包",
     "domain_pack_desc": "领域包会创建复用基础领域行为的别名领域，并携带推荐扩展组合。",
     "domain_pack_id": "领域包 ID",
-    "domain_pack_id_placeholder": "例如: basketball_basic_pack",
+    "domain_pack_id_placeholder": "??: football_basic_pack",
     "domain_pack_empty": "当前没有已安装领域包。",
     "install_domain_pack": "安装领域包",
     "installing_domain_pack": "正在安装领域包...",
@@ -273,5 +273,10 @@
     "config_desc": "包含球队信息、近期状态和自定义数据",
     "import_save": "导入并保存到历史",
     "import_analyze": "导入数据并开始分析"
+  },
+  "domains": {
+    "football": {
+      "name": "足球分析"
+    }
   }
 }

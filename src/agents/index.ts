@@ -1,4 +1,6 @@
 import {
+  footballPlannerAutonomousAgent,
+  footballPlannerTemplateAgent,
   generalAgent,
   oddsAgent,
   overviewAgent,
@@ -11,22 +13,6 @@ import { plannerAutonomousAgent } from './planner_autonomous';
 import { tagAgent } from './tag';
 import { summaryAgent } from './summary';
 import { animationAgent } from './animation';
-import {
-  basketballGeneralAgent,
-  basketballMarketAgent,
-  basketballOverviewAgent,
-  basketballPredictionAgent,
-  basketballStatsAgent,
-  basketballTacticalAgent,
-} from './domains/basketball';
-import {
-  stocksFundamentalAgent,
-  stocksGeneralAgent,
-  stocksOverviewAgent,
-  stocksPredictionAgent,
-  stocksRiskAgent,
-  stocksTechnicalAgent,
-} from './domains/stocks';
 import { AgentConfig } from './types';
 import { buildAnalysisPrompt } from './utils';
 import { getInstalledAgentManifest, listInstalledAgentManifests } from '@/src/services/extensions/store';
@@ -40,22 +26,12 @@ export const BUILTIN_AGENTS: Record<string, AgentConfig> = {
   general: generalAgent,
   planner_template: plannerTemplateAgent,
   planner_autonomous: plannerAutonomousAgent,
+  football_planner_template: footballPlannerTemplateAgent,
+  football_planner_autonomous: footballPlannerAutonomousAgent,
   tag: tagAgent,
   summary: summaryAgent,
   odds: oddsAgent,
   animation: animationAgent,
-  basketball_overview: basketballOverviewAgent,
-  basketball_stats: basketballStatsAgent,
-  basketball_tactical: basketballTacticalAgent,
-  basketball_market: basketballMarketAgent,
-  basketball_prediction: basketballPredictionAgent,
-  basketball_general: basketballGeneralAgent,
-  stocks_overview: stocksOverviewAgent,
-  stocks_technical: stocksTechnicalAgent,
-  stocks_fundamental: stocksFundamentalAgent,
-  stocks_risk: stocksRiskAgent,
-  stocks_prediction: stocksPredictionAgent,
-  stocks_general: stocksGeneralAgent,
 };
 
 export const BUILTIN_AGENT_VERSIONS: Record<string, string> = {
@@ -66,22 +42,12 @@ export const BUILTIN_AGENT_VERSIONS: Record<string, string> = {
   general: '1.0.0',
   planner_template: '1.0.0',
   planner_autonomous: '1.0.0',
+  football_planner_template: '1.0.0',
+  football_planner_autonomous: '1.0.0',
   tag: '1.0.0',
   summary: '1.0.0',
   odds: '1.0.0',
   animation: '1.0.0',
-  basketball_overview: '1.0.0',
-  basketball_stats: '1.0.0',
-  basketball_tactical: '1.0.0',
-  basketball_market: '1.0.0',
-  basketball_prediction: '1.0.0',
-  basketball_general: '1.0.0',
-  stocks_overview: '1.0.0',
-  stocks_technical: '1.0.0',
-  stocks_fundamental: '1.0.0',
-  stocks_risk: '1.0.0',
-  stocks_prediction: '1.0.0',
-  stocks_general: '1.0.0',
 };
 
 function buildManifestAgent(manifest: AgentExtensionManifest): AgentConfig {

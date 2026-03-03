@@ -348,7 +348,7 @@ export default function Settings() {
   const domainOptions = (() => {
     const installed = listAnalysisDomains().map((domain) => ({
       value: domain.id,
-      label: domain.name,
+      label: t(`domains.${domain.id}.name`, { defaultValue: domain.name }),
     }));
 
     if (

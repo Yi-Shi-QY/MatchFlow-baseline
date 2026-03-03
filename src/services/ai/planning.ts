@@ -30,8 +30,13 @@ function parsePlanningRequirements(planningContext: any) {
               : undefined,
         }
       : undefined;
+  const plannerAgentId =
+    typeof planningContext?.plannerAgentId === "string" &&
+    planningContext.plannerAgentId.trim().length > 0
+      ? planningContext.plannerAgentId.trim()
+      : undefined;
 
-  return { requiredAgentIds, requiredSkillIds, hub };
+  return { requiredAgentIds, requiredSkillIds, hub, plannerAgentId };
 }
 
 function resolveDomainSettings(
@@ -50,14 +55,30 @@ export function resolvePlanningRoute(
   settings: Pick<AppSettings, "enableAutonomousPlanning" | "activeDomainId">,
 ): PlanningRouteDecision {
   const planningContext = matchData?.sourceContext?.planning || {};
-  const requirements = parsePlanningRequirements(planningContext);
+  const {
+    requiredAgentIds,
+    requiredSkillIds,
+    hub,
+    plannerAgentId: requestedPlannerAgentId,
+  } = parsePlanningRequirements(planningContext);
+  const strategy = getPlanningStrategyForAnalysis(
+    matchData,
+    resolveDomainSettings({ activeDomainId: settings.activeDomainId }),
+  );
+  const resolvePlannerAgentId = (mode: "template" | "autonomous") =>
+    requestedPlannerAgentId ||
+    strategy.getPlannerAgentId?.(mode) ||
+    (mode === "autonomous" ? "planner_autonomous" : "planner_template");
 
   if (settings.enableAutonomousPlanning) {
     return {
       mode: "autonomous",
+      plannerAgentId: resolvePlannerAgentId("autonomous"),
       allowedAgentTypes: null,
       reason: "settings.enableAutonomousPlanning=true",
-      ...requirements,
+      requiredAgentIds,
+      requiredSkillIds,
+      hub,
     };
   }
 
@@ -65,9 +86,12 @@ export function resolvePlanningRoute(
   if (forcedMode === "autonomous") {
     return {
       mode: "autonomous",
+      plannerAgentId: resolvePlannerAgentId("autonomous"),
       allowedAgentTypes: null,
       reason: "sourceContext.planning.mode=autonomous",
-      ...requirements,
+      requiredAgentIds,
+      requiredSkillIds,
+      hub,
     };
   }
 
@@ -82,21 +106,22 @@ export function resolvePlanningRoute(
   if (forcedTemplateId) {
     return {
       mode: "template",
+      plannerAgentId: resolvePlannerAgentId("template"),
       templateType: forcedTemplateId,
       allowedAgentTypes: null,
       reason: `sourceContext.planning.template=${forcedTemplateId}`,
-      ...requirements,
+      requiredAgentIds,
+      requiredSkillIds,
+      hub,
     };
   }
-
-  const strategy = getPlanningStrategyForAnalysis(
-    matchData,
-    resolveDomainSettings({ activeDomainId: settings.activeDomainId }),
-  );
   const domainRoute = strategy.resolveRoute(matchData);
   return {
     ...domainRoute,
-    ...requirements,
+    plannerAgentId: domainRoute.plannerAgentId || resolvePlannerAgentId(domainRoute.mode),
+    requiredAgentIds,
+    requiredSkillIds,
+    hub,
   };
 }
 

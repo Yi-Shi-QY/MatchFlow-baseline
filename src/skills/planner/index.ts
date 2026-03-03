@@ -5,18 +5,6 @@ import {
   oddsFocusedTemplate,
   standardTemplate,
 } from "./templates/football";
-import {
-  basketballBasicTemplate,
-  basketballComprehensiveTemplate,
-  basketballLinesFocusedTemplate,
-  basketballStandardTemplate,
-} from "./templates/basketball";
-import {
-  stocksBasicTemplate,
-  stocksComprehensiveTemplate,
-  stocksRiskFocusedTemplate,
-  stocksStandardTemplate,
-} from "./templates/stocks";
 import { PlanTemplate } from "./types";
 import { listInstalledTemplateManifests } from "@/src/services/extensions/store";
 import { TemplateExtensionManifest } from "@/src/services/extensions/types";
@@ -26,14 +14,6 @@ const BUILTIN_TEMPLATES: PlanTemplate[] = [
   standardTemplate,
   oddsFocusedTemplate,
   comprehensiveTemplate,
-  basketballBasicTemplate,
-  basketballStandardTemplate,
-  basketballLinesFocusedTemplate,
-  basketballComprehensiveTemplate,
-  stocksBasicTemplate,
-  stocksStandardTemplate,
-  stocksRiskFocusedTemplate,
-  stocksComprehensiveTemplate,
 ];
 
 function manifestToTemplate(manifest: TemplateExtensionManifest): PlanTemplate {
