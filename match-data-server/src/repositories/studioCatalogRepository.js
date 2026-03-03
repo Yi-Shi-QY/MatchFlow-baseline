@@ -21,6 +21,10 @@ const DOMAIN_CONFIG = {
     table: 'skill_revisions',
     editPermission: 'catalog:skill:edit',
   },
+  domain_pack: {
+    table: 'domain_pack_revisions',
+    editPermission: 'catalog:domain:edit',
+  },
 };
 
 function ensureDbConnected() {

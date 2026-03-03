@@ -5,7 +5,7 @@ const {
   getLatestPublishedRevision,
 } = require('../repositories/studioCatalogRepository');
 
-const ALLOWED_KINDS = ['agent', 'skill', 'template'];
+const ALLOWED_KINDS = ['agent', 'skill', 'template', 'domain'];
 const ALLOWED_CHANNELS = ['stable', 'beta', 'internal'];
 const ALLOWED_STATUSES = ['draft', 'published', 'deprecated'];
 const ID_PATTERN = /^[a-z0-9_][a-z0-9_-]{1,63}$/;
@@ -44,6 +44,8 @@ function normalizeKind(input) {
   if (kind === 'agents') return 'agent';
   if (kind === 'skills') return 'skill';
   if (kind === 'templates') return 'template';
+  if (kind === 'domains') return 'domain';
+  if (kind === 'domain_pack' || kind === 'domain-packs') return 'domain';
   return kind;
 }
 
@@ -76,6 +78,7 @@ function resolveCatalogDomainByKind(kind) {
   if (kind === 'template') return 'planning_template';
   if (kind === 'agent') return 'agent';
   if (kind === 'skill') return 'skill';
+  if (kind === 'domain') return 'domain_pack';
   return null;
 }
 
@@ -189,7 +192,7 @@ function validateManifest(manifest) {
 
   const kind = normalizeKind(manifest.kind);
   if (!ALLOWED_KINDS.includes(kind)) {
-    errors.push('manifest.kind must be one of agent|skill|template');
+    errors.push('manifest.kind must be one of agent|skill|template|domain');
   }
 
   if (typeof manifest.id !== 'string' || !ID_PATTERN.test(manifest.id)) {
@@ -290,6 +293,63 @@ function validateManifest(manifest) {
           errors.push(`template.segments[${index}].focus.zh is required`);
         }
       });
+    }
+  }
+
+  if (kind === 'domain') {
+    if (manifest.baseDomainId !== undefined) {
+      if (typeof manifest.baseDomainId !== 'string' || manifest.baseDomainId.trim().length === 0) {
+        errors.push('domain.baseDomainId must be a non-empty string when provided');
+      } else if (!ID_PATTERN.test(manifest.baseDomainId.trim())) {
+        errors.push('domain.baseDomainId is invalid');
+      }
+    }
+
+    if (manifest.minAppVersion !== undefined) {
+      if (typeof manifest.minAppVersion !== 'string' || !SEMVER_PATTERN.test(manifest.minAppVersion)) {
+        errors.push('domain.minAppVersion must follow semver x.y.z');
+      }
+    }
+
+    if (manifest.updatedAt !== undefined && typeof manifest.updatedAt !== 'string') {
+      errors.push('domain.updatedAt must be a string when provided');
+    }
+
+    ['recommendedAgents', 'recommendedSkills', 'recommendedTemplates', 'skillHttpAllowedHosts'].forEach((field) => {
+      if (manifest[field] === undefined) return;
+      if (!Array.isArray(manifest[field])) {
+        errors.push(`domain.${field} must be an array when provided`);
+        return;
+      }
+      const hasInvalidValue = manifest[field].some((item) => typeof item !== 'string' || item.trim().length === 0);
+      if (hasInvalidValue) {
+        errors.push(`domain.${field} must contain non-empty strings`);
+      }
+    });
+
+    if (manifest.hub !== undefined) {
+      if (!manifest.hub || typeof manifest.hub !== 'object' || Array.isArray(manifest.hub)) {
+        errors.push('domain.hub must be an object when provided');
+      } else {
+        if (
+          manifest.hub.baseUrl !== undefined &&
+          (typeof manifest.hub.baseUrl !== 'string' || manifest.hub.baseUrl.trim().length === 0)
+        ) {
+          errors.push('domain.hub.baseUrl must be a non-empty string when provided');
+        }
+        if (
+          manifest.hub.apiKey !== undefined &&
+          (typeof manifest.hub.apiKey !== 'string' || manifest.hub.apiKey.trim().length === 0)
+        ) {
+          errors.push('domain.hub.apiKey must be a non-empty string when provided');
+        }
+        if (
+          manifest.hub.autoInstall !== undefined &&
+          typeof manifest.hub.autoInstall !== 'boolean'
+        ) {
+          errors.push('domain.hub.autoInstall must be boolean when provided');
+        }
+      }
     }
   }
 
@@ -433,6 +493,28 @@ const defaultRecords = [
           contextMode: 'all',
         },
       ],
+    },
+    {
+      channel: 'stable',
+      status: 'published',
+      publishedAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+    },
+  ),
+  createRecordFromManifest(
+    {
+      kind: 'domain',
+      id: 'basketball_plus',
+      version: '1.0.0',
+      name: 'Basketball Plus',
+      description: 'Domain pack alias for basketball with recommended runtime resources.',
+      baseDomainId: 'basketball',
+      minAppVersion: '1.0.0',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      recommendedAgents: ['momentum_agent'],
+      recommendedSkills: ['select_plan_template_v2'],
+      recommendedTemplates: ['live_market_pro'],
+      skillHttpAllowedHosts: ['api.example.com'],
     },
     {
       channel: 'stable',

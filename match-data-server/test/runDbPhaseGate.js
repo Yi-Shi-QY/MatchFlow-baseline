@@ -1325,6 +1325,181 @@ async function main() {
       assert.equal(hubSkill.body?.data?.kind, 'skill');
       assert.equal(hubSkill.body?.data?.id, skillItemId);
       assert.equal(hubSkill.body?.data?.version, '1.0.0');
+
+      const domainPackItemId = `hub_domain_${runTag}`;
+      const createDomainPackV1 = await requestJson(baseUrl, '/admin/catalog/domain_pack', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          itemId: domainPackItemId,
+          version: '1.0.0',
+          status: 'draft',
+          channel: 'internal',
+          manifest: {
+            kind: 'domain',
+            id: domainPackItemId,
+            name: 'Hub Domain Pack v1',
+            description: 'Domain pack manifest exposed through /hub/domains.',
+            baseDomainId: 'basketball',
+            minAppVersion: '1.0.0',
+            recommendedAgents: ['momentum_agent'],
+            recommendedSkills: ['select_plan_template_v2'],
+            recommendedTemplates: [templateItemId],
+            skillHttpAllowedHosts: ['api.example.com'],
+          },
+        }),
+      });
+      assert.equal(createDomainPackV1.status, 201);
+
+      const validateDomainPackV1 = await requestJson(baseUrl, '/admin/validate/run', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          runType: 'catalog_validate',
+          domain: 'domain_pack',
+          scope: {
+            itemId: domainPackItemId,
+            version: '1.0.0',
+          },
+        }),
+      });
+      assert.equal(validateDomainPackV1.status, 202);
+      assert.equal(validateDomainPackV1.body?.data?.status, 'succeeded');
+
+      const publishDomainPackV1 = await requestJson(
+        baseUrl,
+        `/admin/catalog/domain_pack/${domainPackItemId}/publish`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            version: '1.0.0',
+            channel: 'stable',
+            validationRunId: validateDomainPackV1.body?.data?.id,
+          }),
+        },
+      );
+      assert.equal(publishDomainPackV1.status, 200);
+
+      const hubDomainPackV1 = await requestJson(
+        baseUrl,
+        `/hub/domains/${encodeURIComponent(domainPackItemId)}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(hubDomainPackV1.status, 200);
+      assert.equal(hubDomainPackV1.body?.data?.kind, 'domain');
+      assert.equal(hubDomainPackV1.body?.data?.id, domainPackItemId);
+      assert.equal(hubDomainPackV1.body?.data?.version, '1.0.0');
+      assert.equal(hubDomainPackV1.body?.data?.baseDomainId, 'basketball');
+
+      const hubDomainPackLegacyPath = await requestJson(
+        baseUrl,
+        `/domains/${encodeURIComponent(domainPackItemId)}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(hubDomainPackLegacyPath.status, 200);
+      assert.equal(hubDomainPackLegacyPath.body?.data?.id, domainPackItemId);
+
+      const createDomainPackV2 = await requestJson(
+        baseUrl,
+        `/admin/catalog/domain_pack/${domainPackItemId}/revisions`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            version: '1.1.0',
+            status: 'draft',
+            channel: 'internal',
+            manifest: {
+              kind: 'domain',
+              id: domainPackItemId,
+              name: 'Hub Domain Pack v2',
+              description: 'Domain pack v2 with additional resources.',
+              baseDomainId: 'basketball',
+              minAppVersion: '1.0.0',
+              recommendedAgents: ['momentum_agent', 'overview'],
+              recommendedSkills: ['select_plan_template_v2'],
+              recommendedTemplates: [templateItemId],
+              skillHttpAllowedHosts: ['api.example.com', 'api.backup.local:8443'],
+            },
+          }),
+        },
+      );
+      assert.equal(createDomainPackV2.status, 201);
+
+      const validateDomainPackV2 = await requestJson(baseUrl, '/admin/validate/run', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          runType: 'catalog_validate',
+          domain: 'domain_pack',
+          scope: {
+            itemId: domainPackItemId,
+            version: '1.1.0',
+          },
+        }),
+      });
+      assert.equal(validateDomainPackV2.status, 202);
+      assert.equal(validateDomainPackV2.body?.data?.status, 'succeeded');
+
+      const publishDomainPackV2 = await requestJson(
+        baseUrl,
+        `/admin/catalog/domain_pack/${domainPackItemId}/publish`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            version: '1.1.0',
+            channel: 'stable',
+            validationRunId: validateDomainPackV2.body?.data?.id,
+          }),
+        },
+      );
+      assert.equal(publishDomainPackV2.status, 200);
+
+      const hubDomainPackV2 = await requestJson(
+        baseUrl,
+        `/hub/domains/${encodeURIComponent(domainPackItemId)}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(hubDomainPackV2.status, 200);
+      assert.equal(hubDomainPackV2.body?.data?.version, '1.1.0');
+      assert.ok(Array.isArray(hubDomainPackV2.body?.data?.recommendedAgents));
+      assert.ok(hubDomainPackV2.body?.data?.recommendedAgents.includes('overview'));
+
+      const rollbackDomainPack = await requestJson(
+        baseUrl,
+        `/admin/catalog/domain_pack/${domainPackItemId}/rollback`,
+        {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            targetVersion: '1.0.0',
+            channel: 'stable',
+          }),
+        },
+      );
+      assert.equal(rollbackDomainPack.status, 200);
+
+      const hubDomainPackRollback = await requestJson(
+        baseUrl,
+        `/hub/domains/${encodeURIComponent(domainPackItemId)}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      assert.equal(hubDomainPackRollback.status, 200);
+      assert.equal(hubDomainPackRollback.body?.data?.version, '1.0.0');
     }, counters);
 
     await runCase('phase-gate 4: permission matrix (user tokens + DB sessions)', async () => {

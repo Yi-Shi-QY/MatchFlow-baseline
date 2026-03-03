@@ -1,6 +1,12 @@
 const crypto = require('crypto');
 const db = require('../../db');
 const {
+  DEEPSEEK_API_BASE_URL,
+  DEEPSEEK_API_KEY,
+  DEEPSEEK_MODEL,
+  DEEPSEEK_TIMEOUT_MS,
+} = require('../config');
+const {
   normalizeDomain,
   getDomainConfig,
   listCatalogEntries,
@@ -24,6 +30,8 @@ const ALLOWED_STATUSES = new Set(['draft', 'validated', 'published', 'deprecated
 const ALLOWED_RUN_TYPES = new Set(['catalog_validate', 'pre_publish', 'post_publish']);
 const ALLOWED_CONTEXT_MODES = new Set(['independent', 'build_upon', 'all']);
 const SOURCE_ID_PATTERN = /^[a-z0-9_][a-z0-9_-]{1,63}$/;
+const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+const HOST_ALLOWLIST_ENTRY_PATTERN = /^[A-Za-z0-9*.-]+(?::\d{1,5})?$/;
 
 class StudioCatalogError extends Error {
   constructor(message, code = 'STUDIO_CATALOG_ERROR', statusCode = 400, details = null) {
@@ -757,6 +765,150 @@ function validateSkillManifestCompatibility(manifest) {
   return errors;
 }
 
+function validateDomainPackManifestSchema(manifest) {
+  const errors = [];
+  const domainId = normalizeString(manifest?.id);
+
+  if (!domainId) {
+    errors.push('domain_pack.id is required');
+  } else if (!SOURCE_ID_PATTERN.test(domainId)) {
+    errors.push('domain_pack.id must match pattern [a-z0-9_][a-z0-9_-]{1,63}');
+  }
+
+  if (manifest?.kind !== undefined && manifest.kind !== 'domain') {
+    errors.push('domain_pack.kind must be "domain" when provided');
+  }
+  if (!normalizeString(manifest?.name)) {
+    errors.push('domain_pack.name is required');
+  }
+  if (!normalizeString(manifest?.description)) {
+    errors.push('domain_pack.description is required');
+  }
+
+  const baseDomainId = normalizeString(manifest?.baseDomainId);
+  if (manifest?.baseDomainId !== undefined && !baseDomainId) {
+    errors.push('domain_pack.baseDomainId must be a non-empty string when provided');
+  } else if (baseDomainId && !SOURCE_ID_PATTERN.test(baseDomainId)) {
+    errors.push('domain_pack.baseDomainId must match pattern [a-z0-9_][a-z0-9_-]{1,63}');
+  }
+
+  const minAppVersion = normalizeString(manifest?.minAppVersion);
+  if (manifest?.minAppVersion !== undefined && !minAppVersion) {
+    errors.push('domain_pack.minAppVersion must be a non-empty string when provided');
+  } else if (minAppVersion && !SEMVER_PATTERN.test(minAppVersion)) {
+    errors.push('domain_pack.minAppVersion must follow semver x.y.z');
+  }
+
+  if (manifest?.updatedAt !== undefined && !normalizeString(manifest.updatedAt)) {
+    errors.push('domain_pack.updatedAt must be a non-empty string when provided');
+  }
+
+  const idArrayFields = ['recommendedAgents', 'recommendedSkills', 'recommendedTemplates'];
+  idArrayFields.forEach((fieldName) => {
+    const value = manifest?.[fieldName];
+    if (value === undefined) return;
+    if (!Array.isArray(value)) {
+      errors.push(`domain_pack.${fieldName} must be an array when provided`);
+      return;
+    }
+    value.forEach((entry, index) => {
+      const normalized = normalizeString(entry);
+      if (!normalized) {
+        errors.push(`domain_pack.${fieldName}[${index}] must be a non-empty string`);
+        return;
+      }
+      if (!SOURCE_ID_PATTERN.test(normalized)) {
+        errors.push(
+          `domain_pack.${fieldName}[${index}] must match pattern [a-z0-9_][a-z0-9_-]{1,63}`,
+        );
+      }
+    });
+  });
+
+  if (manifest?.skillHttpAllowedHosts !== undefined) {
+    if (!Array.isArray(manifest.skillHttpAllowedHosts)) {
+      errors.push('domain_pack.skillHttpAllowedHosts must be an array when provided');
+    } else {
+      manifest.skillHttpAllowedHosts.forEach((entry, index) => {
+        const host = normalizeString(entry);
+        if (!host) {
+          errors.push(`domain_pack.skillHttpAllowedHosts[${index}] must be a non-empty string`);
+        }
+      });
+    }
+  }
+
+  if (manifest?.hub !== undefined) {
+    if (!isPlainObject(manifest.hub)) {
+      errors.push('domain_pack.hub must be an object when provided');
+    } else {
+      if (manifest.hub.baseUrl !== undefined && !normalizeString(manifest.hub.baseUrl)) {
+        errors.push('domain_pack.hub.baseUrl must be a non-empty string when provided');
+      }
+      if (manifest.hub.apiKey !== undefined && !normalizeString(manifest.hub.apiKey)) {
+        errors.push('domain_pack.hub.apiKey must be a non-empty string when provided');
+      }
+      if (
+        manifest.hub.autoInstall !== undefined
+        && typeof manifest.hub.autoInstall !== 'boolean'
+      ) {
+        errors.push('domain_pack.hub.autoInstall must be boolean when provided');
+      }
+    }
+  }
+
+  return errors;
+}
+
+function validateDomainPackManifestDependencies(manifest) {
+  const errors = [];
+  const hosts = normalizeStringArray(manifest?.skillHttpAllowedHosts);
+
+  hosts.forEach((host) => {
+    if (host.includes('://')) {
+      errors.push(`domain_pack.skillHttpAllowedHosts must be host[:port] without scheme: ${host}`);
+      return;
+    }
+    if (!HOST_ALLOWLIST_ENTRY_PATTERN.test(host)) {
+      errors.push(`domain_pack.skillHttpAllowedHosts contains invalid host entry: ${host}`);
+    }
+  });
+
+  return errors;
+}
+
+function validateDomainPackManifestCompatibility(manifest) {
+  const errors = [];
+  const domainId = normalizeString(manifest?.id);
+  const baseDomainId = normalizeString(manifest?.baseDomainId);
+
+  if (domainId && baseDomainId && domainId === baseDomainId) {
+    errors.push('domain_pack.baseDomainId cannot be the same as domain_pack.id');
+  }
+
+  const checkDuplicates = (fieldName) => {
+    const values = normalizeStringArray(manifest?.[fieldName]);
+    const seen = new Set();
+    values.forEach((value) => {
+      if (seen.has(value)) {
+        errors.push(`domain_pack.${fieldName} duplicated: ${value}`);
+      } else {
+        seen.add(value);
+      }
+    });
+  };
+  checkDuplicates('recommendedAgents');
+  checkDuplicates('recommendedSkills');
+  checkDuplicates('recommendedTemplates');
+  checkDuplicates('skillHttpAllowedHosts');
+
+  if (normalizeStringArray(manifest?.skillHttpAllowedHosts).length > 100) {
+    errors.push('domain_pack.skillHttpAllowedHosts cannot exceed 100 entries');
+  }
+
+  return errors;
+}
+
 function supportsStrictDomainValidation(domain) {
   return (
     domain === 'datasource'
@@ -764,6 +916,7 @@ function supportsStrictDomainValidation(domain) {
     || domain === 'animation_template'
     || domain === 'agent'
     || domain === 'skill'
+    || domain === 'domain_pack'
   );
 }
 
@@ -868,6 +1021,26 @@ function buildDomainValidationChecks(domain, manifest) {
     ];
   }
 
+  if (domain === 'domain_pack') {
+    return [
+      buildValidationCheck(
+        'schema',
+        validateDomainPackManifestSchema(manifest),
+        'Domain pack schema check passed',
+      ),
+      buildValidationCheck(
+        'dependency',
+        validateDomainPackManifestDependencies(manifest),
+        'Domain pack dependency check passed',
+      ),
+      buildValidationCheck(
+        'compatibility',
+        validateDomainPackManifestCompatibility(manifest),
+        'Domain pack compatibility check passed',
+      ),
+    ];
+  }
+
   return [
     {
       name: 'schema',
@@ -899,6 +1072,225 @@ function buildValidationSummary(checks, status, metadata = {}) {
     checks,
     ...metadata,
   };
+}
+
+function normalizeTemperature(input, fallback = 0.2) {
+  const parsed = Number.parseFloat(input);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(0, Math.min(parsed, 2));
+}
+
+function normalizeMaxTokens(input, fallback = 900, max = 4096) {
+  const parsed = Number.parseInt(input, 10);
+  if (!Number.isFinite(parsed)) {
+    return Math.min(Math.max(fallback, 1), max);
+  }
+  return Math.min(Math.max(parsed, 1), max);
+}
+
+function normalizeObject(input, label) {
+  if (input === undefined || input === null) {
+    return {};
+  }
+  if (!isPlainObject(input)) {
+    throw new StudioCatalogError(`${label} must be an object`, 'CATALOG_PREVIEW_INPUT_INVALID', 400);
+  }
+  return input;
+}
+
+function normalizeJsonObjectText(input, label) {
+  const normalized = normalizeString(input);
+  if (!normalized) {
+    return {};
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(normalized);
+  } catch (error) {
+    throw new StudioCatalogError(`${label} must be valid JSON`, 'CATALOG_PREVIEW_INPUT_INVALID', 400, {
+      field: label,
+      reason: error.message,
+    });
+  }
+  if (!isPlainObject(parsed)) {
+    throw new StudioCatalogError(`${label} must be a JSON object`, 'CATALOG_PREVIEW_INPUT_INVALID', 400, {
+      field: label,
+    });
+  }
+  return parsed;
+}
+
+function normalizeDeepSeekMessageContent(content) {
+  if (typeof content === 'string') {
+    return content.trim();
+  }
+  if (!Array.isArray(content)) {
+    return '';
+  }
+  return content
+    .map((item) => {
+      if (typeof item === 'string') {
+        return item;
+      }
+      if (!isPlainObject(item)) {
+        return '';
+      }
+      if (typeof item.text === 'string') {
+        return item.text;
+      }
+      if (typeof item.content === 'string') {
+        return item.content;
+      }
+      return '';
+    })
+    .filter((item) => item.trim().length > 0)
+    .join('\n')
+    .trim();
+}
+
+function buildDeepSeekEndpoint() {
+  const baseUrl = normalizeString(DEEPSEEK_API_BASE_URL) || 'https://api.deepseek.com';
+  const normalizedBase = baseUrl.replace(/\/+$/g, '');
+  return `${normalizedBase}/chat/completions`;
+}
+
+async function callDeepSeekChatCompletion({
+  model,
+  messages,
+  temperature,
+  maxTokens,
+}) {
+  if (!normalizeString(DEEPSEEK_API_KEY)) {
+    throw new StudioCatalogError(
+      'DeepSeek API key not configured',
+      'MODEL_PROVIDER_NOT_CONFIGURED',
+      503,
+    );
+  }
+
+  if (typeof fetch !== 'function') {
+    throw new StudioCatalogError(
+      'Runtime fetch API is unavailable',
+      'MODEL_PROVIDER_RUNTIME_UNSUPPORTED',
+      500,
+    );
+  }
+
+  const endpoint = buildDeepSeekEndpoint();
+  const resolvedModel = normalizeString(model) || DEEPSEEK_MODEL || 'deepseek-chat';
+  const resolvedTemperature = normalizeTemperature(temperature, 0.2);
+  const resolvedMaxTokens = normalizeMaxTokens(maxTokens, 900, 4096);
+  const timeoutMs = normalizeMaxTokens(DEEPSEEK_TIMEOUT_MS, 20000, 120000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: resolvedModel,
+        messages,
+        temperature: resolvedTemperature,
+        max_tokens: resolvedMaxTokens,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+
+    const rawText = await response.text();
+    let payload;
+    try {
+      payload = JSON.parse(rawText);
+    } catch {
+      payload = null;
+    }
+
+    if (!response.ok) {
+      const providerCode = normalizeString(payload?.error?.code);
+      const providerMessage = normalizeString(payload?.error?.message);
+      throw new StudioCatalogError(
+        providerMessage || `DeepSeek request failed with status ${response.status}`,
+        'MODEL_PROVIDER_REQUEST_FAILED',
+        response.status === 429 ? 503 : 502,
+        {
+          status: response.status,
+          providerCode: providerCode || null,
+        },
+      );
+    }
+
+    const choices = Array.isArray(payload?.choices) ? payload.choices : [];
+    const firstChoice = choices[0] || {};
+    const content = normalizeDeepSeekMessageContent(firstChoice?.message?.content);
+    if (!content) {
+      throw new StudioCatalogError(
+        'DeepSeek returned empty content',
+        'MODEL_PROVIDER_EMPTY_RESPONSE',
+        502,
+      );
+    }
+
+    return {
+      model: normalizeString(payload?.model) || resolvedModel,
+      content,
+      finishReason: normalizeString(firstChoice?.finish_reason) || 'unknown',
+      usage: isPlainObject(payload?.usage) ? payload.usage : {},
+      id: normalizeString(payload?.id) || null,
+    };
+  } catch (error) {
+    if (error instanceof StudioCatalogError) {
+      throw error;
+    }
+    if (error?.name === 'AbortError') {
+      throw new StudioCatalogError(
+        `DeepSeek request timed out after ${timeoutMs}ms`,
+        'MODEL_PROVIDER_TIMEOUT',
+        504,
+      );
+    }
+    throw new StudioCatalogError(
+      `DeepSeek request failed: ${error.message || 'unknown error'}`,
+      'MODEL_PROVIDER_REQUEST_FAILED',
+      502,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function resolveAgentPromptByLocale(manifest, localeInput) {
+  const rolePrompt = isPlainObject(manifest?.rolePrompt) ? manifest.rolePrompt : {};
+  const locale = normalizeString(localeInput).toLowerCase();
+  const promptEn = normalizeString(rolePrompt.en);
+  const promptZh = normalizeString(rolePrompt.zh);
+
+  if (locale.startsWith('zh')) {
+    return {
+      locale: promptZh ? 'zh' : 'en',
+      prompt: promptZh || promptEn,
+    };
+  }
+
+  return {
+    locale: promptEn ? 'en' : 'zh',
+    prompt: promptEn || promptZh,
+  };
+}
+
+function getSkillRequiredKeys(manifest) {
+  const declaration = isPlainObject(manifest?.declaration) ? manifest.declaration : {};
+  const parameters = isPlainObject(declaration?.parameters) ? declaration.parameters : {};
+  const requiredRaw = Array.isArray(parameters.required) ? parameters.required : [];
+  return requiredRaw
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
 }
 
 function toCapabilitySuffix(value) {
@@ -1523,6 +1915,177 @@ async function previewDatasourceDataForAdmin({ body }) {
     }
     throw error;
   }
+}
+
+async function previewAgentModelRunForAdmin({ body }) {
+  const manifest = ensureManifest(body?.manifest);
+  const checks = buildDomainValidationChecks('agent', manifest);
+  const failedChecks = getFailedChecks(checks);
+  if (failedChecks.length > 0) {
+    throw new StudioCatalogError(
+      'agent manifest validation failed before model preview',
+      'CATALOG_PREVIEW_MANIFEST_INVALID',
+      400,
+      { checks },
+    );
+  }
+
+  const localeInput = normalizeString(body?.locale) || 'en';
+  const resolvedPrompt = resolveAgentPromptByLocale(manifest, localeInput);
+  if (!resolvedPrompt.prompt) {
+    throw new StudioCatalogError(
+      'agent rolePrompt is required for model preview',
+      'CATALOG_PREVIEW_MANIFEST_INVALID',
+      400,
+      { field: 'rolePrompt' },
+    );
+  }
+
+  const inputText = normalizeString(body?.input || body?.userInput || body?.prompt)
+    || 'Please provide a concise analysis for this test request.';
+  const contextValue = body?.context;
+  const context =
+    typeof contextValue === 'string'
+      ? normalizeJsonObjectText(contextValue, 'context')
+      : normalizeObject(contextValue, 'context');
+  const contextSummary = JSON.stringify(context, null, 2);
+
+  const startTimeMs = Date.now();
+  const completion = await callDeepSeekChatCompletion({
+    model: body?.model,
+    temperature: body?.temperature,
+    maxTokens: body?.maxTokens,
+    messages: [
+      { role: 'system', content: resolvedPrompt.prompt },
+      {
+        role: 'user',
+        content: [
+          'Admin Studio agent test run request',
+          `agentId: ${normalizeString(manifest.id) || 'unknown'}`,
+          `agentName: ${normalizeString(manifest.name) || 'unknown'}`,
+          `requestedLocale: ${localeInput}`,
+          '',
+          'runtimeContext (JSON):',
+          contextSummary || '{}',
+          '',
+          'testInput:',
+          inputText,
+        ].join('\n'),
+      },
+    ],
+  });
+  const latencyMs = Date.now() - startTimeMs;
+
+  return {
+    provider: 'deepseek',
+    model: completion.model,
+    latencyMs,
+    request: {
+      locale: resolvedPrompt.locale,
+      input: inputText,
+      context,
+    },
+    output: {
+      content: completion.content,
+      finishReason: completion.finishReason,
+    },
+    usage: completion.usage,
+    validation: {
+      status: 'passed',
+      checks,
+    },
+  };
+}
+
+async function previewSkillInvocationForAdmin({ body }) {
+  const manifest = ensureManifest(body?.manifest);
+  const checks = buildDomainValidationChecks('skill', manifest);
+  const failedChecks = getFailedChecks(checks);
+  if (failedChecks.length > 0) {
+    throw new StudioCatalogError(
+      'skill manifest validation failed before model preview',
+      'CATALOG_PREVIEW_MANIFEST_INVALID',
+      400,
+      { checks },
+    );
+  }
+
+  const payloadValue = body?.invocationPayload;
+  const invocationPayload =
+    typeof payloadValue === 'string'
+      ? normalizeJsonObjectText(payloadValue, 'invocationPayload')
+      : normalizeObject(payloadValue, 'invocationPayload');
+
+  const requiredKeys = getSkillRequiredKeys(manifest);
+  const payloadKeys = Object.keys(invocationPayload);
+  const missingRequiredKeys = requiredKeys.filter(
+    (requiredKey) => !Object.prototype.hasOwnProperty.call(invocationPayload, requiredKey),
+  );
+  const targetSkill = normalizeString(manifest?.runtime?.targetSkill);
+  const warnings = [];
+  if (!targetSkill) {
+    warnings.push('runtime.targetSkill is empty');
+  }
+  if (missingRequiredKeys.length > 0) {
+    warnings.push(`missing required payload keys: ${missingRequiredKeys.join(', ')}`);
+  }
+
+  const startTimeMs = Date.now();
+  const completion = await callDeepSeekChatCompletion({
+    model: body?.model,
+    temperature: body?.temperature,
+    maxTokens: body?.maxTokens,
+    messages: [
+      {
+        role: 'system',
+        content: [
+          'You are a runtime skill invocation simulator.',
+          'Return concise output with three sections:',
+          '1) call_plan',
+          '2) validation_risks',
+          '3) expected_result_preview',
+          'Keep response short and practical.',
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          'Admin Studio skill invocation preview request',
+          `skillId: ${normalizeString(manifest.id) || 'unknown'}`,
+          `declarationName: ${normalizeString(manifest?.declaration?.name) || 'unknown'}`,
+          `targetSkill: ${targetSkill || 'unknown'}`,
+          `requiredKeys: ${requiredKeys.join(', ') || '(none)'}`,
+          `payloadKeys: ${payloadKeys.join(', ') || '(none)'}`,
+          '',
+          'invocationPayload (JSON):',
+          JSON.stringify(invocationPayload, null, 2),
+        ].join('\n'),
+      },
+    ],
+  });
+  const latencyMs = Date.now() - startTimeMs;
+
+  return {
+    provider: 'deepseek',
+    model: completion.model,
+    latencyMs,
+    invocation: {
+      targetSkill: targetSkill || null,
+      requiredKeys,
+      payloadKeys,
+      missingRequiredKeys,
+      warnings,
+    },
+    output: {
+      content: completion.content,
+      finishReason: completion.finishReason,
+    },
+    usage: completion.usage,
+    validation: {
+      status: 'passed',
+      checks,
+    },
+  };
 }
 
 async function listCatalogEntriesForAdmin({ domain, query, authContext }) {
@@ -2205,6 +2768,8 @@ module.exports = {
   getCatalogEditPermission,
   previewDatasourceStructureForAdmin,
   previewDatasourceDataForAdmin,
+  previewAgentModelRunForAdmin,
+  previewSkillInvocationForAdmin,
   listCatalogEntriesForAdmin,
   createCatalogEntryForAdmin,
   listCatalogRevisionsForAdmin,

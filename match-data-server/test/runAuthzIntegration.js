@@ -120,6 +120,26 @@ async function main() {
     );
 
     await runCase(
+      'matches supports domainId filtering with stable sourceContext.domainId',
+      async () => {
+        const token = createAccessToken(['datasource:use:fundamental']);
+        const football = await requestJson(baseUrl, '/matches?domainId=football', token);
+        assert.equal(football.status, 200);
+        assert.ok(Array.isArray(football.body?.data));
+        assert.ok(football.body.data.length > 0);
+        football.body.data.forEach((match) => {
+          assert.equal(match?.sourceContext?.domainId, 'football');
+        });
+
+        const basketball = await requestJson(baseUrl, '/matches?domainId=basketball', token);
+        assert.equal(basketball.status, 200);
+        assert.ok(Array.isArray(basketball.body?.data));
+        assert.equal(basketball.body.data.length, 0);
+      },
+      counters,
+    );
+
+    await runCase(
       'token without datasource:use:fundamental is rejected from match endpoints',
       async () => {
         const token = createAccessToken(['datasource:use:market']);
@@ -146,6 +166,8 @@ async function main() {
             stats: { possession: { home: 55, away: 45 } },
             odds: { had: { h: 1.9, d: 3.2, a: 4.1 } },
             sourceContext: {
+              domainId: 'basketball',
+              traceId: 'trace-analysis-config',
               selectedSources: {
                 fundamental: true,
                 market: true,
@@ -157,6 +179,8 @@ async function main() {
         const body = await response.json();
 
         assert.equal(response.status, 200);
+        assert.equal(body?.data?.sourceContext?.domainId, 'basketball');
+        assert.equal(body?.data?.sourceContext?.traceId, 'trace-analysis-config');
         assert.equal(body?.data?.sourceContext?.selectedSources?.fundamental, true);
         assert.equal(body?.data?.sourceContext?.selectedSources?.market, false);
         assert.ok(
@@ -203,6 +227,39 @@ async function main() {
           datasourceOnlyToken,
         );
         assert.equal(datasourceOnlyAccess.status, 403);
+      },
+      counters,
+    );
+
+    await runCase(
+      'domain hub access allows fundamental datasource permission and blocks unauthorized users',
+      async () => {
+        const fundamentalToken = createAccessToken(['datasource:use:fundamental']);
+        const unauthorizedToken = createAccessToken([]);
+
+        const hubAccess = await requestJson(
+          baseUrl,
+          '/hub/domains/basketball_plus',
+          fundamentalToken,
+        );
+        assert.equal(hubAccess.status, 200);
+        assert.equal(hubAccess.body?.data?.id, 'basketball_plus');
+        assert.equal(hubAccess.body?.data?.baseDomainId, 'basketball');
+
+        const directAccess = await requestJson(
+          baseUrl,
+          '/domains/basketball_plus',
+          fundamentalToken,
+        );
+        assert.equal(directAccess.status, 200);
+        assert.equal(directAccess.body?.data?.id, 'basketball_plus');
+
+        const denied = await requestJson(
+          baseUrl,
+          '/hub/domains/basketball_plus',
+          unauthorizedToken,
+        );
+        assert.equal(denied.status, 403);
       },
       counters,
     );

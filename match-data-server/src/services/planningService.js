@@ -5,6 +5,10 @@ function hasNonEmptyObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0;
 }
 
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 function parseBooleanEnv(value, fallback) {
   if (value == null || value === '') return fallback;
   const normalized = String(value).trim().toLowerCase();
@@ -242,28 +246,65 @@ async function recommendPlanning(matchData, req) {
 async function buildAnalysisConfigPayload(matchData, req) {
   const planning = await recommendPlanning(matchData, req);
   const signals = deriveSourceSignals(matchData);
+  const inputSourceContext = isPlainObject(matchData?.sourceContext) ? matchData.sourceContext : {};
+  const inputSelectedSources = isPlainObject(inputSourceContext.selectedSources)
+    ? inputSourceContext.selectedSources
+    : {};
+  const inputSelectedSourceIds = normalizeStringArray(inputSourceContext.selectedSourceIds);
+  const inputCapabilities = isPlainObject(inputSourceContext.capabilities)
+    ? inputSourceContext.capabilities
+    : {};
+  const inputPlanning = isPlainObject(inputSourceContext.planning)
+    ? inputSourceContext.planning
+    : {};
+
   const selectedSources = {
+    ...inputSelectedSources,
     fundamental: signals.wantsFundamental,
     market: signals.wantsMarket,
     custom: signals.wantsCustom,
   };
-  const selectedSourceIds = Object.entries(selectedSources)
-    .filter(([, enabled]) => !!enabled)
-    .map(([sourceId]) => sourceId);
+  const selectedSourceIdSet = new Set(inputSelectedSourceIds);
+  ['fundamental', 'market', 'custom'].forEach((sourceId) => {
+    if (selectedSources[sourceId]) {
+      selectedSourceIdSet.add(sourceId);
+    } else {
+      selectedSourceIdSet.delete(sourceId);
+    }
+  });
+  const selectedSourceIds = Array.from(selectedSourceIdSet);
+
+  const capabilities = {
+    ...inputCapabilities,
+    hasFundamental: signals.wantsFundamental,
+    hasStats: signals.hasStats,
+    hasOdds: signals.hasOdds,
+    hasCustom: signals.hasCustom,
+  };
+  const domainId =
+    typeof inputSourceContext.domainId === 'string' && inputSourceContext.domainId.trim().length > 0
+      ? inputSourceContext.domainId.trim()
+      : typeof matchData?.domainId === 'string' && matchData.domainId.trim().length > 0
+        ? matchData.domainId.trim()
+        : undefined;
+  const mergedPlanning = {
+    ...inputPlanning,
+    ...planning,
+  };
+  const sourceContext = {
+    ...inputSourceContext,
+    selectedSources,
+    selectedSourceIds,
+    capabilities,
+    matchStatus: signals.status,
+    planning: mergedPlanning,
+  };
+  if (domainId) {
+    sourceContext.domainId = domainId;
+  }
 
   return {
-    sourceContext: {
-      selectedSources,
-      selectedSourceIds,
-      capabilities: {
-        hasFundamental: signals.wantsFundamental,
-        hasStats: signals.hasStats,
-        hasOdds: signals.hasOdds,
-        hasCustom: signals.hasCustom,
-      },
-      matchStatus: signals.status,
-      planning,
-    },
+    sourceContext,
   };
 }
 

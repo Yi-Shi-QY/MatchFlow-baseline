@@ -173,6 +173,77 @@ paths:
         - admin:*
         - release:rollback
 
+  /admin/catalog/agent/preview/model:
+    post:
+      tags: [Catalog]
+      summary: Run live model preview for an agent manifest
+      operationId: previewAgentModelRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentModelPreviewRequest'
+      responses:
+        '200':
+          description: Agent model preview result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentModelPreviewResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - catalog:agent:edit
+
+  /admin/catalog/skill/preview/model:
+    post:
+      tags: [Catalog]
+      summary: Run live invocation preview for a skill manifest
+      operationId: previewSkillModelInvocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillModelPreviewRequest'
+      responses:
+        '200':
+          description: Skill invocation preview result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillModelPreviewResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+        - catalog:skill:edit
+
+  /admin/audit-logs:
+    get:
+      tags: [Audit]
+      summary: Query governance audit logs
+      operationId: listAuditLogs
+      parameters:
+        - $ref: '#/components/parameters/TenantIdQuery'
+        - $ref: '#/components/parameters/AuditActionQuery'
+        - $ref: '#/components/parameters/AuditActorUserIdQuery'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/OffsetQuery'
+      responses:
+        '200':
+          description: Audit log records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditLogListResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      x-permissions:
+        - admin:*
+
   /admin/validate/run:
     post:
       tags: [Validation]
@@ -366,6 +437,19 @@ components:
       required: false
       schema:
         $ref: '#/components/schemas/CatalogDomain'
+    AuditActionQuery:
+      name: action
+      in: query
+      required: false
+      schema:
+        type: string
+    AuditActorUserIdQuery:
+      name: actorUserId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
 
   responses:
     ErrorResponse:
@@ -384,6 +468,7 @@ components:
         - animation_template
         - agent
         - skill
+        - domain_pack
     ReleaseChannel:
       type: string
       enum: [internal, beta, stable]
@@ -576,6 +661,170 @@ components:
         createdAt:
           type: string
           format: date-time
+    CatalogPreviewValidationCheck:
+      type: object
+      required: [name, status, message]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        message:
+          type: string
+        details:
+          nullable: true
+    AgentModelPreviewResult:
+      type: object
+      required:
+        - provider
+        - model
+        - latencyMs
+        - request
+        - output
+        - usage
+        - validation
+      properties:
+        provider:
+          type: string
+          example: deepseek
+        model:
+          type: string
+        latencyMs:
+          type: integer
+        request:
+          type: object
+          required: [locale, input, context]
+          properties:
+            locale:
+              type: string
+            input:
+              type: string
+            context:
+              type: object
+              additionalProperties: true
+        output:
+          type: object
+          required: [content, finishReason]
+          properties:
+            content:
+              type: string
+            finishReason:
+              type: string
+        usage:
+          type: object
+          additionalProperties: true
+        validation:
+          type: object
+          required: [status, checks]
+          properties:
+            status:
+              type: string
+            checks:
+              type: array
+              items:
+                $ref: '#/components/schemas/CatalogPreviewValidationCheck'
+    SkillModelPreviewResult:
+      type: object
+      required:
+        - provider
+        - model
+        - latencyMs
+        - invocation
+        - output
+        - usage
+        - validation
+      properties:
+        provider:
+          type: string
+          example: deepseek
+        model:
+          type: string
+        latencyMs:
+          type: integer
+        invocation:
+          type: object
+          required: [targetSkill, requiredKeys, payloadKeys, missingRequiredKeys, warnings]
+          properties:
+            targetSkill:
+              type: string
+              nullable: true
+            requiredKeys:
+              type: array
+              items:
+                type: string
+            payloadKeys:
+              type: array
+              items:
+                type: string
+            missingRequiredKeys:
+              type: array
+              items:
+                type: string
+            warnings:
+              type: array
+              items:
+                type: string
+        output:
+          type: object
+          required: [content, finishReason]
+          properties:
+            content:
+              type: string
+            finishReason:
+              type: string
+        usage:
+          type: object
+          additionalProperties: true
+        validation:
+          type: object
+          required: [status, checks]
+          properties:
+            status:
+              type: string
+            checks:
+              type: array
+              items:
+                $ref: '#/components/schemas/CatalogPreviewValidationCheck'
+    AdminAuditLog:
+      type: object
+      required:
+        - id
+        - action
+        - metadata
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorUserId:
+          type: string
+          format: uuid
+          nullable: true
+        actorUsername:
+          type: string
+          nullable: true
+        tenantId:
+          type: string
+          format: uuid
+          nullable: true
+        action:
+          type: string
+        targetType:
+          type: string
+          nullable: true
+        targetId:
+          type: string
+          nullable: true
+        beforeState:
+          nullable: true
+        afterState:
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
 
     CatalogCreateRequest:
       type: object
@@ -656,6 +905,43 @@ components:
         scope:
           type: object
           additionalProperties: true
+    AgentModelPreviewRequest:
+      type: object
+      required: [manifest]
+      properties:
+        manifest:
+          type: object
+          additionalProperties: true
+        locale:
+          type: string
+          example: en
+        input:
+          type: string
+        context:
+          type: object
+          additionalProperties: true
+        model:
+          type: string
+        temperature:
+          type: number
+        maxTokens:
+          type: integer
+    SkillModelPreviewRequest:
+      type: object
+      required: [manifest]
+      properties:
+        manifest:
+          type: object
+          additionalProperties: true
+        invocationPayload:
+          type: object
+          additionalProperties: true
+        model:
+          type: string
+        temperature:
+          type: number
+        maxTokens:
+          type: integer
     ReleasePublishRequest:
       type: object
       required: [domain, itemId, version, channel]
@@ -735,6 +1021,18 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/ValidationRun'
+    AgentModelPreviewResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AgentModelPreviewResult'
+    SkillModelPreviewResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/SkillModelPreviewResult'
     ReleaseRecordResponse:
       type: object
       required: [data]
@@ -749,5 +1047,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ReleaseRecord'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    AdminAuditLogListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAuditLog'
         pagination:
           $ref: '#/components/schemas/Pagination'

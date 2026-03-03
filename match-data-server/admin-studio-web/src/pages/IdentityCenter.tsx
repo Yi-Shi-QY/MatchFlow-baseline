@@ -20,7 +20,6 @@ import {
   setAdminRolePermissions,
   setAdminUserRoles,
 } from '@/src/services/adminStudio';
-import { getSettings, saveSettings } from '@/src/services/settings';
 
 type FeedbackTone = 'success' | 'error' | 'info';
 
@@ -52,10 +51,6 @@ function formatTime(value: string | null | undefined) {
 
 export default function IdentityCenter() {
   const navigate = useNavigate();
-  const settings = getSettings();
-
-  const [serverUrlInput, setServerUrlInput] = useState(settings.matchDataServerUrl);
-  const [apiKeyInput, setApiKeyInput] = useState(settings.matchDataApiKey);
   const [feedback, setFeedback] = useState<{ tone: FeedbackTone; message: string } | null>(null);
 
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -121,14 +116,6 @@ export default function IdentityCenter() {
   useEffect(() => {
     void refreshAll();
   }, []);
-
-  function handleSaveConnection() {
-    saveSettings({
-      matchDataServerUrl: serverUrlInput.trim(),
-      matchDataApiKey: apiKeyInput.trim(),
-    });
-    setFeedback({ tone: 'success', message: 'Connection settings saved.' });
-  }
 
   async function handleCreateUser() {
     if (!newUserUsername.trim() || !newUserEmail.trim() || !newUserPassword.trim()) {
@@ -242,9 +229,9 @@ export default function IdentityCenter() {
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/')}>
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/app/dashboard')}>
                 <ShieldCheck className="h-4 w-4" />
-                Catalog Studio
+                Workspace
               </Button>
               <h1 className="text-base font-bold tracking-tight text-white">Identity Center</h1>
             </div>
@@ -252,11 +239,6 @@ export default function IdentityCenter() {
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Refresh
             </Button>
-          </div>
-          <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_auto]">
-            <input type="text" value={serverUrlInput} onChange={(event) => setServerUrlInput(event.target.value)} placeholder="Server URL" className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none" />
-            <input type="password" value={apiKeyInput} onChange={(event) => setApiKeyInput(event.target.value)} placeholder="API Key" className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none" />
-            <Button variant="secondary" size="sm" onClick={handleSaveConnection}>Save Connection</Button>
           </div>
         </div>
       </header>

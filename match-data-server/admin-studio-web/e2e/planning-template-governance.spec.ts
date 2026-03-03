@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { loginWithApiKey, openLegacyStudio } from './support/auth';
 
 function buildPlanningTemplateManifest(itemId: string) {
   return {
@@ -36,13 +37,8 @@ test.describe('Admin Studio planning_template governance lifecycle', () => {
     const apiKey = process.env.E2E_MATCH_DATA_API_KEY || process.env.API_KEY || 'your-secret-key';
     const manifestText = JSON.stringify(buildPlanningTemplateManifest(itemId), null, 2);
 
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Admin Studio 2.0' })).toBeVisible();
-
-    await page.getByTestId('settings-server-url').fill(serverUrl);
-    await page.getByTestId('settings-api-key').fill(apiKey);
-    await page.getByTestId('settings-save-connection').click();
-    await expect(page.getByTestId('feedback-banner')).toContainText('Admin Studio connection settings saved.');
+    await loginWithApiKey(page, { serverUrl, apiKey });
+    await openLegacyStudio(page);
 
     await page.getByTestId('domain-select').click();
     await page.getByTestId('domain-select-option-planning_template').click();

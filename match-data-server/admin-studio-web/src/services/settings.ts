@@ -23,6 +23,7 @@ export interface AdminStudioSettings {
 }
 
 const SETTINGS_KEY = 'matchflow_admin_studio_settings';
+export const ADMIN_STUDIO_SETTINGS_UPDATED_EVENT = 'admin-studio-settings-updated';
 
 const DEFAULT_SETTINGS: AdminStudioSettings = {
   matchDataServerUrl: String(import.meta.env.VITE_MATCH_DATA_SERVER_URL || '').trim(),
@@ -105,6 +106,9 @@ export function saveSettings(next: Partial<AdminStudioSettings>) {
       ...next,
     });
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(ADMIN_STUDIO_SETTINGS_UPDATED_EVENT));
+    }
   } catch (error) {
     console.error('Failed to save admin studio settings', error);
   }

@@ -148,6 +148,13 @@ function canAccessHubManifest(authContext, kind, extensionId) {
     return hasAnyScopedPermission(authContext, 'template:use:');
   }
 
+  if (kind === 'domain') {
+    return (
+      hasPermission(authContext, 'datasource:use:fundamental')
+      || hasAnyScopedPermission(authContext, 'template:use:')
+    );
+  }
+
   return false;
 }
 
