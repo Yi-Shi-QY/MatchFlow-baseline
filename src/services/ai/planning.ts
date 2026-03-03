@@ -1,10 +1,9 @@
 import type { HubEndpointHint } from "../extensions/types";
 import type { AppSettings } from "../settings";
-import type { TemplateType as FootballTemplateType } from "../domains/planning/football";
 import { getPlanningStrategyForAnalysis } from "../domains/planning/registry";
 import type { PlanningRouteDecision } from "../domains/planning/types";
 
-export type TemplateType = FootballTemplateType;
+export type TemplateType = string;
 export type { PlanningRouteDecision };
 
 function parsePlanningRequirements(planningContext: any) {

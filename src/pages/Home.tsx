@@ -11,6 +11,9 @@ import { Match } from '@/src/data/matches';
 import { Button } from '@/src/components/ui/Button';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
+import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
+import { getBuiltinDomainLocalTestCases } from '@/src/services/domains/builtinModules';
+import { getAnalysisOutcomeDistribution } from '@/src/services/analysisSummary';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -24,6 +27,7 @@ export default function Home() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { activeAnalyses, clearActiveAnalysis } = useAnalysis();
   const prevAnalysesRef = React.useRef<Record<string, boolean>>({});
+  const summaryBarPalette = ['#10b981', '#71717a', '#3b82f6', '#f59e0b', '#ef4444'];
 
   const loadMatches = async () => {
     setIsLoadingMatches(true);
@@ -31,7 +35,9 @@ export default function Home() {
     if (matches && matches.length > 0) {
       setLiveMatches(matches);
     } else {
-      setLiveMatches(MOCK_MATCHES);
+      const activeDomainId = getActiveAnalysisDomain().id;
+      const domainCases = getBuiltinDomainLocalTestCases(activeDomainId);
+      setLiveMatches(domainCases.length > 0 ? domainCases : MOCK_MATCHES);
     }
     setIsLoadingMatches(false);
   };
@@ -263,7 +269,11 @@ export default function Home() {
             {filteredAndSortedHistory.length > 0 ? (
               <div className="flex overflow-x-auto gap-3 pb-4 snap-x snap-mandatory hide-scrollbar px-1">
                 {filteredAndSortedHistory.map((record: any) => {
-                  const winProb = record.analysis?.winProbability;
+                  const outcomeDistribution = getAnalysisOutcomeDistribution(record.analysis, {
+                    homeLabel: record.match.homeTeam.name,
+                    drawLabel: t('match.draw'),
+                    awayLabel: record.match.awayTeam.name,
+                  });
                   const isActive = record.isActive;
                   const parsedStream = record.parsedStream;
                   
@@ -331,17 +341,25 @@ export default function Home() {
                                 {statusText}
                               </span>
                             </div>
-                          ) : winProb ? (
+                          ) : outcomeDistribution.length > 0 ? (
                             <div className="flex flex-col gap-1">
                               <div className="flex w-full h-1.5 rounded-full overflow-hidden">
-                                <div style={{ width: `${winProb.home}%` }} className="bg-emerald-500" />
-                                <div style={{ width: `${winProb.draw}%` }} className="bg-zinc-500" />
-                                <div style={{ width: `${winProb.away}%` }} className="bg-red-500" />
+                                {outcomeDistribution.map((entry, index) => (
+                                  <div
+                                    key={entry.id}
+                                    style={{
+                                      width: `${entry.value}%`,
+                                      backgroundColor: entry.color || summaryBarPalette[index % summaryBarPalette.length],
+                                    }}
+                                  />
+                                ))}
                               </div>
                               <div className="flex justify-between text-[8px] text-zinc-500 font-mono px-1">
-                                <span>{t('match.home_win')} {winProb.home}%</span>
-                                <span>{t('match.draw')} {winProb.draw}%</span>
-                                <span>{t('match.away_win')} {winProb.away}%</span>
+                                {outcomeDistribution.slice(0, 3).map((entry) => (
+                                  <span key={`label_${entry.id}`} className="truncate max-w-[56px]">
+                                    {entry.label} {entry.value}%
+                                  </span>
+                                ))}
                               </div>
                             </div>
                           ) : (

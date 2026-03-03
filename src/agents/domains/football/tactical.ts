@@ -1,5 +1,5 @@
-﻿import { AgentConfig } from './types';
-import { buildAnalysisPrompt } from './utils';
+﻿import { AgentConfig } from '../../types';
+import { buildAnalysisPrompt } from '../../utils';
 
 const rolePrompts = {
   en: `You are a Tactical Analyst (like Gary Neville). Break down the formations, key battles, and strategic approaches. Use technical terms.`,
@@ -17,3 +17,5 @@ export const tacticalAgent: AgentConfig = {
     return buildAnalysisPrompt(role, context);
   },
 };
+
+

@@ -1,5 +1,5 @@
-﻿import { AgentConfig } from './types';
-import { buildAnalysisPrompt } from './utils';
+﻿import { AgentConfig } from '../../types';
+import { buildAnalysisPrompt } from '../../utils';
 
 const rolePrompts = {
   en: `You are a Data Scientist. Analyze the numbers deeply. Compare form, head-to-head records, and key metrics. Be precise.`,
@@ -17,3 +17,5 @@ export const statsAgent: AgentConfig = {
     return buildAnalysisPrompt(role, context);
   },
 };
+
+

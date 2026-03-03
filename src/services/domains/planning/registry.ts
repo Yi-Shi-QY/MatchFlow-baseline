@@ -1,13 +1,26 @@
 import type { AppSettings } from "@/src/services/settings";
-import { footballPlanningStrategy } from "./football";
+import { DEFAULT_DOMAIN_ID, listBuiltinPlanningStrategies } from "../builtinModules";
 import type { DomainPlanningStrategy } from "./types";
 import { getInstalledDomainPackManifest } from "../packStore";
 
-const DOMAIN_PLANNING_STRATEGIES: Record<string, DomainPlanningStrategy> = {
-  [footballPlanningStrategy.domainId]: footballPlanningStrategy,
-};
+const DOMAIN_PLANNING_STRATEGIES: Record<string, DomainPlanningStrategy> =
+  listBuiltinPlanningStrategies().reduce(
+    (acc, strategy) => {
+      acc[strategy.domainId] = strategy;
+      return acc;
+    },
+    {} as Record<string, DomainPlanningStrategy>,
+  );
 
-const DEFAULT_DOMAIN_ID = footballPlanningStrategy.domainId;
+function getDefaultPlanningStrategy(): DomainPlanningStrategy {
+  const explicitDefault = DOMAIN_PLANNING_STRATEGIES[DEFAULT_DOMAIN_ID];
+  if (explicitDefault) return explicitDefault;
+
+  const fallback = Object.values(DOMAIN_PLANNING_STRATEGIES)[0];
+  if (fallback) return fallback;
+
+  throw new Error("No domain planning strategy registered.");
+}
 
 export function listPlanningStrategies(): DomainPlanningStrategy[] {
   return Object.values(DOMAIN_PLANNING_STRATEGIES);
@@ -56,5 +69,5 @@ export function getPlanningStrategyForAnalysis(
   settings: Pick<AppSettings, "activeDomainId">,
 ): DomainPlanningStrategy {
   const domainId = resolvePlanningDomainId(analysisData, settings);
-  return getPlanningStrategyByDomainId(domainId) || footballPlanningStrategy;
+  return getPlanningStrategyByDomainId(domainId) || getDefaultPlanningStrategy();
 }

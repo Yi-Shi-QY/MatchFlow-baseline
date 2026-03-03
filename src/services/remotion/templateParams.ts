@@ -1,6 +1,15 @@
 import { TEMPLATES } from './templates';
 
-export type AnimationType = 'stats' | 'tactical' | 'odds' | 'comparison' | 'none' | string;
+export type AnimationType =
+  | 'stats'
+  | 'tactical'
+  | 'odds'
+  | 'comparison'
+  | 'basketball_metrics'
+  | 'basketball_matchup'
+  | 'basketball_lines'
+  | 'none'
+  | string;
 
 export interface TemplateDeclaration {
   animationType: string;
@@ -30,6 +39,9 @@ const ANIMATION_TO_TEMPLATE: Record<string, string> = {
   comparison: 'stats-comparison',
   tactical: 'tactical-board',
   odds: 'odds-card',
+  basketball_metrics: 'basketball-metrics-radar',
+  basketball_matchup: 'basketball-matchup-board',
+  basketball_lines: 'basketball-lines-card',
 };
 
 export function getTemplateIdByAnimationType(animationType?: string): string {
@@ -97,6 +109,41 @@ export function validateAndNormalizeAnimationPayload(
     if (!Number.isFinite(payload.params?.had?.d)) errors.push('had.d must be a finite number');
     if (!Number.isFinite(payload.params?.had?.a)) errors.push('had.a must be a finite number');
   }
+  if (payload.templateId === 'basketball-metrics-radar') {
+    if (!Number.isFinite(payload.params?.pace?.home)) errors.push('pace.home must be a finite number');
+    if (!Number.isFinite(payload.params?.pace?.away)) errors.push('pace.away must be a finite number');
+    if (!Number.isFinite(payload.params?.offensiveRating?.home)) {
+      errors.push('offensiveRating.home must be a finite number');
+    }
+    if (!Number.isFinite(payload.params?.offensiveRating?.away)) {
+      errors.push('offensiveRating.away must be a finite number');
+    }
+    if (!Number.isFinite(payload.params?.defensiveRating?.home)) {
+      errors.push('defensiveRating.home must be a finite number');
+    }
+    if (!Number.isFinite(payload.params?.defensiveRating?.away)) {
+      errors.push('defensiveRating.away must be a finite number');
+    }
+  }
+  if (payload.templateId === 'basketball-lines-card') {
+    if (!Number.isFinite(payload.params?.moneyline?.home)) {
+      errors.push('moneyline.home must be a finite number');
+    }
+    if (!Number.isFinite(payload.params?.moneyline?.away)) {
+      errors.push('moneyline.away must be a finite number');
+    }
+    if (!Number.isFinite(payload.params?.spread?.line)) {
+      errors.push('spread.line must be a finite number');
+    }
+    if (!Number.isFinite(payload.params?.total?.points)) {
+      errors.push('total.points must be a finite number');
+    }
+  }
+  if (payload.templateId === 'basketball-matchup-board') {
+    if (typeof payload.params?.focusArea !== 'string' || !payload.params.focusArea.trim()) {
+      errors.push('focusArea must be a non-empty string');
+    }
+  }
 
   return {
     isValid: errors.length === 0,
@@ -137,6 +184,20 @@ export function buildFallbackAnimationPayload(
       awayLabel: awayName || 'AWAY',
     };
   }
+  if (declaration.templateId === 'basketball-metrics-radar') {
+    fallbackParams = {
+      ...template.example,
+      homeLabel: homeName || 'Home',
+      awayLabel: awayName || 'Away',
+    };
+  }
+  if (declaration.templateId === 'basketball-lines-card') {
+    fallbackParams = {
+      ...template.example,
+      homeLabel: homeName || 'Home',
+      awayLabel: awayName || 'Away',
+    };
+  }
 
   const normalizedParams = template.fillParams(fallbackParams);
   return {
@@ -171,6 +232,20 @@ export function buildTemplatePromptSpec(
         ...template.example,
         homeLabel: homeName || 'HOME',
         awayLabel: awayName || 'AWAY',
+      };
+    }
+    if (declaration.templateId === 'basketball-metrics-radar') {
+      return {
+        ...template.example,
+        homeLabel: homeName || 'Home',
+        awayLabel: awayName || 'Away',
+      };
+    }
+    if (declaration.templateId === 'basketball-lines-card') {
+      return {
+        ...template.example,
+        homeLabel: homeName || 'Home',
+        awayLabel: awayName || 'Away',
       };
     }
     return template.example;

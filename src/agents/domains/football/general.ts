@@ -1,5 +1,5 @@
-﻿import { AgentConfig } from './types';
-import { buildAnalysisPrompt } from './utils';
+﻿import { AgentConfig } from '../../types';
+import { buildAnalysisPrompt } from '../../utils';
 
 const rolePrompts = {
   en: `You are a Senior Football Analyst.`,
@@ -17,3 +17,5 @@ export const generalAgent: AgentConfig = {
     return buildAnalysisPrompt(role, context);
   },
 };
+
+

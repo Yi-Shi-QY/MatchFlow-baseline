@@ -1,4 +1,4 @@
-﻿import { PlanTemplate } from '../types';
+﻿import { PlanTemplate } from '../../types';
 
 export const comprehensiveTemplate: PlanTemplate = {
   id: 'comprehensive',
@@ -46,3 +46,5 @@ export const comprehensiveTemplate: PlanTemplate = {
     },
   ],
 };
+
+

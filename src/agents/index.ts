@@ -1,14 +1,24 @@
-import { overviewAgent } from './overview';
-import { statsAgent } from './stats';
-import { tacticalAgent } from './tactical';
-import { predictionAgent } from './prediction';
-import { generalAgent } from './general';
+import {
+  generalAgent,
+  oddsAgent,
+  overviewAgent,
+  predictionAgent,
+  statsAgent,
+  tacticalAgent,
+} from './domains/football';
 import { plannerTemplateAgent } from './planner_template';
 import { plannerAutonomousAgent } from './planner_autonomous';
 import { tagAgent } from './tag';
 import { summaryAgent } from './summary';
-import { oddsAgent } from './odds';
 import { animationAgent } from './animation';
+import {
+  basketballGeneralAgent,
+  basketballMarketAgent,
+  basketballOverviewAgent,
+  basketballPredictionAgent,
+  basketballStatsAgent,
+  basketballTacticalAgent,
+} from './domains/basketball';
 import { AgentConfig } from './types';
 import { buildAnalysisPrompt } from './utils';
 import { getInstalledAgentManifest, listInstalledAgentManifests } from '@/src/services/extensions/store';
@@ -25,7 +35,13 @@ export const BUILTIN_AGENTS: Record<string, AgentConfig> = {
   tag: tagAgent,
   summary: summaryAgent,
   odds: oddsAgent,
-  animation: animationAgent
+  animation: animationAgent,
+  basketball_overview: basketballOverviewAgent,
+  basketball_stats: basketballStatsAgent,
+  basketball_tactical: basketballTacticalAgent,
+  basketball_market: basketballMarketAgent,
+  basketball_prediction: basketballPredictionAgent,
+  basketball_general: basketballGeneralAgent,
 };
 
 export const BUILTIN_AGENT_VERSIONS: Record<string, string> = {
@@ -40,6 +56,12 @@ export const BUILTIN_AGENT_VERSIONS: Record<string, string> = {
   summary: '1.0.0',
   odds: '1.0.0',
   animation: '1.0.0',
+  basketball_overview: '1.0.0',
+  basketball_stats: '1.0.0',
+  basketball_tactical: '1.0.0',
+  basketball_market: '1.0.0',
+  basketball_prediction: '1.0.0',
+  basketball_general: '1.0.0',
 };
 
 function buildManifestAgent(manifest: AgentExtensionManifest): AgentConfig {

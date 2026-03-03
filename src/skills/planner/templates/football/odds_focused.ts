@@ -1,4 +1,4 @@
-﻿import { PlanTemplate } from '../types';
+﻿import { PlanTemplate } from '../../types';
 
 export const oddsFocusedTemplate: PlanTemplate = {
   id: 'odds_focused',
@@ -46,3 +46,5 @@ export const oddsFocusedTemplate: PlanTemplate = {
     },
   ],
 };
+
+

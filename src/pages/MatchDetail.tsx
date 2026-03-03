@@ -32,6 +32,12 @@ import {
   SourceSelection
 } from '@/src/services/dataSources';
 import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
+import {
+  formatConclusionCardValue,
+  getAnalysisConclusionCards,
+  getAnalysisOutcomeDistribution,
+} from '@/src/services/analysisSummary';
+import { findBuiltinDomainLocalTestCaseById } from '@/src/services/domains/builtinModules';
 
 interface ExportSegmentOption {
   includeSegment: boolean;
@@ -87,31 +93,66 @@ export default function MatchDetail() {
   
   const [historyRecord, setHistoryRecord] = useState<HistoryRecord | undefined>(undefined);
   const [savedMatchRecord, setSavedMatchRecord] = useState<SavedMatchRecord | undefined>(undefined);
+  const [resumeMatch, setResumeMatch] = useState<Match | undefined>(undefined);
+  const [isLoadingRecordContext, setIsLoadingRecordContext] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
-      const history = await getHistory();
-      const record = history.find(h => h.matchId === id);
-      setHistoryRecord(record);
+      setIsLoadingRecordContext(true);
+      try {
+        const history = await getHistory();
+        const record = history.find(h => h.matchId === id);
+        setHistoryRecord(record);
 
-      if (!record) {
-        const savedMatches = await getSavedMatches();
-        const saved = savedMatches.find(s => s.id === id);
-        setSavedMatchRecord(saved);
+        if (!record) {
+          const savedMatches = await getSavedMatches();
+          const saved = savedMatches.find(s => s.id === id);
+          setSavedMatchRecord(saved);
+        } else {
+          setSavedMatchRecord(undefined);
+        }
+
+        if (id) {
+          const resumeState = await getResumeState(id);
+          const snapshot = resumeState?.state?.matchSnapshot;
+          if (snapshot && typeof snapshot === 'object') {
+            setResumeMatch(snapshot as Match);
+          } else {
+            setResumeMatch(undefined);
+          }
+        } else {
+          setResumeMatch(undefined);
+        }
+      } finally {
+        setIsLoadingRecordContext(false);
       }
     };
     loadData();
   }, [id]);
 
-  const match = (importedData ? customMatch : null) || (isCustom ? customMatch : (MOCK_MATCHES.find(m => m.id === id) || historyRecord?.match || savedMatchRecord?.match));
+  const routeActiveAnalysis = id ? activeAnalyses[id] : null;
+  const routeBuiltinCase = React.useMemo(() => {
+    if (!id || id === 'custom') return null;
+    return findBuiltinDomainLocalTestCaseById(id);
+  }, [id]);
+  const match =
+    (importedData ? customMatch : null) ||
+    (isCustom
+      ? customMatch
+      : (routeActiveAnalysis?.match ||
+        historyRecord?.match ||
+        savedMatchRecord?.match ||
+        resumeMatch ||
+        routeBuiltinCase ||
+        MOCK_MATCHES.find(m => m.id === id)));
 
-  const activeAnalysis = match ? activeAnalyses[match.id] : null;
+  const activeAnalysis = routeActiveAnalysis || (match ? activeAnalyses[match.id] : null);
 
   // Local state for UI
   const [step, setStep] = useState<'selection' | 'analyzing' | 'result'>('selection');
   const [includeAnimations, setIncludeAnimations] = useState(true);
   const [selectedSources, setSelectedSources] = useState<Partial<SourceSelection>>({});
-  const activeDomain = React.useMemo(() => getActiveAnalysisDomain(), []);
+  const activeDomain = getActiveAnalysisDomain();
   const domainSourceCatalog = activeDomain.dataSources;
 
   const [editableData, setEditableData] = useState("");
@@ -272,12 +313,31 @@ export default function MatchDetail() {
         if (summary.prediction) {
           writeParagraph(`${t('match.pdf_prediction')}: ${normalizeTextForPdf(summary.prediction)}`, { fontSize: 10.5 });
         }
-        if (summary.winProbability) {
-          writeParagraph(t('match.pdf_win_probability', {
-            home: summary.winProbability.home,
-            draw: summary.winProbability.draw,
-            away: summary.winProbability.away,
-          }), { fontSize: 10 });
+        const isZh = i18n.language.startsWith('zh');
+        const summaryDistribution = getAnalysisOutcomeDistribution(summary, {
+          homeLabel: homeName,
+          drawLabel: t('match.draw'),
+          awayLabel: awayName,
+        });
+        if (summaryDistribution.length > 0) {
+          writeParagraph(
+            `${isZh ? '结果分布' : 'Outcome Distribution'}: ${summaryDistribution
+              .map((entry) => `${entry.label} ${entry.value}%`)
+              .join(' / ')}`,
+            { fontSize: 10 },
+          );
+        }
+        const summaryCards = getAnalysisConclusionCards(summary);
+        if (summaryCards.length > 0) {
+          writeParagraph(isZh ? '结论卡片' : 'Conclusion Cards', { fontSize: 10, bold: true, spacingAfter: 1 });
+          summaryCards.forEach((card) => {
+            const details: string[] = [];
+            if (typeof card.confidence === 'number') details.push(`${isZh ? '置信度' : 'Confidence'} ${card.confidence}%`);
+            if (card.trend) details.push(`${isZh ? '趋势' : 'Trend'} ${card.trend}`);
+            if (card.note) details.push(card.note);
+            const detailSuffix = details.length > 0 ? ` (${details.join(' | ')})` : '';
+            writeParagraph(`- ${card.label}: ${formatConclusionCardValue(card)}${detailSuffix}`, { fontSize: 10 });
+          });
         }
         if (summary.expectedGoals) {
           writeParagraph(t('match.pdf_expected_goals', {
@@ -655,7 +715,17 @@ export default function MatchDetail() {
 
   const shareUrl = `${window.location.origin}/share?d=${shareData}`;
 
-  if (!match) return <div className="p-8 text-white text-center">Match not found</div>;
+  if (!match) {
+    if (isLoadingRecordContext) {
+      return (
+        <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center gap-2 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
+          <span>Loading analysis context...</span>
+        </div>
+      );
+    }
+    return <div className="p-8 text-white text-center">Match not found</div>;
+  }
 
   // Determine what to render based on activeAnalysis or history
   let displayData = {
@@ -699,6 +769,24 @@ export default function MatchDetail() {
     isAnalyzing,
     error
   } = displayData;
+
+  let editablePreviewData: any = null;
+  try {
+    editablePreviewData = editableData ? JSON.parse(editableData) : null;
+  } catch (e) {
+    editablePreviewData = null;
+  }
+
+  const summaryHomeLabel = editablePreviewData?.homeTeam?.name || match.homeTeam.name;
+  const summaryAwayLabel = editablePreviewData?.awayTeam?.name || match.awayTeam.name;
+  const summaryDistribution = getAnalysisOutcomeDistribution(analysis, {
+    homeLabel: summaryHomeLabel,
+    drawLabel: t('match.draw'),
+    awayLabel: summaryAwayLabel,
+  });
+  const summaryCards = getAnalysisConclusionCards(analysis);
+  const summaryBarPalette = ['#10b981', '#71717a', '#3b82f6', '#f59e0b', '#ef4444'];
+  const summaryIsZh = i18n.language.startsWith('zh');
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col pb-[calc(5rem+env(safe-area-inset-bottom))]">
@@ -1032,72 +1120,81 @@ export default function MatchDetail() {
                       <img src={match.awayTeam.logo} className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5" />
                     </div>
 
-                    <div className="w-full max-w-[240px] space-y-4">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                          <span className="truncate max-w-[80px]">
-                            {(() => {
-                              try {
-                                const d = JSON.parse(editableData);
-                                return d.homeTeam?.name || match.homeTeam.name;
-                              } catch(e) { return match.homeTeam.name; }
-                            })()}
+                    {summaryDistribution.length > 0 && (
+                      <div className="w-full max-w-[320px] space-y-3">
+                        {summaryDistribution.map((entry, index) => (
+                          <div key={entry.id} className="space-y-1">
+                            <div className="flex justify-between text-[10px] font-mono text-zinc-400">
+                              <span className="truncate max-w-[180px]">{entry.label}</span>
+                              <span>{entry.value}%</span>
+                            </div>
+                            <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${entry.value}%` }}
+                                transition={{ duration: 0.9, delay: index * 0.08 }}
+                                className="h-full"
+                                style={{
+                                  backgroundColor:
+                                    entry.color || summaryBarPalette[index % summaryBarPalette.length],
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {summaryCards.length > 0 && (
+                      <div className="mt-5 w-full grid grid-cols-2 gap-2">
+                        {summaryCards.map((card, index) => (
+                          <div
+                            key={`${card.label}_${index}`}
+                            className="rounded-lg border border-white/10 bg-black/40 p-2.5 space-y-1"
+                          >
+                            <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+                              {card.label}
+                            </div>
+                            <div className="text-sm font-semibold text-zinc-100">
+                              {formatConclusionCardValue(card)}
+                            </div>
+                            {(typeof card.confidence === 'number' || card.trend) && (
+                              <div className="text-[10px] text-zinc-400">
+                                {typeof card.confidence === 'number'
+                                  ? `${summaryIsZh ? '置信度' : 'Confidence'} ${card.confidence}%`
+                                  : ''}
+                                {typeof card.confidence === 'number' && card.trend ? ' | ' : ''}
+                                {card.trend ? `${summaryIsZh ? '趋势' : 'Trend'} ${card.trend}` : ''}
+                              </div>
+                            )}
+                            {card.note && (
+                              <div className="text-[10px] text-zinc-500 line-clamp-2">{card.note}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {analysis.prediction && (
+                      <div className="mt-6 p-4 rounded-xl bg-black/50 border border-white/5 w-full">
+                        <p className="text-xs text-zinc-300 leading-relaxed italic text-center">
+                          "{analysis.prediction}"
+                        </p>
+                      </div>
+                    )}
+
+                    {Array.isArray(analysis.keyFactors) && analysis.keyFactors.length > 0 && (
+                      <div className="mt-4 w-full flex flex-wrap items-center justify-center gap-1.5">
+                        {analysis.keyFactors.slice(0, 6).map((factor, index) => (
+                          <span
+                            key={`${factor}_${index}`}
+                            className="text-[10px] px-2 py-1 rounded-full bg-zinc-800 text-zinc-300 border border-white/10"
+                          >
+                            {factor}
                           </span>
-                          <span>{analysis.winProbability.home}%</span>
-                        </div>
-                        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${analysis.winProbability.home}%` }}
-                            transition={{ duration: 1 }}
-                            className="h-full bg-emerald-500"
-                          />
-                        </div>
+                        ))}
                       </div>
-
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                          <span className="truncate max-w-[80px]">{t('match.draw')}</span>
-                          <span>{analysis.winProbability.draw}%</span>
-                        </div>
-                        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${analysis.winProbability.draw}%` }}
-                            transition={{ duration: 1 }}
-                            className="h-full bg-zinc-500"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                          <span className="truncate max-w-[80px]">
-                            {(() => {
-                              try {
-                                const d = JSON.parse(editableData);
-                                return d.awayTeam?.name || match.awayTeam.name;
-                              } catch(e) { return match.awayTeam.name; }
-                            })()}
-                          </span>
-                          <span>{analysis.winProbability.away}%</span>
-                        </div>
-                        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${analysis.winProbability.away}%` }}
-                            transition={{ duration: 1 }}
-                            className="h-full bg-blue-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 p-4 rounded-xl bg-black/50 border border-white/5 w-full">
-                      <p className="text-xs text-zinc-300 leading-relaxed italic text-center">
-                        "{analysis.prediction}"
-                      </p>
-                    </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

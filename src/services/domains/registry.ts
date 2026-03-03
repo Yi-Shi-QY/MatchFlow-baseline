@@ -1,12 +1,26 @@
 import { getSettings } from "@/src/services/settings";
-import { footballDomain } from "./football";
+import { DEFAULT_DOMAIN_ID, listBuiltinDomains } from "./builtinModules";
 import { listInstalledDomainPackManifests } from "./packStore";
 import type { DomainPackManifest } from "./packTypes";
 import type { AnalysisDomain } from "./types";
 
-const BUILTIN_DOMAINS: Record<string, AnalysisDomain> = {
-  [footballDomain.id]: footballDomain,
-};
+const BUILTIN_DOMAINS: Record<string, AnalysisDomain> = listBuiltinDomains().reduce(
+  (acc, domain) => {
+    acc[domain.id] = domain;
+    return acc;
+  },
+  {} as Record<string, AnalysisDomain>,
+);
+
+function getDefaultBuiltinDomain(): AnalysisDomain {
+  const explicitDefault = BUILTIN_DOMAINS[DEFAULT_DOMAIN_ID];
+  if (explicitDefault) return explicitDefault;
+
+  const fallback = Object.values(BUILTIN_DOMAINS)[0];
+  if (fallback) return fallback;
+
+  throw new Error("No built-in analysis domains registered.");
+}
 
 function getBuiltinDomainById(id: string): AnalysisDomain | null {
   return BUILTIN_DOMAINS[id] || null;
@@ -32,7 +46,7 @@ function mergeDomainResources(
 }
 
 function buildPackDomainAlias(pack: DomainPackManifest): AnalysisDomain | null {
-  const baseId = pack.baseDomainId || "football";
+  const baseId = pack.baseDomainId || getDefaultBuiltinDomain().id;
   const base = getBuiltinDomainById(baseId);
   if (!base) return null;
 
@@ -73,5 +87,5 @@ export function getAnalysisDomainById(
 
 export function getActiveAnalysisDomain(): AnalysisDomain {
   const configuredDomainId = getSettings().activeDomainId;
-  return getAnalysisDomainById(configuredDomainId) || footballDomain;
+  return getAnalysisDomainById(configuredDomainId) || getDefaultBuiltinDomain();
 }

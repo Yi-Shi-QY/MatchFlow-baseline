@@ -57,6 +57,9 @@ export default function Settings() {
   const [isAiConfigCollapsed, setIsAiConfigCollapsed] = useState(true);
   const [isDataSourceCollapsed, setIsDataSourceCollapsed] = useState(true);
   const [notificationPermission, setNotificationPermission] = useState<string>('unknown');
+  const [settingsMode, setSettingsMode] = useState<'basic' | 'advanced'>('basic');
+  const [healthCheckStatus, setHealthCheckStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [healthCheckMessage, setHealthCheckMessage] = useState('');
 
   useEffect(() => {
     const checkPermission = async () => {
@@ -86,6 +89,12 @@ export default function Settings() {
 
     return withProtocol.replace(/\/+$/, '');
   };
+
+  const isZh = settings.language === 'zh';
+  const modeLabels = {
+    basic: isZh ? '基础模式' : 'Basic Mode',
+    advanced: isZh ? '高级模式' : 'Advanced Mode',
+  } as const;
 
   const handleSave = () => {
     const normalizedMatchDataServerUrl = normalizeServerBaseUrl(settings.matchDataServerUrl);
@@ -120,7 +129,7 @@ export default function Settings() {
     setAiTestMessage('');
   };
 
-  const handleTestAiConnection = async () => {
+  const handleTestAiConnection = async (): Promise<boolean> => {
     setAiTestStatus('testing');
     setAiTestMessage('');
     try {
@@ -158,18 +167,20 @@ export default function Settings() {
 
       setAiTestStatus('success');
       setAiTestMessage(t('settings.ai_connected'));
+      return true;
     } catch (e: any) {
       setAiTestStatus('error');
       setAiTestMessage(e.message || t('settings.ai_failed'));
+      return false;
     }
   };
 
-  const handleTestDataConnection = async () => {
+  const handleTestDataConnection = async (): Promise<boolean> => {
     const normalizedBaseUrl = normalizeServerBaseUrl(settings.matchDataServerUrl);
     if (!normalizedBaseUrl) {
       setDataTestStatus('error');
       setDataTestMessage(t('settings.enter_server_url'));
-      return;
+      return false;
     }
     
     setDataTestStatus('testing');
@@ -199,12 +210,13 @@ export default function Settings() {
       }));
       setDataTestStatus('success');
       setDataTestMessage(t('settings.data_connected'));
+      return true;
     } catch (e: any) {
       const message = String(e?.message || '');
       setDataTestStatus('error');
       if (message === 'UNAUTHORIZED') {
         setDataTestMessage(t('settings.data_failed_unauthorized'));
-        return;
+        return false;
       }
 
       const isNetworkError =
@@ -212,11 +224,30 @@ export default function Settings() {
 
       if (isNetworkError) {
         setDataTestMessage(t('settings.data_failed_network_hint'));
-        return;
+        return false;
       }
 
       setDataTestMessage(message || t('settings.data_failed'));
+      return false;
     }
+  };
+
+  const handleRunHealthCheck = async () => {
+    setHealthCheckStatus('running');
+    setHealthCheckMessage('');
+
+    const [aiOk, dataOk] = await Promise.all([
+      handleTestAiConnection(),
+      handleTestDataConnection(),
+    ]);
+
+    const allOk = aiOk && dataOk;
+    setHealthCheckStatus(allOk ? 'success' : 'error');
+    setHealthCheckMessage(
+      allOk
+        ? (isZh ? '健康检查通过：AI 与数据源连接正常。' : 'Health check passed: AI and data source are both healthy.')
+        : (isZh ? '健康检查未通过：请查看 AI 与数据源状态。' : 'Health check failed: please review AI/Data source status.'),
+    );
   };
 
   const handleSyncRecommendedExtensions = async () => {
@@ -345,6 +376,7 @@ export default function Settings() {
   const showOpenAICompatibleInput = settings.agentModelMode === 'global'
     ? settings.provider === 'openai_compatible'
     : configProviders.has('openai_compatible') || settings.provider === 'openai_compatible';
+  const showAdvanced = settingsMode === 'advanced';
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col pb-[calc(5rem+env(safe-area-inset-bottom))]">
@@ -368,7 +400,176 @@ export default function Settings() {
         </Button>
       </header>
 
-      <main className="flex-1 p-4 max-w-md mx-auto w-full space-y-6">
+      <main className="flex-1 p-4 max-w-md mx-auto w-full space-y-4">
+        <Card className="border-zinc-800 bg-zinc-950">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white">
+                {isZh ? '系统状态' : 'System Status'}
+              </h3>
+              <Button
+                onClick={handleRunHealthCheck}
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-[11px]"
+                disabled={healthCheckStatus === 'running'}
+              >
+                <RefreshCw className={`w-3 h-3 ${healthCheckStatus === 'running' ? 'animate-spin' : ''}`} />
+                {isZh ? '健康检查' : 'Health Check'}
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-white/10 bg-zinc-900 p-2.5">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 flex items-center gap-1">
+                  <Cpu className="w-3 h-3" /> AI
+                </div>
+                <div className={`text-xs mt-1 font-medium ${
+                  aiTestStatus === 'success'
+                    ? 'text-emerald-400'
+                    : aiTestStatus === 'error'
+                      ? 'text-red-400'
+                      : aiTestStatus === 'testing'
+                        ? 'text-emerald-300'
+                        : 'text-zinc-300'
+                }`}>
+                  {aiTestStatus === 'success'
+                    ? (isZh ? '已连接' : 'Connected')
+                    : aiTestStatus === 'error'
+                      ? (isZh ? '连接失败' : 'Failed')
+                      : aiTestStatus === 'testing'
+                        ? (isZh ? '检测中' : 'Checking')
+                        : (isZh ? '未检测' : 'Untested')}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-zinc-900 p-2.5">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 flex items-center gap-1">
+                  <Database className="w-3 h-3" /> Data
+                </div>
+                <div className={`text-xs mt-1 font-medium ${
+                  dataTestStatus === 'success'
+                    ? 'text-emerald-400'
+                    : dataTestStatus === 'error'
+                      ? 'text-red-400'
+                      : dataTestStatus === 'testing'
+                        ? 'text-emerald-300'
+                        : 'text-zinc-300'
+                }`}>
+                  {dataTestStatus === 'success'
+                    ? (isZh ? '可用' : 'Available')
+                    : dataTestStatus === 'error'
+                      ? (isZh ? '不可用' : 'Unavailable')
+                      : dataTestStatus === 'testing'
+                        ? (isZh ? '检测中' : 'Checking')
+                        : (isZh ? '未检测' : 'Untested')}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-zinc-900 p-2.5">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 flex items-center gap-1">
+                  <Package className="w-3 h-3" /> Extensions
+                </div>
+                <div className={`text-xs mt-1 font-medium ${
+                  extensionSyncStatus === 'success'
+                    ? 'text-emerald-400'
+                    : extensionSyncStatus === 'error'
+                      ? 'text-red-400'
+                      : extensionSyncStatus === 'syncing'
+                        ? 'text-emerald-300'
+                        : 'text-zinc-300'
+                }`}>
+                  {extensionSyncStatus === 'success'
+                    ? (isZh ? '已同步' : 'Synced')
+                    : extensionSyncStatus === 'error'
+                      ? (isZh ? '同步失败' : 'Sync Failed')
+                      : extensionSyncStatus === 'syncing'
+                        ? (isZh ? '同步中' : 'Syncing')
+                        : (isZh ? '未同步' : 'Idle')}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-zinc-900 p-2.5">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 flex items-center gap-1">
+                  <Bell className="w-3 h-3" /> Background
+                </div>
+                <div className={`text-xs mt-1 font-medium ${
+                  settings.enableBackgroundMode && notificationPermission === 'granted'
+                    ? 'text-emerald-400'
+                    : settings.enableBackgroundMode && notificationPermission !== 'granted'
+                      ? 'text-amber-400'
+                      : 'text-zinc-300'
+                }`}>
+                  {settings.enableBackgroundMode
+                    ? notificationPermission === 'granted'
+                      ? (isZh ? '可用' : 'Enabled')
+                      : (isZh ? '待授权' : 'Needs Permission')
+                    : (isZh ? '关闭' : 'Off')}
+                </div>
+              </div>
+            </div>
+
+            {healthCheckStatus !== 'idle' && (
+              <div className={`text-xs p-2.5 rounded-lg border ${
+                healthCheckStatus === 'success'
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                  : healthCheckStatus === 'error'
+                    ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                    : 'bg-zinc-900 border-zinc-700 text-zinc-300'
+              }`}>
+                {healthCheckMessage || (isZh ? '正在检查系统状态...' : 'Checking system status...')}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-950">
+          <CardContent className="p-4 space-y-4">
+            <div className="space-y-2">
+              <h3 className="text-sm font-bold text-white">
+                {isZh ? '界面模式' : 'View Mode'}
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={() => setSettingsMode('basic')}
+                  variant={settingsMode === 'basic' ? 'default' : 'outline'}
+                  className="h-8 text-xs"
+                >
+                  {modeLabels.basic}
+                </Button>
+                <Button
+                  onClick={() => setSettingsMode('advanced')}
+                  variant={settingsMode === 'advanced' ? 'default' : 'outline'}
+                  className="h-8 text-xs"
+                >
+                  {modeLabels.advanced}
+                </Button>
+              </div>
+              <p className="text-[10px] text-zinc-500">
+                {settingsMode === 'basic'
+                  ? (isZh ? '仅显示高频设置，降低操作复杂度。' : 'Only high-frequency settings are shown.')
+                  : (isZh ? '显示全部设置项，适合联调与高级定制。' : 'All settings are visible for advanced workflows.')}
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-white/10 space-y-2">
+              <label className="text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                {isZh ? '分析领域' : 'Analysis Domain'}
+              </label>
+              <Select
+                value={settings.activeDomainId || 'football'}
+                onChange={(value) => setLocalSettings({ ...settings, activeDomainId: value })}
+                options={domainOptions}
+              />
+              <p className="text-[10px] text-zinc-500">
+                {isZh
+                  ? '基础设置可直接切换领域，决定默认数据源与规划策略。'
+                  : 'Available in basic settings. Controls default data source and planning strategy.'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="p-6 space-y-6">
             
@@ -437,7 +638,7 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  {settings.enableBackgroundMode && (
+                  {settings.enableBackgroundMode && showAdvanced && (
                     <div className="pt-2 space-y-2">
                       <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/30 rounded-lg border border-white/5">
                         <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
@@ -486,34 +687,21 @@ export default function Settings() {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border border-white/5">
-                    <div className="space-y-0.5 pr-4">
-                      <label className="text-xs font-medium text-zinc-200 block">{settings.language === 'zh' ? '自主规划模式' : 'Autonomous Planning Mode'}</label>
-                      <p className="text-[10px] text-zinc-500">{settings.language === 'zh' ? '开启后，AI 将完全自主决定分析结构，不再使用预设模板。' : 'When enabled, AI will completely autonomously decide the analysis structure instead of using predefined templates.'}</p>
+                  {showAdvanced && (
+                    <div className="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border border-white/5">
+                      <div className="space-y-0.5 pr-4">
+                        <label className="text-xs font-medium text-zinc-200 block">{settings.language === 'zh' ? '自主规划模式' : 'Autonomous Planning Mode'}</label>
+                        <p className="text-[10px] text-zinc-500">{settings.language === 'zh' ? '开启后，AI 将完全自主决定分析结构，不再使用预设模板。' : 'When enabled, AI will completely autonomously decide the analysis structure instead of using predefined templates.'}</p>
+                      </div>
+                      <div 
+                        className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors shrink-0 ${settings.enableAutonomousPlanning ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+                        onClick={() => setLocalSettings({...settings, enableAutonomousPlanning: !settings.enableAutonomousPlanning})}
+                      >
+                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${settings.enableAutonomousPlanning ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </div>
                     </div>
-                    <div 
-                      className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors shrink-0 ${settings.enableAutonomousPlanning ? 'bg-emerald-500' : 'bg-zinc-700'}`}
-                      onClick={() => setLocalSettings({...settings, enableAutonomousPlanning: !settings.enableAutonomousPlanning})}
-                    >
-                      <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${settings.enableAutonomousPlanning ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </div>
-                  </div>
+                  )}
 
-                  <div className="space-y-2 p-3 bg-zinc-900 rounded-lg border border-white/5">
-                    <label className="text-xs font-medium text-zinc-200 block">
-                      {settings.language === 'zh' ? '分析领域' : 'Analysis Domain'}
-                    </label>
-                    <p className="text-[10px] text-zinc-500">
-                      {settings.language === 'zh'
-                        ? '决定客户端默认使用的领域数据源和规划策略。'
-                        : 'Controls the default domain data source and planning strategy on client.'}
-                    </p>
-                    <Select
-                      value={settings.activeDomainId || 'football'}
-                      onChange={(value) => setLocalSettings({ ...settings, activeDomainId: value })}
-                      options={domainOptions}
-                    />
-                  </div>
                 </div>
               )}
             </div>
@@ -746,34 +934,36 @@ export default function Settings() {
                     </p>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
-                      {settings.language === 'zh' ? 'Skill HTTP 白名单' : 'Skill HTTP Allowed Hosts'}
-                    </label>
-                    <textarea
-                      value={skillHostAllowlistText}
-                      onChange={(e) => {
-                        const nextText = e.target.value;
-                        setSkillHostAllowlistText(nextText);
-                        setLocalSettings({
-                          ...settings,
-                          skillHttpAllowedHosts: parseHostAllowlist(nextText),
-                        });
-                      }}
-                      placeholder={
-                        settings.language === 'zh'
-                          ? '每行或逗号分隔：api.example.com\n*.trusted.com'
-                          : 'One per line or comma-separated: api.example.com\n*.trusted.com'
-                      }
-                      rows={3}
-                      className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                    />
-                    <p className="text-[10px] text-zinc-500 mt-1">
-                      {settings.language === 'zh'
-                        ? '用于允许 http_json 类型 Skill 访问额外主机。默认已允许 Match Data Server 主机。'
-                        : 'Allows additional hosts for http_json Skill runtime. Match Data Server host is allowed by default.'}
-                    </p>
-                  </div>
+                  {showAdvanced && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                        {settings.language === 'zh' ? 'Skill HTTP 白名单' : 'Skill HTTP Allowed Hosts'}
+                      </label>
+                      <textarea
+                        value={skillHostAllowlistText}
+                        onChange={(e) => {
+                          const nextText = e.target.value;
+                          setSkillHostAllowlistText(nextText);
+                          setLocalSettings({
+                            ...settings,
+                            skillHttpAllowedHosts: parseHostAllowlist(nextText),
+                          });
+                        }}
+                        placeholder={
+                          settings.language === 'zh'
+                            ? '每行或逗号分隔：api.example.com\n*.trusted.com'
+                            : 'One per line or comma-separated: api.example.com\n*.trusted.com'
+                        }
+                        rows={3}
+                        className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                      />
+                      <p className="text-[10px] text-zinc-500 mt-1">
+                        {settings.language === 'zh'
+                          ? '用于允许 http_json 类型 Skill 访问额外主机。默认已允许 Match Data Server 主机。'
+                          : 'Allows additional hosts for http_json Skill runtime. Match Data Server host is allowed by default.'}
+                      </p>
+                    </div>
+                  )}
 
                   <div className="pt-2">
                     <Button 
@@ -807,65 +997,75 @@ export default function Settings() {
               )}
             </div>
 
-            <div className="pt-6 border-t border-white/10 space-y-3">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Package className="w-4 h-4 text-emerald-500" /> {t('settings.extension_hub')}
-                </h3>
-                {extensionSyncStatus === 'success' && (
-                  <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> {t('settings.extension_sync_done')}
-                  </span>
-                )}
-                {extensionSyncStatus === 'error' && (
-                  <span className="text-[10px] text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <XCircle className="w-3 h-3" /> {t('settings.extension_sync_failed')}
-                  </span>
-                )}
-                {extensionSyncStatus === 'syncing' && (
-                  <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Activity className="w-3 h-3 animate-spin" /> {t('settings.extension_syncing')}
-                  </span>
+            {showAdvanced ? (
+              <div className="pt-6 border-t border-white/10 space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Package className="w-4 h-4 text-emerald-500" /> {t('settings.extension_hub')}
+                  </h3>
+                  {extensionSyncStatus === 'success' && (
+                    <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> {t('settings.extension_sync_done')}
+                    </span>
+                  )}
+                  {extensionSyncStatus === 'error' && (
+                    <span className="text-[10px] text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <XCircle className="w-3 h-3" /> {t('settings.extension_sync_failed')}
+                    </span>
+                  )}
+                  {extensionSyncStatus === 'syncing' && (
+                    <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Activity className="w-3 h-3 animate-spin" /> {t('settings.extension_syncing')}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-zinc-500">
+                  {t('settings.extension_hub_desc')}
+                </p>
+                <Button
+                  onClick={handleSyncRecommendedExtensions}
+                  className="w-full gap-2"
+                  disabled={extensionSyncStatus === 'syncing'}
+                >
+                  {extensionSyncStatus === 'syncing' ? (
+                    <Activity className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  {t('settings.sync_recommended_extensions')}
+                </Button>
+                <Button
+                  onClick={() => navigate('/extensions')}
+                  variant="outline"
+                  className="w-full gap-2 border-zinc-700 bg-zinc-900 hover:bg-zinc-800"
+                >
+                  <Package className="w-4 h-4" />
+                  {t('settings.open_extension_hub')}
+                </Button>
+                {extensionSyncStatus !== 'idle' && (
+                  <div className={`flex items-center gap-2 text-xs p-3 rounded-lg border ${
+                    extensionSyncStatus === 'success'
+                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                      : extensionSyncStatus === 'error'
+                        ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                        : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                  }`}>
+                    {extensionSyncStatus === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                    {extensionSyncStatus === 'error' && <XCircle className="w-4 h-4 shrink-0" />}
+                    {extensionSyncStatus === 'syncing' && <Activity className="w-4 h-4 shrink-0 animate-pulse" />}
+                    <span className="break-all">{extensionSyncMessage || t('settings.extension_syncing')}</span>
+                  </div>
                 )}
               </div>
-              <p className="text-[10px] text-zinc-500">
-                {t('settings.extension_hub_desc')}
-              </p>
-              <Button
-                onClick={handleSyncRecommendedExtensions}
-                className="w-full gap-2"
-                disabled={extensionSyncStatus === 'syncing'}
-              >
-                {extensionSyncStatus === 'syncing' ? (
-                  <Activity className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                {t('settings.sync_recommended_extensions')}
-              </Button>
-              <Button
-                onClick={() => navigate('/extensions')}
-                variant="outline"
-                className="w-full gap-2 border-zinc-700 bg-zinc-900 hover:bg-zinc-800"
-              >
-                <Package className="w-4 h-4" />
-                {t('settings.open_extension_hub')}
-              </Button>
-              {extensionSyncStatus !== 'idle' && (
-                <div className={`flex items-center gap-2 text-xs p-3 rounded-lg border ${
-                  extensionSyncStatus === 'success'
-                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                    : extensionSyncStatus === 'error'
-                      ? 'bg-red-500/10 border-red-500/20 text-red-400'
-                      : 'bg-zinc-900 border-zinc-700 text-zinc-400'
-                }`}>
-                  {extensionSyncStatus === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
-                  {extensionSyncStatus === 'error' && <XCircle className="w-4 h-4 shrink-0" />}
-                  {extensionSyncStatus === 'syncing' && <Activity className="w-4 h-4 shrink-0 animate-pulse" />}
-                  <span className="break-all">{extensionSyncMessage || t('settings.extension_syncing')}</span>
+            ) : (
+              <div className="pt-6 border-t border-white/10">
+                <div className="text-[11px] text-zinc-500 bg-zinc-900/60 border border-white/10 rounded-lg p-3">
+                  {isZh
+                    ? '扩展管理、白名单与自动同步已在“高级模式”中收纳。'
+                    : 'Extension management, allowlist, and auto-sync are available in Advanced Mode.'}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
 
 

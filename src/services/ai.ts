@@ -5,6 +5,7 @@ import { buildFallbackPlan, normalizePlan, resolvePlanningRoute } from "./ai/pla
 import { streamAIRequest } from "./ai/streamRequest";
 import { generateValidatedAnimationBlock } from "./ai/animationPipeline";
 import { extractJson } from "../utils/json";
+import type { Match } from "../data/matches";
 import {
   ensureAgentAvailable,
   ensurePlanAgentRequirements,
@@ -19,15 +20,34 @@ export {
   streamFixAnimationParams,
 } from "./ai/animationPipeline";
 
+export interface OutcomeDistributionEntry {
+  label: string;
+  value: number; // Percent-like score; UI will normalize if sum is not 100.
+  color?: string;
+}
+
+export interface ConclusionCardEntry {
+  label: string;
+  value: string | number;
+  unit?: string;
+  confidence?: number; // 0-100
+  trend?: "up" | "down" | "neutral";
+  note?: string;
+}
+
 export interface MatchAnalysis {
   prediction: string;
-  keyFactors: string[];
-  winProbability: {
+  keyFactors?: string[];
+  // Generic summary payload for non-versus domains (stocks, macro, operations, etc.)
+  outcomeDistribution?: OutcomeDistributionEntry[];
+  conclusionCards?: ConclusionCardEntry[];
+  // Backward-compatible fields for versus-match domains.
+  winProbability?: {
     home: number;
     draw: number;
     away: number;
   };
-  expectedGoals: {
+  expectedGoals?: {
     home: number;
     away: number;
   };
@@ -366,6 +386,7 @@ export interface AnalysisResumeState {
   completedSegmentIndices: number[];
   fullAnalysisText: string;
   segmentResults?: SegmentResult[];
+  matchSnapshot?: Match;
 }
 
 export async function* streamAgentThoughts(

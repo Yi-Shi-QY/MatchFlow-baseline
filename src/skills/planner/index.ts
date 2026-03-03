@@ -1,8 +1,16 @@
 import { FunctionDeclaration, Type } from "@google/genai";
-import { basicTemplate } from "./templates/basic";
-import { standardTemplate } from "./templates/standard";
-import { oddsFocusedTemplate } from "./templates/odds_focused";
-import { comprehensiveTemplate } from "./templates/comprehensive";
+import {
+  basicTemplate,
+  comprehensiveTemplate,
+  oddsFocusedTemplate,
+  standardTemplate,
+} from "./templates/football";
+import {
+  basketballBasicTemplate,
+  basketballComprehensiveTemplate,
+  basketballLinesFocusedTemplate,
+  basketballStandardTemplate,
+} from "./templates/basketball";
 import { PlanTemplate } from "./types";
 import { listInstalledTemplateManifests } from "@/src/services/extensions/store";
 import { TemplateExtensionManifest } from "@/src/services/extensions/types";
@@ -12,6 +20,10 @@ const BUILTIN_TEMPLATES: PlanTemplate[] = [
   standardTemplate,
   oddsFocusedTemplate,
   comprehensiveTemplate,
+  basketballBasicTemplate,
+  basketballStandardTemplate,
+  basketballLinesFocusedTemplate,
+  basketballComprehensiveTemplate,
 ];
 
 function manifestToTemplate(manifest: TemplateExtensionManifest): PlanTemplate {

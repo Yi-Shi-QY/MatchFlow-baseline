@@ -1,5 +1,5 @@
-﻿import { AgentConfig } from './types';
-import { buildAnalysisPrompt } from './utils';
+﻿import { AgentConfig } from '../../types';
+import { buildAnalysisPrompt } from '../../utils';
 
 const rolePrompts = {
   en: `You are a Lead Sports Journalist. Write a compelling introduction setting the stage, history, and stakes of the match.`,
@@ -17,3 +17,5 @@ export const overviewAgent: AgentConfig = {
     return buildAnalysisPrompt(role, context);
   },
 };
+
+

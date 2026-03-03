@@ -1,5 +1,5 @@
-﻿import { AgentConfig } from './types';
-import { buildAnalysisPrompt } from './utils';
+﻿import { AgentConfig } from '../../types';
+import { buildAnalysisPrompt } from '../../utils';
 
 const rolePrompts = {
   en: `You are a professional Sports Betting Analyst specializing in Chinese Sports Lottery (Jingcai) odds.
@@ -23,3 +23,5 @@ export const oddsAgent: AgentConfig = {
     return buildAnalysisPrompt(role, context);
   },
 };
+
+

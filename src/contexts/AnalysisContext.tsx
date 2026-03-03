@@ -348,7 +348,11 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         return;
       }
       lastSnapshotAt = now;
-      void saveResumeState(matchId, latestResumeState, currentThoughts);
+      const stateToPersist: AnalysisResumeState = {
+        ...latestResumeState,
+        matchSnapshot: match,
+      };
+      void saveResumeState(matchId, stateToPersist, currentThoughts);
     };
 
     const commitLivePreview = (

@@ -1,5 +1,5 @@
-﻿import { AgentConfig } from './types';
-import { buildAnalysisPrompt } from './utils';
+﻿import { AgentConfig } from '../../types';
+import { buildAnalysisPrompt } from '../../utils';
 
 const rolePrompts = {
   en: `You are a Senior Pundit. Weigh all factors and provide a reasoned prediction. Discuss psychological factors.`,
@@ -17,3 +17,5 @@ export const predictionAgent: AgentConfig = {
     return buildAnalysisPrompt(role, context);
   },
 };
+
+

@@ -1,4 +1,4 @@
-﻿import { PlanTemplate } from '../types';
+﻿import { PlanTemplate } from '../../types';
 
 export const standardTemplate: PlanTemplate = {
   id: 'standard',
@@ -39,3 +39,5 @@ export const standardTemplate: PlanTemplate = {
     },
   ],
 };
+
+
