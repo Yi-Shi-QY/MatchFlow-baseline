@@ -58,6 +58,7 @@
     "remotion": "^4.0.428",
     "sucrase": "^3.35.1",
     "tailwind-merge": "^3.5.0",
+    "three": "^0.179.1",
     "vite": "^6.2.0"
   },
   "devDependencies": {

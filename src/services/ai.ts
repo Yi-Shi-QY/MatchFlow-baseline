@@ -13,6 +13,11 @@ import {
   ensureTemplateRequirements,
 } from "./extensions/runtime";
 import { HubEndpointHint } from "./extensions/types";
+import {
+  buildPlannerRuntimeState,
+  createPlannerRunId,
+  type PlannerRuntimeState,
+} from "./planner/runtime";
 export { testConnection } from "./ai/connection";
 export { getGeminiAI } from "./ai/geminiClient";
 export {
@@ -399,6 +404,7 @@ export interface AnalysisResumeState {
   completedSegmentIndices: number[];
   fullAnalysisText: string;
   segmentResults?: SegmentResult[];
+  runtimeStatus?: PlannerRuntimeState;
   matchSnapshot?: Match;
 }
 
@@ -408,8 +414,10 @@ export async function* streamAgentThoughts(
   resumeState?: AnalysisResumeState,
   onStateUpdate?: (state: AnalysisResumeState) => void,
   abortSignal?: AbortSignal,
+  onRuntimeUpdate?: (state: PlannerRuntimeState) => void,
+  runtimeRunId?: string,
 ) {
-  throwIfAborted(abortSignal);
+  const runId = runtimeRunId || createPlannerRunId("analysis");
   const hubHint = resolvePlanningHubHint(matchData);
   // 1. Planning Phase (Hidden)
   let plan = resumeState?.plan || [];
@@ -417,102 +425,198 @@ export async function* streamAgentThoughts(
   let fullAnalysisText = resumeState?.fullAnalysisText || "";
   let segmentResults: SegmentResult[] = resumeState?.segmentResults || [];
 
-  if (!resumeState) {
-    try {
-      plan = await generateAnalysisPlan(matchData, includeAnimations, abortSignal);
-    } catch (e) {
-      if (isAbortError(e)) {
-        throw e;
-      }
-      plan = [{ title: "Analysis", focus: "General analysis", animationType: "none", agentType: "general" }];
-    }
+  const emitRuntime = (input: {
+    stage: PlannerRuntimeState["stage"];
+    segmentIndex?: number;
+    totalSegments?: number;
+    stageLabel?: string;
+    activeAgentId?: string;
+    activeSegmentTitle?: string;
+    progressPercent?: number;
+    errorMessage?: string;
+  }) => {
+    if (!onRuntimeUpdate) return;
+    onRuntimeUpdate(
+      buildPlannerRuntimeState({
+        runId,
+        stage: input.stage,
+        segmentIndex: input.segmentIndex ?? completedSegmentIndices.length,
+        totalSegments: input.totalSegments ?? plan.length,
+        stageLabel: input.stageLabel,
+        activeAgentId: input.activeAgentId,
+        activeSegmentTitle: input.activeSegmentTitle,
+        progressPercent: input.progressPercent,
+        errorMessage: input.errorMessage,
+      }),
+    );
+  };
+
+  try {
     throwIfAborted(abortSignal);
-    onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText, segmentResults });
-  }
-
-  // 2. Analysis Phase (Iterative)
-  for (let i = 0; i < plan.length; i++) {
-    throwIfAborted(abortSignal);
-    if (completedSegmentIndices.includes(i)) {
-      continue;
-    }
-
-    const segment = plan[i];
-    if (!includeAnimations) {
-      segment.animationType = 'none';
-    }
-
-    const agentId = segment.agentType || 'general';
-    await ensureAgentAvailable(agentId, hubHint);
-    const agent = getAgent(agentId);
-    
-    let filteredContext = "";
-    const deps = agent.contextDependencies || 'all';
-    if (deps === 'none') {
-      filteredContext = "";
-    } else if (deps === 'all') {
-      filteredContext = segmentResults.map(r => `[From ${r.agentId} - ${r.title}]:\n${r.content}`).join('\n\n');
-    } else if (Array.isArray(deps)) {
-      const relevantResults = segmentResults.filter(r => deps.includes(r.agentId));
-      if (relevantResults.length > 0) {
-        filteredContext = relevantResults.map(r => `[From ${r.agentId} - ${r.title}]:\n${r.content}`).join('\n\n');
+    if (!resumeState) {
+      emitRuntime({
+        stage: "planning",
+        stageLabel: "Planning",
+      });
+      try {
+        plan = await generateAnalysisPlan(matchData, includeAnimations, abortSignal);
+      } catch (e) {
+        if (isAbortError(e)) {
+          throw e;
+        }
+        plan = [{ title: "Analysis", focus: "General analysis", animationType: "none", agentType: "general" }];
       }
-    }
-
-    // A. Run Analysis Agent
-    let segmentText = "";
-    const segmentStream = streamAnalysisAgent(matchData, segment, filteredContext, abortSignal);
-    for await (const chunk of segmentStream) {
       throwIfAborted(abortSignal);
-      segmentText += chunk;
-      fullAnalysisText += chunk;
+      onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText, segmentResults });
+    }
+
+    // 2. Analysis Phase (Iterative)
+    for (let i = 0; i < plan.length; i++) {
+      throwIfAborted(abortSignal);
+      if (completedSegmentIndices.includes(i)) {
+        continue;
+      }
+
+      const segment = plan[i];
+      if (!includeAnimations) {
+        segment.animationType = "none";
+      }
+
+      const agentId = segment.agentType || "general";
+      emitRuntime({
+        stage: "segment_running",
+        segmentIndex: completedSegmentIndices.length,
+        totalSegments: plan.length,
+        activeAgentId: agentId,
+        activeSegmentTitle: segment.title,
+        stageLabel: segment.title || "Segment",
+      });
+      await ensureAgentAvailable(agentId, hubHint);
+      const agent = getAgent(agentId);
+      
+      let filteredContext = "";
+      const deps = agent.contextDependencies || "all";
+      if (deps === "none") {
+        filteredContext = "";
+      } else if (deps === "all") {
+        filteredContext = segmentResults.map(r => `[From ${r.agentId} - ${r.title}]:\n${r.content}`).join("\n\n");
+      } else if (Array.isArray(deps)) {
+        const relevantResults = segmentResults.filter(r => deps.includes(r.agentId));
+        if (relevantResults.length > 0) {
+          filteredContext = relevantResults.map(r => `[From ${r.agentId} - ${r.title}]:\n${r.content}`).join("\n\n");
+        }
+      }
+
+      // A. Run Analysis Agent
+      let segmentText = "";
+      const segmentStream = streamAnalysisAgent(matchData, segment, filteredContext, abortSignal);
+      for await (const chunk of segmentStream) {
+        throwIfAborted(abortSignal);
+        segmentText += chunk;
+        fullAnalysisText += chunk;
+        yield chunk;
+      }
+
+      // A.1 Run Animation Agent (if needed)
+      if (includeAnimations && segment.animationType && segment.animationType !== "none") {
+        emitRuntime({
+          stage: "animation_generating",
+          segmentIndex: completedSegmentIndices.length,
+          totalSegments: plan.length,
+          activeAgentId: agentId,
+          activeSegmentTitle: segment.title,
+          stageLabel: segment.title || "Animation",
+        });
+        // Parameter-first flow:
+        // 1) LLM extracts template params JSON
+        // 2) System validates and retries if invalid
+        // 3) System emits normalized <animation> block
+        const animationOutput = await generateValidatedAnimationBlock(
+          matchData,
+          segment,
+          segmentText,
+          abortSignal,
+        );
+        throwIfAborted(abortSignal);
+        yield animationOutput;
+
+        // Append animation output to the text tracking variables
+        segmentText += "\n" + animationOutput;
+        fullAnalysisText += "\n" + animationOutput;
+      }
+
+      // B. Run Tag Generation Agent (After analysis is done for this segment)
+      // We need to extract the pure text content from the segment output to feed the tag agent
+      // Simple regex to strip tags for the prompt
+      emitRuntime({
+        stage: "tag_generating",
+        segmentIndex: completedSegmentIndices.length,
+        totalSegments: plan.length,
+        activeAgentId: agentId,
+        activeSegmentTitle: segment.title,
+        stageLabel: segment.title || "Tag generation",
+      });
+      const cleanText = segmentText.replace(/<[^>]+>/g, " ").trim();
+      const validatedTags = await generateValidatedTagsBlock(cleanText, abortSignal);
+      throwIfAborted(abortSignal);
+      segmentText += validatedTags;
+      yield validatedTags;
+
+      yield "\n";
+      segmentText += "\n";
+      fullAnalysisText += "\n";
+      
+      segmentResults.push({ agentId, title: segment.title, content: segmentText });
+      completedSegmentIndices.push(i);
+      onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText, segmentResults });
+    }
+
+    // 3. Summary Phase
+    throwIfAborted(abortSignal);
+    emitRuntime({
+      stage: "summary_generating",
+      segmentIndex: completedSegmentIndices.length,
+      totalSegments: plan.length,
+      stageLabel: "Summary",
+    });
+    const summaryStream = streamSummaryAgent(matchData, fullAnalysisText, abortSignal);
+    for await (const chunk of summaryStream) {
+      throwIfAborted(abortSignal);
       yield chunk;
     }
 
-    // A.1 Run Animation Agent (if needed)
-    if (includeAnimations && segment.animationType && segment.animationType !== 'none') {
-      // Parameter-first flow:
-      // 1) LLM extracts template params JSON
-      // 2) System validates and retries if invalid
-      // 3) System emits normalized <animation> block
-      const animationOutput = await generateValidatedAnimationBlock(
-        matchData,
-        segment,
-        segmentText,
-        abortSignal,
-      );
-      throwIfAborted(abortSignal);
-      yield animationOutput;
-
-      // Append animation output to the text tracking variables
-      segmentText += "\n" + animationOutput;
-      fullAnalysisText += "\n" + animationOutput;
+    emitRuntime({
+      stage: "finalizing",
+      segmentIndex: completedSegmentIndices.length,
+      totalSegments: plan.length,
+      stageLabel: "Finalizing",
+    });
+    emitRuntime({
+      stage: "completed",
+      segmentIndex: plan.length,
+      totalSegments: plan.length,
+      progressPercent: 100,
+      stageLabel: "Completed",
+    });
+  } catch (error: any) {
+    if (isAbortError(error)) {
+      emitRuntime({
+        stage: "cancelled",
+        segmentIndex: completedSegmentIndices.length,
+        totalSegments: plan.length,
+        stageLabel: "Cancelled",
+      });
+      throw error;
     }
 
-    // B. Run Tag Generation Agent (After analysis is done for this segment)
-    // We need to extract the pure text content from the segment output to feed the tag agent
-    // Simple regex to strip tags for the prompt
-    const cleanText = segmentText.replace(/<[^>]+>/g, ' ').trim();
-    const validatedTags = await generateValidatedTagsBlock(cleanText, abortSignal);
-    throwIfAborted(abortSignal);
-    segmentText += validatedTags;
-    yield validatedTags;
-
-    yield "\n";
-    segmentText += "\n";
-    fullAnalysisText += "\n";
-    
-    segmentResults.push({ agentId, title: segment.title, content: segmentText });
-    completedSegmentIndices.push(i);
-    onStateUpdate?.({ plan, completedSegmentIndices, fullAnalysisText, segmentResults });
-  }
-
-  // 3. Summary Phase
-  throwIfAborted(abortSignal);
-  const summaryStream = streamSummaryAgent(matchData, fullAnalysisText, abortSignal);
-  for await (const chunk of summaryStream) {
-    throwIfAborted(abortSignal);
-    yield chunk;
+    emitRuntime({
+      stage: "failed",
+      segmentIndex: completedSegmentIndices.length,
+      totalSegments: plan.length,
+      stageLabel: "Failed",
+      errorMessage: error?.message || "Analysis failed",
+    });
+    throw error;
   }
 }
 

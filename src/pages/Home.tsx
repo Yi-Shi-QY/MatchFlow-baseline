@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MOCK_MATCHES, Match } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
-import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, X, Loader2, RefreshCw } from 'lucide-react';
+import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, Loader2, RefreshCw } from 'lucide-react';
 import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord, clearResumeState } from '@/src/services/history';
 import { getSavedMatches, deleteSavedMatch, SavedMatchRecord } from '@/src/services/savedMatches';
 import { fetchMatches } from '@/src/services/matchData';
@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
 import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
 import { getBuiltinDomainLocalTestCases } from '@/src/services/domains/builtinModules';
+import { getPlannerStageI18nKey } from '@/src/services/planner/stageI18n';
 import {
   getDomainUiPresenter,
   type HomeCenterDisplay,
@@ -24,6 +25,11 @@ function toneClassForMetric(tone?: 'neutral' | 'positive' | 'negative') {
   if (tone === 'negative') return 'text-red-400';
   return 'text-zinc-400';
 }
+
+type PendingDeleteTarget =
+  | { kind: 'history'; id: string; matchId: string }
+  | { kind: 'saved'; id: string }
+  | null;
 
 export default function Home() {
   const navigate = useNavigate();
@@ -40,6 +46,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [pendingDeleteTarget, setPendingDeleteTarget] = useState<PendingDeleteTarget>(null);
   const { activeAnalyses, clearActiveAnalysis } = useAnalysis();
   const prevAnalysesRef = React.useRef<Record<string, boolean>>({});
   const summaryBarPalette = ['#10b981', '#71717a', '#3b82f6', '#f59e0b', '#ef4444'];
@@ -136,21 +143,32 @@ export default function Home() {
     setShowClearConfirm(false);
   };
 
-  const handleDeleteRecord = async (e: React.MouseEvent, id: string, matchId: string) => {
+  const handleDeleteRecord = (e: React.MouseEvent, id: string, matchId: string) => {
     e.stopPropagation();
-    deleteHistoryRecord(id);
-    clearActiveAnalysis(matchId); // Clear from context
-    await clearResumeState(matchId);
-
-    const data = await getHistory();
-    setHistory(data);
+    setPendingDeleteTarget({ kind: 'history', id, matchId });
   };
 
-  const handleDeleteSavedMatch = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteSavedMatch = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    await deleteSavedMatch(id);
+    setPendingDeleteTarget({ kind: 'saved', id });
+  };
+
+  const handleConfirmDeleteItem = async () => {
+    if (!pendingDeleteTarget) return;
+    if (pendingDeleteTarget.kind === 'history') {
+      deleteHistoryRecord(pendingDeleteTarget.id);
+      clearActiveAnalysis(pendingDeleteTarget.matchId);
+      await clearResumeState(pendingDeleteTarget.matchId);
+      const data = await getHistory();
+      setHistory(data);
+      setPendingDeleteTarget(null);
+      return;
+    }
+
+    await deleteSavedMatch(pendingDeleteTarget.id);
     const data = await getSavedMatches();
     setSavedMatches(data);
+    setPendingDeleteTarget(null);
   };
 
   // Combine history and active analyses
@@ -164,7 +182,10 @@ export default function Home() {
         timestamp: Date.now(), // Keep active ones at the top
         isActive: true,
         analysis: active.analysis,
-        parsedStream: active.parsedStream
+        parsedStream: active.parsedStream,
+        runtimeStatus: active.runtimeStatus,
+        planTotalSegments: active.planTotalSegments,
+        planCompletedSegments: active.planCompletedSegments,
       }));
 
     // Filter out history records that are currently active
@@ -261,24 +282,26 @@ export default function Home() {
                 return (
                   <Card
                     key={record.id}
-                    className="snap-center shrink-0 w-48 cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900 hover:border-zinc-700 group relative overflow-hidden"
+                    className="snap-center shrink-0 w-48 cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900 hover:border-zinc-700 overflow-hidden"
                     onClick={() => navigate(`/match/${record.id}`)}
                   >
-                    <button
-                      onClick={(e) => handleDeleteSavedMatch(e, record.id)}
-                      className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400 hover:bg-black"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-
                     <CardContent className="p-3">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono truncate max-w-[80px]">
+                      <div className="flex items-start justify-between mb-3 gap-2">
+                        <span className="min-w-0 flex-1 text-[9px] text-zinc-500 uppercase tracking-wider font-mono truncate">
                           {record.match.league}
                         </span>
-                        <span className="text-[9px] text-zinc-600 font-mono">
-                          {new Date(record.timestamp).toLocaleDateString()}
-                        </span>
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          <span className="text-[9px] text-zinc-600 font-mono whitespace-nowrap">
+                            {new Date(record.timestamp).toLocaleDateString()}
+                          </span>
+                          <button
+                            onClick={(e) => handleDeleteSavedMatch(e, record.id)}
+                            aria-label={t('home.clear')}
+                            className="h-6 w-6 inline-flex items-center justify-center rounded-full border border-white/10 bg-zinc-800/80 text-zinc-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between mb-3">
@@ -361,40 +384,59 @@ export default function Home() {
                   const parsedStream = record.parsedStream;
 
                   let statusText = isActive ? t('home.analyzing') : t('home.completed');
-                  if (isActive && parsedStream) {
-                    const totalSegments = parsedStream.segments.length;
-                    const completedSegments = parsedStream.segments.filter((s: any) => s.isThoughtComplete).length;
+                  if (isActive) {
+                    const runtimeStatus = record.runtimeStatus;
+                    const stageLabel = runtimeStatus
+                      ? t(getPlannerStageI18nKey(runtimeStatus.stage))
+                      : t('home.analyzing');
+                    const completedFromSegments = parsedStream
+                      ? parsedStream.segments.filter((s: any) => s.isThoughtComplete).length
+                      : 0;
+                    const totalFromSegments = parsedStream ? parsedStream.segments.length : 0;
+                    const totalSegments = Math.max(
+                      Number(record.planTotalSegments) || 0,
+                      Number(runtimeStatus?.totalSegments) || 0,
+                      totalFromSegments,
+                    );
+                    const completedSegments = Math.max(
+                      Number(record.planCompletedSegments) || 0,
+                      Number(runtimeStatus?.segmentIndex) || 0,
+                      completedFromSegments,
+                    );
                     if (totalSegments > 0) {
-                      statusText = `${t('home.analyzing')} (${completedSegments}/${totalSegments})`;
+                      statusText = `${stageLabel} (${Math.min(completedSegments, totalSegments)}/${totalSegments})`;
+                    } else {
+                      statusText = stageLabel;
                     }
                   }
 
                   return (
                     <Card
                       key={record.id}
-                      className={`snap-center shrink-0 w-48 cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900 hover:border-zinc-700 group relative overflow-hidden ${isActive ? 'ring-1 ring-emerald-500/50' : ''}`}
+                      className={`snap-center shrink-0 w-48 cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900 hover:border-zinc-700 overflow-hidden ${isActive ? 'ring-1 ring-emerald-500/50' : ''}`}
                       onClick={() => navigate(`/match/${record.matchId}`)}
                     >
-                      {/* Delete Button (only for non-active) */}
-                      {!isActive && (
-                        <button
-                          onClick={(e) => handleDeleteRecord(e, record.id, record.matchId)}
-                          className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400 hover:bg-black"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-
                       <CardContent className="p-3">
                         {/* Header: League & Time */}
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono truncate max-w-[80px]">
+                        <div className="flex items-start justify-between mb-3 gap-2">
+                          <span className="min-w-0 flex-1 text-[9px] text-zinc-500 uppercase tracking-wider font-mono truncate">
                             {record.match.league}
                           </span>
-                          <span className="text-[9px] text-zinc-600 font-mono flex items-center gap-1">
-                            {isActive && <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />}
-                            {new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                          <div className="shrink-0 flex items-center gap-1.5">
+                            <span className="text-[9px] text-zinc-600 font-mono flex items-center gap-1 whitespace-nowrap">
+                              {isActive && <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />}
+                              {new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            {!isActive && (
+                              <button
+                                onClick={(e) => handleDeleteRecord(e, record.id, record.matchId)}
+                                aria-label={t('home.clear')}
+                                className="h-6 w-6 inline-flex items-center justify-center rounded-full border border-white/10 bg-zinc-800/80 text-zinc-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* Display Pair */}
@@ -581,6 +623,48 @@ export default function Home() {
                   onClick={handleClearHistory}
                 >
                   {t('home.confirm')}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Item Confirmation Modal */}
+      <AnimatePresence>
+        {pendingDeleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setPendingDeleteTarget(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-zinc-900 border border-white/10 rounded-2xl p-6 max-w-xs w-full shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold mb-2 text-white">{t('home.confirm_delete_item_title')}</h3>
+              <p className="text-sm text-zinc-400 mb-6">
+                {t('home.confirm_delete_item_desc')}
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="ghost"
+                  className="flex-1"
+                  onClick={() => setPendingDeleteTarget(null)}
+                >
+                  {t('home.cancel')}
+                </Button>
+                <Button
+                  variant="default"
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white"
+                  onClick={handleConfirmDeleteItem}
+                >
+                  {t('home.confirm_delete_item_action')}
                 </Button>
               </div>
             </motion.div>

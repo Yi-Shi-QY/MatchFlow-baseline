@@ -5,7 +5,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { MOCK_MATCHES, Match } from '@/src/data/matches';
 import { MatchAnalysis } from '@/src/services/ai';
-import { getHistory, getResumeState, HistoryRecord } from '@/src/services/history';
+import {
+  getHistory,
+  getResumeState,
+  HistoryRecord,
+  SavedResumeState,
+} from '@/src/services/history';
 import { getSavedMatches, SavedMatchRecord } from '@/src/services/savedMatches';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
@@ -41,6 +46,9 @@ import {
   getDomainUiPresenter,
   type ResultPresenterContext,
 } from '@/src/services/domains/ui/presenter';
+import type { PlannerRuntimeState, PlannerStage } from '@/src/services/planner/runtime';
+import { getPlannerStageI18nKey } from '@/src/services/planner/stageI18n';
+import { AnalysisPlannerRuntimeBridge } from '@/src/components/planner/AnalysisPlannerRuntimeBridge';
 
 interface ExportSegmentOption {
   includeSegment: boolean;
@@ -169,7 +177,7 @@ export default function MatchDetail() {
 
   const [editableData, setEditableData] = useState("");
   const [showJson, setShowJson] = useState(false);
-  const [savedResumeState, setSavedResumeState] = useState<any | null>(null);
+  const [savedResumeState, setSavedResumeState] = useState<SavedResumeState | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isPreviewExpanded, setIsPreviewExpanded] = useState(true);
@@ -177,6 +185,7 @@ export default function MatchDetail() {
   const [exportSegments, setExportSegments] = useState<Record<string, ExportSegmentOption>>({});
   const [includeSummaryInExport, setIncludeSummaryInExport] = useState(true);
   const [segmentAnimationOverrides, setSegmentAnimationOverrides] = useState<Record<string, any>>({});
+  const [isPlannerCompact, setIsPlannerCompact] = useState(false);
 
   useEffect(() => {
     setSegmentAnimationOverrides({});
@@ -450,6 +459,46 @@ export default function MatchDetail() {
       setSavedResumeState(null);
     }
   }, [match, activeAnalysis, historyRecord]);
+
+  const resumeStatusMeta = React.useMemo(() => {
+    if (!savedResumeState) return null;
+
+    const resumeState = savedResumeState.state;
+    const runtimeStatus = resumeState?.runtimeStatus;
+    const stage: PlannerStage = runtimeStatus?.stage || 'booting';
+    const stageLabel = t(getPlannerStageI18nKey(stage));
+
+    const completedSegments = Array.isArray(resumeState?.completedSegmentIndices)
+      ? resumeState.completedSegmentIndices.length
+      : Math.max(0, runtimeStatus?.segmentIndex || 0);
+    const totalSegments = Array.isArray(resumeState?.plan)
+      ? resumeState.plan.length
+      : Math.max(0, runtimeStatus?.totalSegments || 0);
+    const progressPercent =
+      typeof runtimeStatus?.progressPercent === 'number'
+        ? Math.max(0, Math.min(100, Math.round(runtimeStatus.progressPercent)))
+        : totalSegments > 0
+          ? Math.round((completedSegments / totalSegments) * 100)
+          : 0;
+
+    const locale = i18n.language.startsWith('zh') ? 'zh-CN' : 'en-US';
+    const lastSaved = new Date(savedResumeState.timestamp).toLocaleString(locale, {
+      hour12: false,
+    });
+    const activeSegmentTitle =
+      typeof runtimeStatus?.activeSegmentTitle === 'string' && runtimeStatus.activeSegmentTitle.trim().length > 0
+        ? runtimeStatus.activeSegmentTitle.trim()
+        : null;
+
+    return {
+      stageLabel,
+      completedSegments,
+      totalSegments,
+      progressPercent,
+      lastSaved,
+      activeSegmentTitle,
+    };
+  }, [savedResumeState, t, i18n.language]);
 
   const editableDataRef = React.useRef(editableData);
   useEffect(() => {
@@ -768,7 +817,10 @@ export default function MatchDetail() {
     parsedStream: null as AgentResult | null,
     collapsedSegments: {} as Record<string, boolean>,
     isAnalyzing: false,
-    error: null as string | null
+    error: null as string | null,
+    planTotalSegments: 0,
+    planCompletedSegments: 0,
+    runtimeStatus: null as PlannerRuntimeState | null,
   };
 
   if (activeAnalysis) {
@@ -779,7 +831,10 @@ export default function MatchDetail() {
       parsedStream: activeAnalysis.parsedStream,
       collapsedSegments: activeAnalysis.collapsedSegments,
       isAnalyzing: activeAnalysis.isAnalyzing,
-      error: activeAnalysis.error
+      error: activeAnalysis.error,
+      planTotalSegments: activeAnalysis.planTotalSegments,
+      planCompletedSegments: activeAnalysis.planCompletedSegments,
+      runtimeStatus: activeAnalysis.runtimeStatus,
     };
   } else if (historyRecord) {
     displayData = {
@@ -789,7 +844,10 @@ export default function MatchDetail() {
       parsedStream: historyRecord.parsedStream || null,
       collapsedSegments: {},
       isAnalyzing: false,
-      error: null
+      error: null,
+      planTotalSegments: 0,
+      planCompletedSegments: 0,
+      runtimeStatus: null,
     };
   }
 
@@ -800,8 +858,34 @@ export default function MatchDetail() {
     parsedStream,
     collapsedSegments,
     isAnalyzing,
-    error
+    error,
+    planTotalSegments,
+    planCompletedSegments,
+    runtimeStatus,
   } = displayData;
+
+  useEffect(() => {
+    const shouldTrackPlannerScroll = isAnalyzing && (step === 'analyzing' || step === 'result');
+    if (!shouldTrackPlannerScroll) {
+      setIsPlannerCompact(false);
+      return;
+    }
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const collapseThreshold = 120;
+    const handleScroll = () => {
+      const nextCompact = window.scrollY > collapseThreshold;
+      setIsPlannerCompact((prev) => (prev === nextCompact ? prev : nextCompact));
+    };
+
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [isAnalyzing, step]);
 
   const retryMatchData = React.useMemo(() => {
     try {
@@ -1007,12 +1091,38 @@ export default function MatchDetail() {
 
           <div className="flex flex-col gap-2 mt-4">
             {savedResumeState && (
-              <Button 
-                className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => startAnalysis(true)}
-              >
-                <Activity className="w-4 h-4" /> {t('match.continue_unfinished')}
-              </Button>
+              <>
+                {resumeStatusMeta && (
+                  <Card className="border-blue-500/30 bg-blue-500/5">
+                    <CardContent className="p-3">
+                      <div className="text-[10px] uppercase tracking-wider text-blue-300 mb-2">
+                        {t('match.resume_checkpoint')}
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                        <span className="text-zinc-400">{t('match.resume_stage')}</span>
+                        <span className="text-blue-100">{resumeStatusMeta.stageLabel}</span>
+                        <span className="text-zinc-400">{t('match.resume_progress')}</span>
+                        <span className="text-blue-100">
+                          {resumeStatusMeta.completedSegments}/{resumeStatusMeta.totalSegments} ({resumeStatusMeta.progressPercent}%)
+                        </span>
+                        <span className="text-zinc-400">{t('match.resume_last_saved')}</span>
+                        <span className="text-blue-100">{resumeStatusMeta.lastSaved}</span>
+                      </div>
+                      {resumeStatusMeta.activeSegmentTitle && (
+                        <div className="mt-2 text-[11px] text-zinc-300">
+                          {t('match.resume_segment')}: {resumeStatusMeta.activeSegmentTitle}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+                <Button
+                  className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => startAnalysis(true)}
+                >
+                  <Activity className="w-4 h-4" /> {t('match.continue_unfinished')}
+                </Button>
+              </>
             )}
             <Button 
               className="w-full gap-2"
@@ -1028,10 +1138,16 @@ export default function MatchDetail() {
       {(step === 'analyzing' || step === 'result') && (
         <main id="analysis-content" className="flex-1 flex flex-col gap-4 p-4 max-w-md mx-auto w-full">
           
-          {isAnalyzing && !parsedStream?.segments?.length && (
-            <div className="flex items-center justify-center p-8 text-emerald-500 animate-pulse font-mono text-xs">
-              <Activity className="w-4 h-4 mr-2" /> {t('match.init_engine')}
-            </div>
+          {isAnalyzing && (
+            <AnalysisPlannerRuntimeBridge
+              runtimeStatus={runtimeStatus}
+              planTotalSegments={planTotalSegments}
+              planCompletedSegments={planCompletedSegments}
+              parsedSegmentCount={parsedStream?.segments?.length || 0}
+              language={i18n.language.startsWith('zh') ? 'zh' : 'en'}
+              compact={isPlannerCompact}
+              className="sticky top-[calc(env(safe-area-inset-top)+4.75rem)] z-10 mb-2"
+            />
           )}
 
           {parsedStream?.segments.map((seg, i) => {
