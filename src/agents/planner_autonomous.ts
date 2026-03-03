@@ -1,6 +1,6 @@
 ﻿import { AgentConfig } from './types';
 
-type PlanningDomain = 'football' | 'basketball';
+type PlanningDomain = 'football' | 'basketball' | 'stocks';
 
 function resolvePlanningDomain(matchData: any): PlanningDomain {
   const domainId =
@@ -11,9 +11,15 @@ function resolvePlanningDomain(matchData: any): PlanningDomain {
   if (domainId.includes('basketball')) {
     return 'basketball';
   }
+  if (domainId.includes('stocks') || domainId.includes('stock')) {
+    return 'stocks';
+  }
 
   if (matchData?.basketballMetrics || matchData?.lines || matchData?.gameContext) {
     return 'basketball';
+  }
+  if (matchData?.assetProfile || matchData?.priceAction || matchData?.valuationHealth) {
+    return 'stocks';
   }
 
   return 'football';
@@ -25,6 +31,31 @@ function buildEnglishPrompt(
   matchData: string,
   domain: PlanningDomain,
 ) {
+  if (domain === 'stocks') {
+    return `
+You are a Senior Equity Research Director. Your job is to MANUALLY PLAN the analysis structure for ${home} vs ${away}.
+
+**TASK:**
+The user requested a custom structure. Build a stock-analysis plan without relying on fixed templates.
+
+**RULES:**
+1. **Logical Flow:** Context -> Price Structure -> Valuation/Quality -> Event Risk -> Final Outlook.
+2. **Segment Count:** 3 to 6 segments.
+3. **Agent Types (strict):** Use only "stocks_overview", "stocks_technical", "stocks_fundamental", "stocks_risk", "stocks_prediction", "stocks_general".
+4. **Animation Strategy (strict mapping):**
+   - Price structure comparison segment => "comparison"
+   - All other segments => "none"
+   - Do NOT invent new animation types.
+5. **Context Strategy:** Set "contextMode" to one of "build_upon", "independent", "compare", or "all".
+
+**OUTPUT FORMAT:**
+Return a strict JSON array only (no markdown code block).
+Each object MUST contain: "title", "focus", "animationType", "agentType", "contextMode".
+
+Analysis Data: ${matchData}
+    `;
+  }
+
   if (domain === 'basketball') {
     return `
 You are a Senior Basketball Analysis Director. Your job is to MANUALLY PLAN the analysis structure for ${home} vs ${away}.
@@ -83,6 +114,32 @@ function buildChinesePrompt(
   matchData: string,
   domain: PlanningDomain,
 ) {
+  if (domain === 'stocks') {
+    return `
+你是一位资深股票研究总监。你的任务是为 ${home} vs ${away} 手动规划分析结构。
+
+**任务：**
+用户希望使用不受固定模板限制的结构，请生成股票专项分析计划。
+
+**规则：**
+1. **逻辑流程：** 标的背景 -> 价格结构 -> 估值质量 -> 事件风险 -> 最终判断。
+2. **片段数量：** 3 到 6 段。
+3. **agentType（严格限制）：** 仅可使用 "stocks_overview"、"stocks_technical"、"stocks_fundamental"、"stocks_risk"、"stocks_prediction"、"stocks_general"。
+4. **动画类型映射（严格）：**
+   - 价格结构对比段 -> "comparison"
+   - 其他片段 -> "none"
+   - 不得发明新动画类型。
+5. **上下文策略：** "contextMode" 仅可为 "build_upon"、"independent"、"compare"、"all"。
+
+**输出格式：**
+必须返回严格 JSON 数组，不要使用 Markdown 代码块。
+每个对象必须包含："title", "focus", "animationType", "agentType", "contextMode"。
+**重要：title 与 focus 必须使用中文。**
+
+分析数据: ${matchData}
+    `;
+  }
+
   if (domain === 'basketball') {
     return `
 你是一位资深篮球分析总监。你的任务是为 ${home} vs ${away} 手动规划分析结构。

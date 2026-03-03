@@ -19,6 +19,14 @@ import {
   basketballStatsAgent,
   basketballTacticalAgent,
 } from './domains/basketball';
+import {
+  stocksFundamentalAgent,
+  stocksGeneralAgent,
+  stocksOverviewAgent,
+  stocksPredictionAgent,
+  stocksRiskAgent,
+  stocksTechnicalAgent,
+} from './domains/stocks';
 import { AgentConfig } from './types';
 import { buildAnalysisPrompt } from './utils';
 import { getInstalledAgentManifest, listInstalledAgentManifests } from '@/src/services/extensions/store';
@@ -42,6 +50,12 @@ export const BUILTIN_AGENTS: Record<string, AgentConfig> = {
   basketball_market: basketballMarketAgent,
   basketball_prediction: basketballPredictionAgent,
   basketball_general: basketballGeneralAgent,
+  stocks_overview: stocksOverviewAgent,
+  stocks_technical: stocksTechnicalAgent,
+  stocks_fundamental: stocksFundamentalAgent,
+  stocks_risk: stocksRiskAgent,
+  stocks_prediction: stocksPredictionAgent,
+  stocks_general: stocksGeneralAgent,
 };
 
 export const BUILTIN_AGENT_VERSIONS: Record<string, string> = {
@@ -62,6 +76,12 @@ export const BUILTIN_AGENT_VERSIONS: Record<string, string> = {
   basketball_market: '1.0.0',
   basketball_prediction: '1.0.0',
   basketball_general: '1.0.0',
+  stocks_overview: '1.0.0',
+  stocks_technical: '1.0.0',
+  stocks_fundamental: '1.0.0',
+  stocks_risk: '1.0.0',
+  stocks_prediction: '1.0.0',
+  stocks_general: '1.0.0',
 };
 
 function buildManifestAgent(manifest: AgentExtensionManifest): AgentConfig {

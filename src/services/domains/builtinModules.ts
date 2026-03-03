@@ -1,7 +1,8 @@
-﻿import type { Match } from "@/src/data/matches";
+import type { Match } from "@/src/data/matches";
 import {
   createBasketballBuiltinModule,
   createFootballBuiltinModule,
+  createStocksBuiltinModule,
   footballDomain,
   type BuiltinDomainModule,
 } from "./modules";
@@ -14,6 +15,7 @@ const LOCAL_DOMAIN_CASE_MINIMUM = 3;
 const BUILTIN_DOMAIN_MODULES: BuiltinDomainModule[] = [
   createFootballBuiltinModule(LOCAL_DOMAIN_CASE_MINIMUM),
   createBasketballBuiltinModule(LOCAL_DOMAIN_CASE_MINIMUM),
+  createStocksBuiltinModule(LOCAL_DOMAIN_CASE_MINIMUM),
 ];
 
 export const DEFAULT_DOMAIN_ID = footballDomain.id;

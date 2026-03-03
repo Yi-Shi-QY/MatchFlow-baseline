@@ -1,6 +1,6 @@
 ﻿import { AgentConfig } from './types';
 
-type PlanningDomain = 'football' | 'basketball';
+type PlanningDomain = 'football' | 'basketball' | 'stocks';
 
 function resolvePlanningDomain(matchData: any): PlanningDomain {
   const domainId =
@@ -11,9 +11,15 @@ function resolvePlanningDomain(matchData: any): PlanningDomain {
   if (domainId.includes('basketball')) {
     return 'basketball';
   }
+  if (domainId.includes('stocks') || domainId.includes('stock')) {
+    return 'stocks';
+  }
 
   if (matchData?.basketballMetrics || matchData?.lines || matchData?.gameContext) {
     return 'basketball';
+  }
+  if (matchData?.assetProfile || matchData?.priceAction || matchData?.valuationHealth) {
+    return 'stocks';
   }
 
   return 'football';
@@ -28,6 +34,14 @@ function getDomainTemplateOptions(domain: PlanningDomain): string[] {
       'basketball_comprehensive',
     ];
   }
+  if (domain === 'stocks') {
+    return [
+      'stocks_basic',
+      'stocks_standard',
+      'stocks_risk_focused',
+      'stocks_comprehensive',
+    ];
+  }
 
   return ['basic', 'standard', 'odds_focused', 'comprehensive'];
 }
@@ -39,8 +53,18 @@ function buildEnglishPrompt(
   domain: PlanningDomain,
 ) {
   const templateOptions = getDomainTemplateOptions(domain).join(', ');
-  const domainLabel = domain === 'basketball' ? 'basketball game' : 'football match';
-  const directorRole = domain === 'basketball' ? 'Senior Basketball Analysis Director' : 'Senior Football Analysis Director';
+  const domainLabel =
+    domain === 'basketball'
+      ? 'basketball game'
+      : domain === 'stocks'
+        ? 'stock analysis target'
+        : 'football match';
+  const directorRole =
+    domain === 'basketball'
+      ? 'Senior Basketball Analysis Director'
+      : domain === 'stocks'
+        ? 'Senior Equity Research Director'
+        : 'Senior Football Analysis Director';
 
   return `
 You are a ${directorRole}. Your job is to select the best analysis template for the ${domainLabel} between ${home} and ${away}.
@@ -66,8 +90,18 @@ function buildChinesePrompt(
   domain: PlanningDomain,
 ) {
   const templateOptions = getDomainTemplateOptions(domain).join(', ');
-  const domainLabel = domain === 'basketball' ? '篮球比赛' : '足球比赛';
-  const directorRole = domain === 'basketball' ? '资深篮球分析总监' : '资深足球分析总监';
+  const domainLabel =
+    domain === 'basketball'
+      ? '篮球比赛'
+      : domain === 'stocks'
+        ? '股票分析标的'
+        : '足球比赛';
+  const directorRole =
+    domain === 'basketball'
+      ? '资深篮球分析总监'
+      : domain === 'stocks'
+        ? '资深股票研究总监'
+        : '资深足球分析总监';
 
   return `
 你是一位${directorRole}。你的任务是为 ${home} vs ${away} 这场${domainLabel}选择最合适的分析模板。
