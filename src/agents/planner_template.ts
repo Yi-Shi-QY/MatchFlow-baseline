@@ -120,19 +120,45 @@ function buildChinesePrompt(
   `;
 }
 
+function resolvePlannerTargets(matchData: any, domain: PlanningDomain): { primary: string; secondary: string } {
+  if (domain === 'stocks') {
+    const symbol =
+      matchData?.assetProfile?.symbol ||
+      matchData?.assetProfile?.assetName ||
+      matchData?.analysisTarget?.id ||
+      matchData?.analysisTarget?.label ||
+      matchData?.homeTeam?.name ||
+      'Target Asset';
+    const benchmark =
+      matchData?.assetProfile?.benchmark ||
+      matchData?.analysisTarget?.benchmark ||
+      matchData?.marketRegime?.regime ||
+      matchData?.awayTeam?.name ||
+      'Market Benchmark';
+    return {
+      primary: String(symbol),
+      secondary: String(benchmark),
+    };
+  }
+
+  return {
+    primary: matchData?.homeTeam?.name || matchData?.participants?.home?.name || 'Home Team',
+    secondary: matchData?.awayTeam?.name || matchData?.participants?.away?.name || 'Away Team',
+  };
+}
+
 export const plannerTemplateAgent: AgentConfig = {
   id: 'planner_template',
   name: 'Template Planner',
   description: 'Selects a predefined analysis plan template.',
   skills: ['select_plan_template'],
   systemPrompt: ({ matchData, language, includeAnimations }) => {
-    const homeName = matchData?.homeTeam?.name || matchData?.participants?.home?.name || 'Home Team';
-    const awayName = matchData?.awayTeam?.name || matchData?.participants?.away?.name || 'Away Team';
     const domain = resolvePlanningDomain(matchData);
+    const { primary, secondary } = resolvePlannerTargets(matchData, domain);
     const basePrompt =
       language === 'zh'
-        ? buildChinesePrompt(homeName, awayName, JSON.stringify(matchData), domain)
-        : buildEnglishPrompt(homeName, awayName, JSON.stringify(matchData), domain);
+        ? buildChinesePrompt(primary, secondary, JSON.stringify(matchData), domain)
+        : buildEnglishPrompt(primary, secondary, JSON.stringify(matchData), domain);
 
     return `${basePrompt}\n\n**USER PREFERENCE:**\nInclude Animations: ${includeAnimations ? 'Yes' : 'No'}`;
   },

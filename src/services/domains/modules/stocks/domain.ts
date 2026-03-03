@@ -23,43 +23,27 @@ function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-function copyTeam(target: any, source: any) {
-  if (!target || typeof target !== "object") {
-    return {
-      id: source?.id,
-      name: source?.name,
-      logo: source?.logo,
-      form: Array.isArray(source?.form) ? [...source.form] : [],
-    };
-  }
-
-  if (target.id === undefined) target.id = source?.id;
-  if (target.name === undefined) target.name = source?.name;
-  if (target.logo === undefined) target.logo = source?.logo;
-  if (target.form === undefined) {
-    target.form = Array.isArray(source?.form) ? [...source.form] : [];
-  }
-
-  return target;
-}
-
-function deriveAssetProfile(data: any, match: Match) {
+function deriveAssetProfile(data: any, match: Match, importedData: any) {
   const existing = hasNonEmptyObject(data?.assetProfile)
     ? data.assetProfile
     : hasNonEmptyObject((match as any)?.assetProfile)
       ? (match as any).assetProfile
-      : {};
+      : hasNonEmptyObject(importedData?.assetProfile)
+        ? importedData.assetProfile
+        : {};
 
   const assetSymbol = hasText(existing.symbol)
     ? String(existing.symbol).trim()
     : hasText(match?.homeTeam?.name)
       ? String(match.homeTeam.name).trim().toUpperCase()
       : "ASSET";
+
   const assetName = hasText(existing.assetName)
     ? String(existing.assetName).trim()
-    : hasText(match?.homeTeam?.name)
-      ? String(match.homeTeam.name).trim()
-      : "Target Asset";
+    : hasText(existing.name)
+      ? String(existing.name).trim()
+      : assetSymbol;
+
   const benchmark = hasText(existing.benchmark)
     ? String(existing.benchmark).trim()
     : hasText(match?.awayTeam?.name)
@@ -76,56 +60,56 @@ function deriveAssetProfile(data: any, match: Match) {
   };
 }
 
-function derivePriceAction(data: any, match: Match) {
+function deriveMarketRegime(data: any, match: Match, importedData: any) {
+  const existing = hasNonEmptyObject(data?.marketRegime)
+    ? data.marketRegime
+    : hasNonEmptyObject((match as any)?.marketRegime)
+      ? (match as any).marketRegime
+      : hasNonEmptyObject(importedData?.marketRegime)
+        ? importedData.marketRegime
+        : {};
+
+  return {
+    regime: hasText(existing.regime) ? existing.regime : "Late-cycle disinflation",
+    ratesTrend: hasText(existing.ratesTrend) ? existing.ratesTrend : "Range-bound",
+    liquidityPulse: hasText(existing.liquidityPulse) ? existing.liquidityPulse : "Neutral-to-tight",
+    sentiment: hasText(existing.sentiment) ? existing.sentiment : "Crowded long growth",
+  };
+}
+
+function derivePriceAction(data: any, match: Match, importedData: any) {
   const existing = hasNonEmptyObject(data?.priceAction)
     ? data.priceAction
     : hasNonEmptyObject((match as any)?.priceAction)
       ? (match as any).priceAction
-      : {};
-  const stats: any = hasNonEmptyObject(match?.stats) ? match.stats : {};
-
-  const trendScore = round1(
-    toNumber(existing.trendScore, 40 + toNumber(stats?.shots?.home, 70) * 0.35),
-  );
-  const momentum14d = round1(
-    toNumber(existing.momentum14d, toNumber(stats?.possession?.home, 52) - 50),
-  );
-  const volatility30d = round1(
-    toNumber(existing.volatility30d, 12 + Math.abs(toNumber(stats?.shotsOnTarget?.away, 25) - 25)),
-  );
-  const relativeStrength = round1(
-    toNumber(existing.relativeStrength, 50 + toNumber(stats?.shotsOnTarget?.home, 30) * 0.8),
-  );
-  const support = round1(toNumber(existing.support, 170));
-  const resistance = round1(toNumber(existing.resistance, 186));
+      : hasNonEmptyObject(importedData?.priceAction)
+        ? importedData.priceAction
+        : {};
 
   return {
-    trendScore,
-    momentum14d,
-    volatility30d,
-    relativeStrength,
-    support,
-    resistance,
+    trendScore: round1(toNumber(existing.trendScore, 58)),
+    momentum14d: round1(toNumber(existing.momentum14d, 2.1)),
+    volatility30d: round1(toNumber(existing.volatility30d, 22.4)),
+    relativeStrength: round1(toNumber(existing.relativeStrength, 54)),
+    support: round1(toNumber(existing.support, 170)),
+    resistance: round1(toNumber(existing.resistance, 186)),
   };
 }
 
-function deriveValuationHealth(data: any, match: Match) {
+function deriveValuationHealth(data: any, match: Match, importedData: any) {
   const existing = hasNonEmptyObject(data?.valuationHealth)
     ? data.valuationHealth
     : hasNonEmptyObject((match as any)?.valuationHealth)
       ? (match as any).valuationHealth
-      : {};
-  const odds: any = hasNonEmptyObject(match?.odds?.had) ? match.odds?.had : {};
+      : hasNonEmptyObject(importedData?.valuationHealth)
+        ? importedData.valuationHealth
+        : {};
 
   return {
-    peRatio: round1(toNumber(existing.peRatio, 15 + toNumber(odds?.h, 1.9) * 6)),
-    revenueGrowthPct: round1(
-      toNumber(existing.revenueGrowthPct, 4 + toNumber(odds?.a, 1.9) * 3),
-    ),
-    revisionScore: round1(toNumber(existing.revisionScore, 45 + toNumber(odds?.h, 1.9) * 18)),
-    freeCashFlowMarginPct: round1(
-      toNumber(existing.freeCashFlowMarginPct, 8 + toNumber(odds?.d, 2.5) * 2),
-    ),
+    peRatio: round1(toNumber(existing.peRatio, 24.6)),
+    revenueGrowthPct: round1(toNumber(existing.revenueGrowthPct, 8.5)),
+    revisionScore: round1(toNumber(existing.revisionScore, 56)),
+    freeCashFlowMarginPct: round1(toNumber(existing.freeCashFlowMarginPct, 17.2)),
   };
 }
 
@@ -159,6 +143,7 @@ function resolveLegacySelection(
 
   const aliases: Record<string, string[]> = {
     asset_profile: ["fundamental", "context", "game_context"],
+    macro_regime: ["context", "fundamental"],
     price_action: ["stats", "performance_matrix"],
     valuation_health: ["market", "betting_lines"],
     risk_events: ["custom", "situational_notes", "custom_notes"],
@@ -178,26 +163,30 @@ function resolveLegacySelection(
 const STOCKS_DATA_SOURCES: DataSourceDefinition[] = [
   {
     id: "asset_profile",
-    labelKey: "match.fundamental_data",
-    descriptionKey: "match.fundamental_desc",
+    labelKey: "Asset Profile",
+    descriptionKey: "Identity and positioning of the analysis target.",
     icon: "layout",
     cardSpan: 1,
     isAvailable: () => true,
     defaultSelected: () => true,
     applyToData: (data, ctx) => {
-      const { match } = ctx;
+      const { match, importedData } = ctx;
       if (data.id === undefined) data.id = match.id;
       if (data.status === undefined) data.status = match.status;
       if (data.date === undefined) data.date = match.date;
       if (data.league === undefined) data.league = match.league;
 
       if (!hasNonEmptyObject(data.assetProfile)) {
-        data.assetProfile = deriveAssetProfile(data, match);
+        data.assetProfile = deriveAssetProfile(data, match, importedData);
       }
 
-      // Keep top-level entities for current UI compatibility while enabling domain-specific payload.
-      data.homeTeam = copyTeam(data.homeTeam, match.homeTeam);
-      data.awayTeam = copyTeam(data.awayTeam, match.awayTeam);
+      if (!hasNonEmptyObject(data.analysisTarget)) {
+        data.analysisTarget = {
+          id: data.assetProfile.symbol,
+          label: data.assetProfile.assetName || data.assetProfile.symbol,
+          benchmark: data.assetProfile.benchmark,
+        };
+      }
     },
     removeFromData: (data) => {
       delete data.id;
@@ -205,13 +194,12 @@ const STOCKS_DATA_SOURCES: DataSourceDefinition[] = [
       delete data.date;
       delete data.league;
       delete data.assetProfile;
-      delete data.homeTeam;
-      delete data.awayTeam;
+      delete data.analysisTarget;
     },
     formSections: [
       {
         id: "asset_identity",
-        titleKey: "match.basic_info",
+        titleKey: "Asset Identity",
         columns: 2,
         fields: [
           { id: "symbol", type: "text", path: ["assetProfile", "symbol"], labelKey: "Symbol" },
@@ -250,16 +238,66 @@ const STOCKS_DATA_SOURCES: DataSourceDefinition[] = [
     ],
   },
   {
+    id: "macro_regime",
+    labelKey: "Macro Regime",
+    descriptionKey: "Rate cycle, liquidity pulse, and sentiment context.",
+    icon: "layout",
+    cardSpan: 1,
+    isAvailable: () => true,
+    defaultSelected: () => true,
+    applyToData: (data, ctx) => {
+      if (!hasNonEmptyObject(data.marketRegime)) {
+        data.marketRegime = deriveMarketRegime(data, ctx.match, ctx.importedData);
+      }
+    },
+    removeFromData: (data) => {
+      delete data.marketRegime;
+    },
+    formSections: [
+      {
+        id: "macro_regime_context",
+        titleKey: "Macro Regime",
+        columns: 2,
+        fields: [
+          {
+            id: "regime",
+            type: "text",
+            path: ["marketRegime", "regime"],
+            labelKey: "Regime",
+          },
+          {
+            id: "rates_trend",
+            type: "text",
+            path: ["marketRegime", "ratesTrend"],
+            labelKey: "Rates Trend",
+          },
+          {
+            id: "liquidity_pulse",
+            type: "text",
+            path: ["marketRegime", "liquidityPulse"],
+            labelKey: "Liquidity Pulse",
+          },
+          {
+            id: "sentiment",
+            type: "text",
+            path: ["marketRegime", "sentiment"],
+            labelKey: "Sentiment",
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "price_action",
-    labelKey: "match.match_stats",
-    descriptionKey: "match.fundamental_desc",
+    labelKey: "Price Action",
+    descriptionKey: "Trend, momentum, volatility, and key levels.",
     icon: "trending",
     cardSpan: 1,
     isAvailable: () => true,
     defaultSelected: () => true,
     applyToData: (data, ctx) => {
       if (!hasNonEmptyObject(data.priceAction)) {
-        data.priceAction = derivePriceAction(data, ctx.match);
+        data.priceAction = derivePriceAction(data, ctx.match, ctx.importedData);
       }
     },
     removeFromData: (data) => {
@@ -268,7 +306,7 @@ const STOCKS_DATA_SOURCES: DataSourceDefinition[] = [
     formSections: [
       {
         id: "price_action_metrics",
-        titleKey: "match.match_stats",
+        titleKey: "Price Action",
         columns: 2,
         fields: [
           {
@@ -313,15 +351,15 @@ const STOCKS_DATA_SOURCES: DataSourceDefinition[] = [
   },
   {
     id: "valuation_health",
-    labelKey: "match.market_data",
-    descriptionKey: "match.market_desc",
+    labelKey: "Valuation Health",
+    descriptionKey: "Valuation multiple, growth quality, and cash-flow health.",
     icon: "layout",
     cardSpan: 1,
     isAvailable: () => true,
     defaultSelected: () => true,
     applyToData: (data, ctx) => {
       if (!hasNonEmptyObject(data.valuationHealth)) {
-        data.valuationHealth = deriveValuationHealth(data, ctx.match);
+        data.valuationHealth = deriveValuationHealth(data, ctx.match, ctx.importedData);
       }
     },
     removeFromData: (data) => {
@@ -330,7 +368,7 @@ const STOCKS_DATA_SOURCES: DataSourceDefinition[] = [
     formSections: [
       {
         id: "valuation_metrics",
-        titleKey: "match.market_odds",
+        titleKey: "Valuation Health",
         columns: 2,
         fields: [
           {
@@ -363,8 +401,8 @@ const STOCKS_DATA_SOURCES: DataSourceDefinition[] = [
   },
   {
     id: "risk_events",
-    labelKey: "match.custom_data",
-    descriptionKey: "match.custom_desc",
+    labelKey: "Risk Events",
+    descriptionKey: "Catalysts, downside triggers, and event-driven narrative.",
     icon: "file",
     cardSpan: 2,
     isAvailable: () => true,
@@ -388,7 +426,7 @@ const STOCKS_DATA_SOURCES: DataSourceDefinition[] = [
     formSections: [
       {
         id: "risk_events",
-        titleKey: "match.custom_data",
+        titleKey: "Risk Events",
         fields: [
           {
             id: "risk_narrative",
@@ -444,6 +482,7 @@ function resolveStocksSourceSelection(
 
 function buildStocksSourceCapabilities(data: any, selectedSources: SourceSelection) {
   const hasAssetProfile = hasNonEmptyObject(data?.assetProfile);
+  const hasMarketRegime = hasNonEmptyObject(data?.marketRegime);
   const hasPriceAction = hasNonEmptyObject(data?.priceAction);
   const hasValuationHealth = hasNonEmptyObject(data?.valuationHealth);
   const hasRiskEvents = hasNonEmptyObject(data?.riskEvents);
@@ -454,6 +493,7 @@ function buildStocksSourceCapabilities(data: any, selectedSources: SourceSelecti
     hasOdds: false,
     hasCustom: hasRiskEvents || hasText(data?.customInfo),
     hasAssetProfile: !!selectedSources.asset_profile && hasAssetProfile,
+    hasMarketRegime: !!selectedSources.macro_regime && hasMarketRegime,
     hasPriceAction: !!selectedSources.price_action && hasPriceAction,
     hasValuationHealth: !!selectedSources.valuation_health && hasValuationHealth,
     hasRiskEvents: !!selectedSources.risk_events && hasRiskEvents,
