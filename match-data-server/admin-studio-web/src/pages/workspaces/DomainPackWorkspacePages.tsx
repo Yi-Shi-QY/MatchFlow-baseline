@@ -14,6 +14,7 @@ import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import DomainStageTabs from '@/src/components/layout/DomainStageTabs';
 import { Select } from '@/src/components/ui/Select';
+import { useI18n } from '@/src/i18n';
 import {
   AdminStudioApiError,
   CatalogEntry,
@@ -335,6 +336,87 @@ function buildDomainPackPreview(
   };
 }
 
+function localizeDomainPackFieldLabel(
+  field: string,
+  t: (en: string, zh?: string) => string,
+) {
+  switch (field) {
+    case 'recommendedAgents':
+      return t('recommendedAgents', 'recommendedAgents');
+    case 'recommendedSkills':
+      return t('recommendedSkills', 'recommendedSkills');
+    case 'recommendedTemplates':
+      return t('recommendedTemplates', 'recommendedTemplates');
+    case 'skillHttpAllowedHosts':
+      return t('skillHttpAllowedHosts', 'skillHttpAllowedHosts');
+    default:
+      return field;
+  }
+}
+
+function localizeDomainPackIssue(issue: string, t: (en: string, zh?: string) => string) {
+  const invalidIdMatch = issue.match(/^(recommendedAgents|recommendedSkills|recommendedTemplates) contains invalid id: (.+)\.$/);
+  if (invalidIdMatch) {
+    const [, field, value] = invalidIdMatch;
+    return t(
+      issue,
+      `${localizeDomainPackFieldLabel(field, t)} 包含非法 id：${value}。`,
+    );
+  }
+
+  const duplicatedMatch = issue.match(/^(recommendedAgents|recommendedSkills|recommendedTemplates|skillHttpAllowedHosts) duplicated value: (.+)\.$/);
+  if (duplicatedMatch) {
+    const [, field, value] = duplicatedMatch;
+    return t(
+      issue,
+      `${localizeDomainPackFieldLabel(field, t)} 存在重复值：${value}。`,
+    );
+  }
+
+  const hostSchemeMatch = issue.match(/^skillHttpAllowedHosts must not include scheme: (.+)\.$/);
+  if (hostSchemeMatch) {
+    return t(issue, `skillHttpAllowedHosts 不可包含 scheme：${hostSchemeMatch[1]}。`);
+  }
+
+  const invalidHostMatch = issue.match(/^skillHttpAllowedHosts contains invalid host: (.+)\.$/);
+  if (invalidHostMatch) {
+    return t(issue, `skillHttpAllowedHosts 包含非法 host：${invalidHostMatch[1]}。`);
+  }
+
+  switch (issue) {
+    case 'Draft not initialized.':
+      return t('Draft not initialized.', '草稿未初始化。');
+    case 'id is required.':
+      return t('id is required.', 'id 为必填项。');
+    case 'id must match [a-z0-9_][a-z0-9_-]{1,63}.':
+      return t('id must match [a-z0-9_][a-z0-9_-]{1,63}.', 'id 必须匹配 [a-z0-9_][a-z0-9_-]{1,63}。');
+    case 'name is required.':
+      return t('name is required.', 'name 为必填项。');
+    case 'description is required.':
+      return t('description is required.', 'description 为必填项。');
+    case 'baseDomainId must match [a-z0-9_][a-z0-9_-]{1,63}.':
+      return t('baseDomainId must match [a-z0-9_][a-z0-9_-]{1,63}.', 'baseDomainId 必须匹配 [a-z0-9_][a-z0-9_-]{1,63}。');
+    case 'baseDomainId cannot equal id.':
+      return t('baseDomainId cannot equal id.', 'baseDomainId 不能与 id 相同。');
+    case 'minAppVersion must use semver format x.y.z.':
+      return t('minAppVersion must use semver format x.y.z.', 'minAppVersion 必须使用 semver 格式 x.y.z。');
+    case 'skillHttpAllowedHosts cannot exceed 100 entries.':
+      return t('skillHttpAllowedHosts cannot exceed 100 entries.', 'skillHttpAllowedHosts 不能超过 100 项。');
+    case 'recommendedAgents is empty; no agent bootstrap hints.':
+      return t('recommendedAgents is empty; no agent bootstrap hints.', 'recommendedAgents 为空，缺少 agent 启动提示。');
+    case 'recommendedSkills is empty; no skill bootstrap hints.':
+      return t('recommendedSkills is empty; no skill bootstrap hints.', 'recommendedSkills 为空，缺少 skill 启动提示。');
+    case 'recommendedTemplates is empty; no template bootstrap hints.':
+      return t('recommendedTemplates is empty; no template bootstrap hints.', 'recommendedTemplates 为空，缺少模板启动提示。');
+    case 'minAppVersion is empty; compatibility floor is unspecified.':
+      return t('minAppVersion is empty; compatibility floor is unspecified.', 'minAppVersion 为空，兼容性下限未指定。');
+    case 'skillHttpAllowedHosts is empty; runtime host policy not constrained.':
+      return t('skillHttpAllowedHosts is empty; runtime host policy not constrained.', 'skillHttpAllowedHosts 为空，运行时 host 策略未受约束。');
+    default:
+      return issue;
+  }
+}
+
 function describeError(error: unknown) {
   if (error instanceof AdminStudioApiError) {
     return `${error.code ? `${error.code}: ` : ''}${error.message}`;
@@ -393,11 +475,22 @@ function hasValidationFailure(run: ValidationRunRecord | null) {
   return getValidationChecks(run).some((check) => check.status !== 'passed');
 }
 
-function WorkspaceHeader({ title, description }: { title: string; description: string }) {
+function WorkspaceHeader({
+  title,
+  titleZh,
+  description,
+  descriptionZh,
+}: {
+  title: string;
+  titleZh?: string;
+  description: string;
+  descriptionZh?: string;
+}) {
+  const { t } = useI18n();
   return (
     <div>
-      <h1 className="text-base font-bold text-white">{title}</h1>
-      <p className="text-xs text-zinc-500">{description}</p>
+      <h1 className="text-base font-bold text-white">{t(title, titleZh)}</h1>
+      <p className="text-xs text-zinc-500">{t(description, descriptionZh)}</p>
     </div>
   );
 }
@@ -419,6 +512,7 @@ function FeedbackBanner({ feedback }: { feedback: FeedbackState }) {
 }
 
 export function DomainPackDesignPage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -446,6 +540,19 @@ export function DomainPackDesignPage() {
   const manifestPreview = useMemo(
     () => (draft ? JSON.stringify(toDomainPackManifest(draft), null, 2) : ''),
     [draft],
+  );
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
   );
 
   async function loadEntries(preferredItemId?: string) {
@@ -520,7 +627,7 @@ export function DomainPackDesignPage() {
     const itemId = asText(newItemId);
     const version = asText(newEntryVersion);
     if (!itemId || !version) {
-      setFeedback({ tone: 'error', message: 'Provide itemId and version.' });
+      setFeedback({ tone: 'error', message: t('Provide itemId and version.', '请填写 itemId 和版本。') });
       return;
     }
     setIsCreatingEntry(true);
@@ -531,7 +638,7 @@ export function DomainPackDesignPage() {
         channel: publishChannel,
         manifest: toDomainPackManifest({ ...(draft || buildEmptyDomainPackDraft(itemId)), id: itemId }),
       });
-      setFeedback({ tone: 'success', message: `Created domain_pack:${itemId}@${version}.` });
+      setFeedback({ tone: 'success', message: t(`Created domain_pack:${itemId}@${version}.`, `已创建 domain_pack:${itemId}@${version}。`) });
       await loadEntries(itemId);
       await loadRevisions(itemId, version);
       setNewItemId('');
@@ -545,7 +652,7 @@ export function DomainPackDesignPage() {
   async function handleCreateRevision() {
     const version = asText(newRevisionVersion);
     if (!selectedItemId || !version || !draft) {
-      setFeedback({ tone: 'error', message: 'Select item and revision version.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision version.', '请选择条目和修订版本。') });
       return;
     }
     setIsCreatingRevision(true);
@@ -555,7 +662,7 @@ export function DomainPackDesignPage() {
         channel: publishChannel,
         manifest: toDomainPackManifest({ ...draft, id: selectedItemId }),
       });
-      setFeedback({ tone: 'success', message: `Created revision ${selectedItemId}@${version}.` });
+      setFeedback({ tone: 'success', message: t(`Created revision ${selectedItemId}@${version}.`, `已创建修订 ${selectedItemId}@${version}。`) });
       await loadRevisions(selectedItemId, version);
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -566,7 +673,7 @@ export function DomainPackDesignPage() {
 
   async function handleSaveDraft() {
     if (!selectedItemId || !selectedVersion || !draft || selectedRevision?.status !== 'draft') {
-      setFeedback({ tone: 'error', message: 'Select draft revision before saving.' });
+      setFeedback({ tone: 'error', message: t('Select draft revision before saving.', '保存前请先选择草稿修订。') });
       return;
     }
     setIsSavingDraft(true);
@@ -575,7 +682,7 @@ export function DomainPackDesignPage() {
         channel: publishChannel,
         manifest: toDomainPackManifest({ ...draft, id: selectedItemId }),
       });
-      setFeedback({ tone: 'success', message: `Draft saved: ${selectedItemId}@${selectedVersion}.` });
+      setFeedback({ tone: 'success', message: t(`Draft saved: ${selectedItemId}@${selectedVersion}.`, `草稿已保存：${selectedItemId}@${selectedVersion}。`) });
       await loadRevisions(selectedItemId, selectedVersion);
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -590,8 +697,8 @@ export function DomainPackDesignPage() {
     setFeedback({
       tone: localIssues.length === 0 ? 'success' : 'info',
       message: preview
-        ? `Domain pack preview generated (${preview.readiness}).`
-        : 'Draft unavailable.',
+        ? t(`Domain pack preview generated (${preview.readiness}).`, `领域包预览已生成（${preview.readiness}）。`)
+        : t('Draft unavailable.', '草稿不可用。'),
     });
   }
 
@@ -599,7 +706,9 @@ export function DomainPackDesignPage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Domain Pack Studio / Design"
+        titleZh="领域包工作台 / 设计"
         description="Edit domain-level package metadata and test release readiness preview."
+        descriptionZh="编辑领域级包元数据并测试发布就绪预览。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="design" />
       {feedback && <FeedbackBanner feedback={feedback} />}
@@ -609,7 +718,7 @@ export function DomainPackDesignPage() {
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div className="lg:col-span-2">
               <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">
-                Domain Pack Item
+                {t('Domain Pack Item', '领域包条目')}
               </label>
               <Select
                 value={selectedItemId || ''}
@@ -617,13 +726,13 @@ export function DomainPackDesignPage() {
                 options={
                   toEntryOptions(entries).length > 0
                     ? toEntryOptions(entries)
-                    : [{ value: '', label: 'No item' }]
+                    : [{ value: '', label: t('No item', '无条目') }]
                 }
               />
             </div>
             <div className="lg:col-span-2">
               <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">
-                Revision
+                {t('Revision', '修订')}
               </label>
               <Select
                 value={selectedVersion || ''}
@@ -631,7 +740,7 @@ export function DomainPackDesignPage() {
                 options={
                   toRevisionOptions(revisions).length > 0
                     ? toRevisionOptions(revisions)
-                    : [{ value: '', label: 'No revision' }]
+                    : [{ value: '', label: t('No revision', '无修订') }]
                 }
               />
             </div>
@@ -649,12 +758,12 @@ export function DomainPackDesignPage() {
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
               )}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
             {isLoadingRevisions && (
               <div className="flex items-center gap-1 text-xs text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading revisions...
+                {t('loading revisions...', '正在加载修订...')}
               </div>
             )}
           </div>
@@ -663,30 +772,30 @@ export function DomainPackDesignPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-white">Create and Save</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Create and Save', '创建与保存')}</h2>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-5">
             <input
               className={INPUT_CLASS}
               value={newItemId}
               onChange={(event) => setNewItemId(event.target.value)}
-              placeholder="new item id"
+              placeholder={t('new item id', '新条目 ID')}
             />
             <input
               className={INPUT_CLASS}
               value={newEntryVersion}
               onChange={(event) => setNewEntryVersion(event.target.value)}
-              placeholder="entry version"
+              placeholder={t('entry version', '条目版本')}
             />
             <input
               className={INPUT_CLASS}
               value={newRevisionVersion}
               onChange={(event) => setNewRevisionVersion(event.target.value)}
-              placeholder="revision version"
+              placeholder={t('revision version', '修订版本')}
             />
             <Select
               value={publishChannel}
               onChange={(value) => setPublishChannel(value as CatalogChannel)}
-              options={CHANNEL_OPTIONS}
+              options={channelOptions}
             />
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void handleCreateEntry()} disabled={isCreatingEntry} className="gap-2">
@@ -695,7 +804,7 @@ export function DomainPackDesignPage() {
                 ) : (
                   <Plus className="h-4 w-4" />
                 )}
-                Create
+                {t('Create', '创建')}
               </Button>
               <Button
                 variant="outline"
@@ -708,7 +817,7 @@ export function DomainPackDesignPage() {
                 ) : (
                   <Plus className="h-4 w-4" />
                 )}
-                Revision
+                {t('Revision', '修订')}
               </Button>
               <Button
                 variant="outline"
@@ -721,7 +830,7 @@ export function DomainPackDesignPage() {
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                Save
+                {t('Save', '保存')}
               </Button>
             </div>
           </div>
@@ -731,8 +840,8 @@ export function DomainPackDesignPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold text-white">Draft Builder</h2>
-            {!draft && <div className="text-xs text-zinc-500">Draft not initialized.</div>}
+            <h2 className="text-sm font-semibold text-white">{t('Draft Builder', '草稿构建器')}</h2>
+            {!draft && <div className="text-xs text-zinc-500">{t('Draft not initialized.', '草稿未初始化。')}</div>}
             {draft && (
               <>
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
@@ -746,7 +855,7 @@ export function DomainPackDesignPage() {
                     className={INPUT_CLASS}
                     value={draft.name}
                     onChange={(event) => updateDraft({ name: event.target.value })}
-                    placeholder="name"
+                    placeholder={t('name', '名称')}
                   />
                   <input
                     className={INPUT_CLASS}
@@ -773,7 +882,7 @@ export function DomainPackDesignPage() {
                   className={TEXTAREA_CLASS}
                   value={draft.description}
                   onChange={(event) => updateDraft({ description: event.target.value })}
-                  placeholder="description"
+                  placeholder={t('description', '描述')}
                 />
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                   <textarea
@@ -834,10 +943,10 @@ export function DomainPackDesignPage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-white">Readiness Preview</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Readiness Preview', '就绪预览')}</h2>
               <Button onClick={handleRunPreview} className="gap-2">
                 <PackageCheck className="h-4 w-4" />
-                Test Preview
+                {t('Test Preview', '测试预览')}
               </Button>
             </div>
             <div
@@ -848,13 +957,13 @@ export function DomainPackDesignPage() {
               }`}
             >
               {localIssues.length === 0
-                ? 'Local validation passed.'
-                : `${localIssues.length} local issues.`}
+                ? t('Local validation passed.', '本地验证通过。')
+                : t(`${localIssues.length} local issues.`, `本地问题 ${localIssues.length} 项。`)}
             </div>
             {localIssues.length > 0 && (
               <ul className="list-disc space-y-1 pl-5 text-xs text-zinc-300">
                 {localIssues.map((issue) => (
-                  <li key={issue}>{issue}</li>
+                  <li key={issue}>{localizeDomainPackIssue(issue, t)}</li>
                 ))}
               </ul>
             )}
@@ -865,19 +974,19 @@ export function DomainPackDesignPage() {
                     localPreview.readiness === 'ready' ? 'text-emerald-300' : 'text-amber-300'
                   }
                 >
-                  readiness: {localPreview.readiness}
+                  {t('readiness', '就绪状态')}: {localPreview.readiness}
                 </div>
-                <div>domain id: {localPreview.scopeDomainId}</div>
-                <div>base domain: {localPreview.baseDomainId}</div>
-                <div>recommended agents: {localPreview.recommendedAgentCount}</div>
-                <div>recommended skills: {localPreview.recommendedSkillCount}</div>
-                <div>recommended templates: {localPreview.recommendedTemplateCount}</div>
-                <div>allowed hosts: {localPreview.allowedHostCount}</div>
-                <div>generatedAt: {formatTime(localPreview.generatedAt)}</div>
+                <div>{t('domain id', '领域 ID')}: {localPreview.scopeDomainId}</div>
+                <div>{t('base domain', '基础领域')}: {localPreview.baseDomainId}</div>
+                <div>{t('recommended agents', '推荐 Agents')}: {localPreview.recommendedAgentCount}</div>
+                <div>{t('recommended skills', '推荐 Skills')}: {localPreview.recommendedSkillCount}</div>
+                <div>{t('recommended templates', '推荐 Templates')}: {localPreview.recommendedTemplateCount}</div>
+                <div>{t('allowed hosts', '允许 Host')}: {localPreview.allowedHostCount}</div>
+                <div>{t('generatedAt', '生成时间')}: {formatTime(localPreview.generatedAt)}</div>
                 {localPreview.warnings.length > 0 && (
                   <ul className="mt-1 list-disc space-y-1 pl-5 text-amber-300">
                     {localPreview.warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
+                      <li key={warning}>{localizeDomainPackIssue(warning, t)}</li>
                     ))}
                   </ul>
                 )}
@@ -889,7 +998,7 @@ export function DomainPackDesignPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="p-4">
-          <h2 className="mb-2 text-sm font-semibold text-white">Manifest Preview</h2>
+          <h2 className="mb-2 text-sm font-semibold text-white">{t('Manifest Preview', '清单预览')}</h2>
           <textarea
             readOnly
             className="min-h-[240px] w-full rounded-lg border border-white/10 bg-zinc-900 p-3 font-mono text-xs text-zinc-200 focus:outline-none"
@@ -903,6 +1012,7 @@ export function DomainPackDesignPage() {
 }
 
 export function DomainPackManagePage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -975,7 +1085,7 @@ export function DomainPackManagePage() {
 
   async function handleDiff() {
     if (!selectedItemId || !diffFromVersion || !diffToVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and diff versions.' });
+      setFeedback({ tone: 'error', message: t('Select item and diff versions.', '请选择条目与对比版本。') });
       return;
     }
     setIsDiffing(true);
@@ -987,7 +1097,7 @@ export function DomainPackManagePage() {
         diffToVersion,
       );
       setDiffResult(result);
-      setFeedback({ tone: 'info', message: `Loaded diff ${diffFromVersion} -> ${diffToVersion}.` });
+      setFeedback({ tone: 'info', message: t(`Loaded diff ${diffFromVersion} -> ${diffToVersion}.`, `已加载差异 ${diffFromVersion} -> ${diffToVersion}。`) });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
     } finally {
@@ -1013,7 +1123,9 @@ export function DomainPackManagePage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Domain Pack Studio / Manage"
+        titleZh="领域包工作台 / 管理"
         description="Compare revisions and inspect package quality before release."
+        descriptionZh="对比修订并在发布前检查包质量。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="manage" />
       {feedback && <FeedbackBanner feedback={feedback} />}
@@ -1027,7 +1139,7 @@ export function DomainPackManagePage() {
               options={
                 toEntryOptions(entries).length > 0
                   ? toEntryOptions(entries)
-                  : [{ value: '', label: 'No item' }]
+                  : [{ value: '', label: t('No item', '无条目') }]
               }
             />
             <Select
@@ -1036,7 +1148,7 @@ export function DomainPackManagePage() {
               options={
                 toRevisionOptions(revisions).length > 0
                   ? toRevisionOptions(revisions)
-                  : [{ value: '', label: 'No revision' }]
+                  : [{ value: '', label: t('No revision', '无修订') }]
               }
             />
           </div>
@@ -1053,12 +1165,12 @@ export function DomainPackManagePage() {
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
               )}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
             {isLoadingRevisions && (
               <div className="flex items-center gap-1 text-xs text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading revisions...
+                {t('loading revisions...', '正在加载修订...')}
               </div>
             )}
           </div>
@@ -1069,7 +1181,7 @@ export function DomainPackManagePage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-white">Diff</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Diff', '差异')}</h2>
               <Button
                 variant="outline"
                 size="sm"
@@ -1082,7 +1194,7 @@ export function DomainPackManagePage() {
                 ) : (
                   <GitCompare className="h-3.5 w-3.5" />
                 )}
-                Run
+                {t('Run', '运行')}
               </Button>
             </div>
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -1092,7 +1204,7 @@ export function DomainPackManagePage() {
                 options={
                   toRevisionOptions(revisions).length > 0
                     ? toRevisionOptions(revisions)
-                    : [{ value: '', label: 'No revision' }]
+                    : [{ value: '', label: t('No revision', '无修订') }]
                 }
               />
               <Select
@@ -1101,17 +1213,17 @@ export function DomainPackManagePage() {
                 options={
                   toRevisionOptions(revisions).length > 0
                     ? toRevisionOptions(revisions)
-                    : [{ value: '', label: 'No revision' }]
+                    : [{ value: '', label: t('No revision', '无修订') }]
                 }
               />
             </div>
-            {!diffResult && <div className="text-xs text-zinc-500">Run diff to inspect manifest changes.</div>}
+            {!diffResult && <div className="text-xs text-zinc-500">{t('Run diff to inspect manifest changes.', '运行差异对比以检查清单变更。')}</div>}
             {diffResult && (
               <div className="rounded-lg border border-white/10 bg-zinc-900/40 p-3 text-xs text-zinc-300">
-                <div>totalChanges: {diffResult.diff.summary.totalChanges}</div>
-                <div>added: {diffResult.diff.summary.addedCount}</div>
-                <div>removed: {diffResult.diff.summary.removedCount}</div>
-                <div>changed: {diffResult.diff.summary.changedCount}</div>
+                <div>{t('totalChanges', '总变更数')}: {diffResult.diff.summary.totalChanges}</div>
+                <div>{t('added', '新增')}: {diffResult.diff.summary.addedCount}</div>
+                <div>{t('removed', '移除')}: {diffResult.diff.summary.removedCount}</div>
+                <div>{t('changed', '变更')}: {diffResult.diff.summary.changedCount}</div>
               </div>
             )}
           </CardContent>
@@ -1119,7 +1231,7 @@ export function DomainPackManagePage() {
 
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold text-white">Manifest Inspector</h2>
+            <h2 className="text-sm font-semibold text-white">{t('Manifest Inspector', '清单检查')}</h2>
             <textarea
               readOnly
               value={selectedRevision ? JSON.stringify(selectedRevision.manifest || {}, null, 2) : ''}
@@ -1133,7 +1245,7 @@ export function DomainPackManagePage() {
                   : 'border-red-500/20 bg-red-500/10 text-red-300'
               }`}
             >
-              {qualityIssues.length === 0 ? 'Quality checks passed.' : `${qualityIssues.length} quality issues.`}
+              {qualityIssues.length === 0 ? t('Quality checks passed.', '质量检查通过。') : t(`${qualityIssues.length} quality issues.`, `质量问题 ${qualityIssues.length} 项。`)}
             </div>
           </CardContent>
         </Card>
@@ -1141,8 +1253,8 @@ export function DomainPackManagePage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-2 p-4">
-          <h2 className="text-sm font-semibold text-white">Release History</h2>
-          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">No release records.</div>}
+          <h2 className="text-sm font-semibold text-white">{t('Release History', '发布历史')}</h2>
+          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">{t('No release records.', '暂无发布记录。')}</div>}
           {releaseHistory.slice(0, 20).map((record) => (
             <div
               key={record.id}
@@ -1166,6 +1278,7 @@ export function DomainPackManagePage() {
 }
 
 export function DomainPackPublishPage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -1194,6 +1307,32 @@ export function DomainPackPublishPage() {
   const publishGatePassed = useMemo(
     () => !!validationRun && validationRun.status === 'succeeded' && !hasValidationFailure(validationRun),
     [validationRun],
+  );
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
+  );
+  const validationTypeOptions = useMemo(
+    () =>
+      VALIDATION_TYPE_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'catalog_validate'
+            ? t('catalog_validate', '目录验证')
+            : item.value === 'pre_publish'
+              ? t('pre_publish', '发布前验证')
+              : t('post_publish', '发布后验证'),
+      })),
+    [t],
   );
 
   async function loadEntries(preferredItemId?: string) {
@@ -1252,7 +1391,7 @@ export function DomainPackPublishPage() {
 
   async function handleRunValidation() {
     if (!selectedItemId || !selectedVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and revision before validation.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision before validation.', '验证前请先选择条目和修订。') });
       return;
     }
     setIsRunningValidation(true);
@@ -1265,7 +1404,7 @@ export function DomainPackPublishPage() {
       });
       setValidationRun(created);
       setValidationLookupRunId(created.id);
-      setFeedback({ tone: 'info', message: `Validation started: ${created.id} (${created.status}).` });
+      setFeedback({ tone: 'info', message: t(`Validation started: ${created.id} (${created.status}).`, `验证已启动：${created.id}（${created.status}）。`) });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
     } finally {
@@ -1276,7 +1415,7 @@ export function DomainPackPublishPage() {
   async function handleFetchValidationRun() {
     const runId = asText(validationLookupRunId);
     if (!runId) {
-      setFeedback({ tone: 'error', message: 'Provide runId first.' });
+      setFeedback({ tone: 'error', message: t('Provide runId first.', '请先填写 runId。') });
       return;
     }
     setIsFetchingValidation(true);
@@ -1296,11 +1435,11 @@ export function DomainPackPublishPage() {
 
   async function handlePublish() {
     if (!selectedItemId || !selectedVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and revision before publish.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision before publish.', '发布前请先选择条目和修订。') });
       return;
     }
     if (!publishGatePassed) {
-      setFeedback({ tone: 'error', message: 'Publish gate blocked: validation not passed.' });
+      setFeedback({ tone: 'error', message: t('Publish gate blocked: validation not passed.', '发布门禁阻塞：验证未通过。') });
       return;
     }
     setIsPublishing(true);
@@ -1312,7 +1451,7 @@ export function DomainPackPublishPage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Published ${selectedItemId}@${selectedVersion} to ${publishChannel}.`,
+        message: t(`Published ${selectedItemId}@${selectedVersion} to ${publishChannel}.`, `已发布 ${selectedItemId}@${selectedVersion} 到 ${publishChannel}。`),
       });
       await loadRevisions(selectedItemId, selectedVersion);
       await loadHistory();
@@ -1325,7 +1464,7 @@ export function DomainPackPublishPage() {
 
   async function handleRollback() {
     if (!selectedItemId || !rollbackVersion) {
-      setFeedback({ tone: 'error', message: 'Select rollback target version.' });
+      setFeedback({ tone: 'error', message: t('Select rollback target version.', '请选择回滚目标版本。') });
       return;
     }
     setIsRollbacking(true);
@@ -1335,7 +1474,7 @@ export function DomainPackPublishPage() {
         channel: publishChannel,
         validationRunId: validationRun?.id || undefined,
       });
-      setFeedback({ tone: 'success', message: `Rollback submitted: ${selectedItemId} -> ${rollbackVersion}.` });
+      setFeedback({ tone: 'success', message: t(`Rollback submitted: ${selectedItemId} -> ${rollbackVersion}.`, `回滚已提交：${selectedItemId} -> ${rollbackVersion}。`) });
       await loadRevisions(selectedItemId, rollbackVersion);
       await loadHistory();
     } catch (error) {
@@ -1369,7 +1508,9 @@ export function DomainPackPublishPage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Domain Pack Studio / Publish"
+        titleZh="领域包工作台 / 发布"
         description="Run validation gate, publish, and rollback safely."
+        descriptionZh="执行验证门禁并安全发布、回滚。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="publish" />
       {feedback && <FeedbackBanner feedback={feedback} />}
@@ -1379,7 +1520,7 @@ export function DomainPackPublishPage() {
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div className="lg:col-span-2">
               <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">
-                Domain Pack Item
+                {t('Domain Pack Item', '领域包条目')}
               </label>
               <Select
                 value={selectedItemId || ''}
@@ -1387,28 +1528,28 @@ export function DomainPackPublishPage() {
                 options={
                   toEntryOptions(entries).length > 0
                     ? toEntryOptions(entries)
-                    : [{ value: '', label: 'No item' }]
+                    : [{ value: '', label: t('No item', '无条目') }]
                 }
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Revision</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Revision', '修订')}</label>
               <Select
                 value={selectedVersion || ''}
                 onChange={(value) => setSelectedVersion(value)}
                 options={
                   toRevisionOptions(revisions).length > 0
                     ? toRevisionOptions(revisions)
-                    : [{ value: '', label: 'No revision' }]
+                    : [{ value: '', label: t('No revision', '无修订') }]
                 }
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Channel</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Channel', '通道')}</label>
               <Select
                 value={publishChannel}
                 onChange={(value) => setPublishChannel(value as CatalogChannel)}
-                options={CHANNEL_OPTIONS}
+                options={channelOptions}
               />
             </div>
           </div>
@@ -1425,17 +1566,17 @@ export function DomainPackPublishPage() {
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
               )}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
             {isLoadingRevisions && (
               <div className="flex items-center gap-1 text-xs text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading revisions...
+                {t('loading revisions...', '正在加载修订...')}
               </div>
             )}
             {selectedRevision && (
               <div className="rounded-lg border border-white/10 bg-zinc-900/40 px-2 py-1 text-xs text-zinc-400">
-                status={selectedRevision.status}, publishedAt={formatTime(selectedRevision.publishedAt)}
+                {t('status', '状态')}={selectedRevision.status}, {t('publishedAt', '发布时间')}={formatTime(selectedRevision.publishedAt)}
               </div>
             )}
           </div>
@@ -1444,18 +1585,18 @@ export function DomainPackPublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-white">Validation Gate</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Validation Gate', '验证门禁')}</h2>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
             <Select
               value={validationType}
               onChange={(value) => setValidationType(value as ValidationRunType)}
-              options={VALIDATION_TYPE_OPTIONS}
+              options={validationTypeOptions}
             />
             <input
               className={`xl:col-span-2 ${INPUT_CLASS}`}
               value={validationLookupRunId}
               onChange={(event) => setValidationLookupRunId(event.target.value)}
-              placeholder="validation run id"
+              placeholder={t('validation run id', '验证任务 ID')}
             />
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1469,7 +1610,7 @@ export function DomainPackPublishPage() {
                 ) : (
                   <ShieldCheck className="h-4 w-4" />
                 )}
-                Run
+                {t('Run', '运行')}
               </Button>
               <Button
                 variant="outline"
@@ -1482,7 +1623,7 @@ export function DomainPackPublishPage() {
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                Fetch
+                {t('Fetch', '查询')}
               </Button>
             </div>
           </div>
@@ -1493,12 +1634,12 @@ export function DomainPackPublishPage() {
                 : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
             }`}
           >
-            Publish Gate: {publishGatePassed ? 'Passed' : 'Blocked'}
+            {t('Publish Gate', '发布门禁')}: {publishGatePassed ? t('Passed', '通过') : t('Blocked', '阻塞')}
           </div>
           {validationRun && (
             <div className="space-y-1 rounded-lg border border-white/10 bg-zinc-900/40 p-3 text-xs text-zinc-300">
-              <div>runId={validationRun.id}, status={validationRun.status}</div>
-              {validationChecks.length === 0 && <div className="text-zinc-500">No checks returned.</div>}
+              <div>runId={validationRun.id}, {t('status', '状态')}={validationRun.status}</div>
+              {validationChecks.length === 0 && <div className="text-zinc-500">{t('No checks returned.', '未返回检查项。')}</div>}
               {validationChecks.map((check, index) => (
                 <div key={`${check.name}-${index}`}>
                   [{check.status}] {check.name}: {check.message}
@@ -1511,7 +1652,7 @@ export function DomainPackPublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-white">Publish and Rollback</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Publish and Rollback', '发布与回滚')}</h2>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
             <div className="xl:col-span-2">
               <Select
@@ -1520,7 +1661,7 @@ export function DomainPackPublishPage() {
                 options={
                   rollbackOptions.length > 0
                     ? rollbackOptions
-                    : [{ value: '', label: 'No published revision' }]
+                    : [{ value: '', label: t('No published revision', '无已发布修订') }]
                 }
               />
             </div>
@@ -1534,7 +1675,7 @@ export function DomainPackPublishPage() {
               ) : (
                 <Upload className="h-4 w-4" />
               )}
-              Publish
+              {t('Publish', '发布')}
             </Button>
             <Button
               variant="outline"
@@ -1547,7 +1688,7 @@ export function DomainPackPublishPage() {
               ) : (
                 <History className="h-4 w-4" />
               )}
-              Rollback
+              {t('Rollback', '回滚')}
             </Button>
           </div>
         </CardContent>
@@ -1555,8 +1696,8 @@ export function DomainPackPublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-2 p-4">
-          <h2 className="text-sm font-semibold text-white">Release History</h2>
-          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">No release records.</div>}
+          <h2 className="text-sm font-semibold text-white">{t('Release History', '发布历史')}</h2>
+          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">{t('No release records.', '暂无发布记录。')}</div>}
           {releaseHistory.slice(0, 20).map((record) => (
             <div
               key={record.id}

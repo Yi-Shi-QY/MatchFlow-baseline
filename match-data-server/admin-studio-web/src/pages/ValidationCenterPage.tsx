@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
+import { useI18n } from '@/src/i18n';
 import {
   type AdminCatalogDomain,
   AdminStudioApiError,
@@ -126,6 +127,7 @@ function delay(ms: number) {
 }
 
 export default function ValidationCenterPage() {
+  const { t } = useI18n();
   const [domain, setDomain] = useState<AdminCatalogDomain>('datasource');
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
@@ -154,25 +156,46 @@ export default function ValidationCenterPage() {
     () => entries.find((entry) => entry.itemId === selectedItemId) || null,
     [entries, selectedItemId],
   );
+  const domainOptions = useMemo(
+    () =>
+      DOMAIN_OPTIONS.map((item) => ({
+        ...item,
+        label: item.value,
+      })),
+    [],
+  );
+  const runTypeOptions = useMemo(
+    () =>
+      RUN_TYPE_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'catalog_validate'
+            ? t('catalog_validate', '目录验证')
+            : item.value === 'pre_publish'
+              ? t('pre_publish', '发布前验证')
+              : t('post_publish', '发布后验证'),
+      })),
+    [t],
+  );
 
   const entryOptions = useMemo(() => {
     if (entries.length === 0) {
-      return [{ value: '', label: 'no items' }];
+      return [{ value: '', label: t('no items', '无条目') }];
     }
     return entries.map((entry) => ({
       value: entry.itemId,
       label: `${entry.itemId} (${entry.latestVersion})`,
     }));
-  }, [entries]);
+  }, [entries, t]);
 
   const revisionOptions = useMemo(() => {
-    const base = [{ value: '', label: 'latest published/draft' }];
+    const base = [{ value: '', label: t('latest published/draft', '最新发布/草稿') }];
     const mapped = revisions.map((revision) => ({
       value: revision.version,
       label: `${revision.version} [${revision.status}]`,
     }));
     return [...base, ...mapped];
-  }, [revisions]);
+  }, [revisions, t]);
 
   function upsertRecentRun(run: ValidationRunRecord) {
     setRecentRuns((previous) => {
@@ -245,7 +268,10 @@ export default function ValidationCenterPage() {
 
   async function handleStartRun() {
     if (!selectedItemId) {
-      setFeedback({ tone: 'error', message: 'Select itemId before starting validation.' });
+      setFeedback({
+        tone: 'error',
+        message: t('Select itemId before starting validation.', '启动验证前请先选择 itemId。'),
+      });
       return;
     }
     setIsStartingRun(true);
@@ -261,7 +287,7 @@ export default function ValidationCenterPage() {
       upsertRecentRun(run);
       setFeedback({
         tone: 'success',
-        message: `Validation run started: ${run.id}`,
+        message: t(`Validation run started: ${run.id}`, `验证任务已启动：${run.id}`),
       });
       if (run.status === 'queued' || run.status === 'running') {
         await pollRunUntilStable(run.id);
@@ -279,7 +305,7 @@ export default function ValidationCenterPage() {
   async function handleLookupRun() {
     const runId = runIdInput.trim();
     if (!runId) {
-      setFeedback({ tone: 'error', message: 'Provide runId.' });
+      setFeedback({ tone: 'error', message: t('Provide runId.', '请输入 runId。') });
       return;
     }
     setIsLookingUpRun(true);
@@ -289,7 +315,7 @@ export default function ValidationCenterPage() {
       upsertRecentRun(run);
       setFeedback({
         tone: 'success',
-        message: `Loaded run ${run.id}.`,
+        message: t(`Loaded run ${run.id}.`, `已加载任务 ${run.id}。`),
       });
       if (run.status === 'queued' || run.status === 'running') {
         await pollRunUntilStable(run.id);
@@ -311,7 +337,7 @@ export default function ValidationCenterPage() {
     }
     setFeedback({
       tone: 'info',
-      message: `Catalog refreshed for ${domain}.`,
+      message: t(`Catalog refreshed for ${domain}.`, `已刷新 ${domain} 目录。`),
     });
   }
 
@@ -354,9 +380,12 @@ export default function ValidationCenterPage() {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 p-4">
       <div>
-        <h1 className="text-base font-bold text-white">Validation Center</h1>
+        <h1 className="text-base font-bold text-white">{t('Validation Center', '验证中心')}</h1>
         <p className="text-xs text-zinc-500">
-          Run cross-domain validation jobs and inspect run status/checks from one page.
+          {t(
+            'Run cross-domain validation jobs and inspect run status/checks from one page.',
+            '在一个页面发起跨领域验证并查看任务状态与检查项。',
+          )}
         </p>
       </div>
 
@@ -378,18 +407,20 @@ export default function ValidationCenterPage() {
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-white">Run Validation</h2>
+            <h2 className="text-sm font-semibold text-white">{t('Run Validation', '执行验证')}</h2>
             <Link className="text-xs text-emerald-300 underline" to={DOMAIN_WORKSPACE_PATH[domain]}>
-              Open {domain} workspace
+              {t('Open', '打开')} {domain} {t('workspace', '工作区')}
             </Link>
           </div>
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-4">
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-500">domain</div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                {t('domain', '领域')}
+              </div>
               <Select
                 value={domain}
                 onChange={(value) => setDomain(value as AdminCatalogDomain)}
-                options={DOMAIN_OPTIONS}
+                options={domainOptions}
                 testId="validation-center-domain-select"
               />
             </div>
@@ -403,7 +434,9 @@ export default function ValidationCenterPage() {
               />
             </div>
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-500">version (optional)</div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                {t('version (optional)', '版本（可选）')}
+              </div>
               <Select
                 value={selectedVersion}
                 onChange={setSelectedVersion}
@@ -416,21 +449,21 @@ export default function ValidationCenterPage() {
               <Select
                 value={runType}
                 onChange={(value) => setRunType(value as ValidationRunType)}
-                options={RUN_TYPE_OPTIONS}
+                options={runTypeOptions}
                 testId="validation-center-run-type-select"
               />
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
-            <span>entries: {entries.length}</span>
+            <span>{t('entries', '条目')}: {entries.length}</span>
             <span>|</span>
-            <span>revisions: {revisions.length}</span>
+            <span>{t('revisions', '修订')}: {revisions.length}</span>
             <span>|</span>
-            <span>latest: {selectedEntry?.latestVersion || '-'}</span>
+            <span>{t('latest', '最新')}: {selectedEntry?.latestVersion || '-'}</span>
             {(isLoadingEntries || isLoadingRevisions) && (
               <span className="inline-flex items-center gap-1 text-blue-300">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading catalog
+                {t('loading catalog', '正在加载目录')}
               </span>
             )}
           </div>
@@ -442,7 +475,7 @@ export default function ValidationCenterPage() {
               data-testid="validation-center-start-run"
             >
               {isStartingRun ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
-              Start Run
+              {t('Start Run', '开始任务')}
             </Button>
             <Button
               variant="outline"
@@ -452,7 +485,7 @@ export default function ValidationCenterPage() {
               data-testid="validation-center-refresh-catalog"
             >
               <RefreshCw className="h-4 w-4" />
-              Refresh Catalog
+              {t('Refresh Catalog', '刷新目录')}
             </Button>
           </div>
         </CardContent>
@@ -460,13 +493,13 @@ export default function ValidationCenterPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-white">Run Lookup</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Run Lookup', '任务查询')}</h2>
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto]">
             <input
               type="text"
               value={runIdInput}
               onChange={(event) => setRunIdInput(event.target.value)}
-              placeholder="validation runId"
+              placeholder={t('validation runId', '验证 runId')}
               data-testid="validation-center-run-id-input"
               className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
             />
@@ -478,7 +511,7 @@ export default function ValidationCenterPage() {
               data-testid="validation-center-load-run"
             >
               {isLookingUpRun ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-              Load Run
+              {t('Load Run', '加载任务')}
             </Button>
           </div>
         </CardContent>
@@ -488,7 +521,7 @@ export default function ValidationCenterPage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4" data-testid="validation-center-run-details">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-white">Run Details</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Run Details', '任务详情')}</h2>
               {activeRun ? (
                 <span
                   className={`rounded-full border px-2.5 py-1 text-[11px] ${statusBadgeClass(activeRun.status)}`}
@@ -500,7 +533,7 @@ export default function ValidationCenterPage() {
             </div>
             {!activeRun && (
               <div className="rounded-lg border border-dashed border-white/15 bg-zinc-900/60 px-3 py-3 text-xs text-zinc-500">
-                No run selected. Start a run or lookup by runId.
+                {t('No run selected. Start a run or lookup by runId.', '未选择任务。请先启动验证或按 runId 查询。')}
               </div>
             )}
 
@@ -541,21 +574,21 @@ export default function ValidationCenterPage() {
                         : 'border-red-500/20 bg-red-500/10'
                     }`}
                   >
-                    <div className="text-zinc-400">checks</div>
+                    <div className="text-zinc-400">{t('checks', '检查项')}</div>
                     <div className="mt-1 text-white">{checks.length}</div>
                   </div>
                   <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2">
-                    <div className="text-zinc-400">failed checks</div>
+                    <div className="text-zinc-400">{t('failed checks', '失败检查项')}</div>
                     <div className="mt-1 text-red-300">{failedChecks.length}</div>
                   </div>
                   <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2">
-                    <div className="text-zinc-400">logs</div>
+                    <div className="text-zinc-400">{t('logs', '日志')}</div>
                     <div className="mt-1 text-zinc-300">{activeRun.logs.length}</div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="text-xs font-semibold text-zinc-300">Validation Checks</div>
+                  <div className="text-xs font-semibold text-zinc-300">{t('Validation Checks', '验证检查项')}</div>
                   <div className="max-h-[240px] space-y-2 overflow-auto rounded-lg border border-white/10 bg-zinc-900/80 p-2">
                     {checks.map((check) => (
                       <div key={`${check.name}_${check.status}`} className="rounded border border-white/10 bg-black/40 px-2 py-2">
@@ -575,13 +608,13 @@ export default function ValidationCenterPage() {
                       </div>
                     ))}
                     {checks.length === 0 && (
-                      <div className="text-xs text-zinc-500">No checks in this run result.</div>
+                      <div className="text-xs text-zinc-500">{t('No checks in this run result.', '本次任务结果没有检查项。')}</div>
                     )}
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="text-xs font-semibold text-zinc-300">Logs</div>
+                  <div className="text-xs font-semibold text-zinc-300">{t('Logs', '日志')}</div>
                   <div className="max-h-[180px] space-y-1 overflow-auto rounded-lg border border-white/10 bg-zinc-900/80 p-2 text-[11px]">
                     {activeRun.logs.map((log, index) => (
                       <div key={`${activeRun.id}_log_${index}`} className="rounded border border-white/10 bg-black/40 px-2 py-1">
@@ -591,7 +624,7 @@ export default function ValidationCenterPage() {
                       </div>
                     ))}
                     {activeRun.logs.length === 0 && (
-                      <div className="text-zinc-500">No logs returned for this run.</div>
+                      <div className="text-zinc-500">{t('No logs returned for this run.', '本次任务未返回日志。')}</div>
                     )}
                   </div>
                 </div>
@@ -602,7 +635,7 @@ export default function ValidationCenterPage() {
 
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold text-white">Recent Runs</h2>
+            <h2 className="text-sm font-semibold text-white">{t('Recent Runs', '最近任务')}</h2>
             <div className="max-h-[640px] space-y-2 overflow-auto" data-testid="validation-center-recent-list">
               {recentRuns.map((run, index) => (
                 <button
@@ -631,12 +664,14 @@ export default function ValidationCenterPage() {
               ))}
               {recentRuns.length === 0 && (
                 <div className="rounded-lg border border-dashed border-white/15 bg-zinc-900/50 px-3 py-3 text-xs text-zinc-500">
-                  No recent runs in this session.
+                  {t('No recent runs in this session.', '当前会话没有最近任务。')}
                 </div>
               )}
             </div>
             <div className="rounded-lg border border-white/10 bg-zinc-900/60 px-3 py-2 text-[11px] text-zinc-500">
-              A run is considered passed only when all checks return <span className="text-emerald-300">passed</span>.
+              {t('A run is considered passed only when all checks return ', '仅当全部检查项返回 ')}
+              <span className="text-emerald-300">{t('passed', 'passed')}</span>
+              {t('.', ' 时，任务才算通过。')}
             </div>
           </CardContent>
         </Card>
@@ -645,7 +680,7 @@ export default function ValidationCenterPage() {
       {(isPollingRun || isStartingRun) && (
         <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs text-blue-300">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Tracking validation run status...
+          {t('Tracking validation run status...', '正在跟踪验证任务状态...')}
         </div>
       )}
     </div>

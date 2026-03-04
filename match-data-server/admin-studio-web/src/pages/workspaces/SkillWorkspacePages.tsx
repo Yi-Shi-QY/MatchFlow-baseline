@@ -14,6 +14,7 @@ import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import DomainStageTabs from '@/src/components/layout/DomainStageTabs';
 import { Select } from '@/src/components/ui/Select';
+import { useI18n } from '@/src/i18n';
 import {
   AdminStudioApiError,
   CatalogEntry,
@@ -250,6 +251,60 @@ function buildSkillInvocationPreview(draft: SkillManifestDraft | null, payloadTe
   };
 }
 
+function localizeSkillIssue(issue: string, t: (en: string, zh?: string) => string) {
+  const validJsonSuffix = ' must be valid JSON.';
+  if (issue.endsWith(validJsonSuffix)) {
+    const label = issue.slice(0, -validJsonSuffix.length);
+    const labelZh = label === 'declaration.parameters'
+      ? '声明参数'
+      : label === 'Invocation payload'
+        ? '调用载荷'
+        : label;
+    return t(issue, `${labelZh} 必须是合法 JSON。`);
+  }
+
+  const jsonObjectSuffix = ' must be a JSON object.';
+  if (issue.endsWith(jsonObjectSuffix)) {
+    const label = issue.slice(0, -jsonObjectSuffix.length);
+    const labelZh = label === 'declaration.parameters'
+      ? '声明参数'
+      : label === 'Invocation payload'
+        ? '调用载荷'
+        : label;
+    return t(issue, `${labelZh} 必须是 JSON 对象。`);
+  }
+
+  const missingMatch = issue.match(/^Missing required keys: (.+)$/);
+  if (missingMatch) {
+    return t(issue, `缺失必需键：${missingMatch[1]}`);
+  }
+
+  switch (issue) {
+    case 'Draft not initialized.':
+      return t('Draft not initialized.', '草稿未初始化。');
+    case 'id is required.':
+      return t('id is required.', 'id 为必填项。');
+    case 'name is required.':
+      return t('name is required.', 'name 为必填项。');
+    case 'declaration.name is required.':
+      return t('declaration.name is required.', 'declaration.name 为必填项。');
+    case 'runtime.targetSkill is required.':
+      return t('runtime.targetSkill is required.', 'runtime.targetSkill 为必填项。');
+    case 'declaration.parameters.type should be object.':
+      return t('declaration.parameters.type should be object.', 'declaration.parameters.type 应为 object。');
+    case 'declaration.parameters JSON invalid.':
+      return t('declaration.parameters JSON invalid.', 'declaration.parameters JSON 非法。');
+    case 'Invocation payload invalid.':
+      return t('Invocation payload invalid.', '调用载荷非法。');
+    case 'declaration.parameters invalid.':
+      return t('declaration.parameters invalid.', 'declaration.parameters 非法。');
+    case 'runtime.targetSkill is empty.':
+      return t('runtime.targetSkill is empty.', 'runtime.targetSkill 为空。');
+    default:
+      return issue;
+  }
+}
+
 function describeError(error: unknown) {
   if (error instanceof AdminStudioApiError) {
     return `${error.code ? `${error.code}: ` : ''}${error.message}`;
@@ -308,11 +363,22 @@ function hasValidationFailure(run: ValidationRunRecord | null) {
   return getValidationChecks(run).some((check) => check.status !== 'passed');
 }
 
-function WorkspaceHeader({ title, description }: { title: string; description: string }) {
+function WorkspaceHeader({
+  title,
+  titleZh,
+  description,
+  descriptionZh,
+}: {
+  title: string;
+  titleZh?: string;
+  description: string;
+  descriptionZh?: string;
+}) {
+  const { t } = useI18n();
   return (
     <div>
-      <h1 className="text-base font-bold text-white">{title}</h1>
-      <p className="text-xs text-zinc-500">{description}</p>
+      <h1 className="text-base font-bold text-white">{t(title, titleZh)}</h1>
+      <p className="text-xs text-zinc-500">{t(description, descriptionZh)}</p>
     </div>
   );
 }
@@ -334,6 +400,7 @@ function FeedbackBanner({ feedback }: { feedback: FeedbackState }) {
 }
 
 export function SkillDesignPage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -368,6 +435,19 @@ export function SkillDesignPage() {
   const manifestPreview = useMemo(
     () => (draft ? JSON.stringify(toSkillManifest(draft), null, 2) : ''),
     [draft],
+  );
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
   );
 
   async function loadEntries(preferredItemId?: string) {
@@ -443,7 +523,7 @@ export function SkillDesignPage() {
     const itemId = asText(newItemId);
     const version = asText(newEntryVersion);
     if (!itemId || !version) {
-      setFeedback({ tone: 'error', message: 'Provide itemId and version.' });
+      setFeedback({ tone: 'error', message: t('Provide itemId and version.', '请填写 itemId 和版本。') });
       return;
     }
     setIsCreatingEntry(true);
@@ -454,7 +534,7 @@ export function SkillDesignPage() {
         channel: publishChannel,
         manifest: toSkillManifest({ ...(draft || buildEmptySkillDraft(itemId)), id: itemId }),
       });
-      setFeedback({ tone: 'success', message: `Created skill:${itemId}@${version}.` });
+      setFeedback({ tone: 'success', message: t(`Created skill:${itemId}@${version}.`, `已创建 skill:${itemId}@${version}。`) });
       await loadEntries(itemId);
       await loadRevisions(itemId, version);
       setNewItemId('');
@@ -468,7 +548,7 @@ export function SkillDesignPage() {
   async function handleCreateRevision() {
     const version = asText(newRevisionVersion);
     if (!selectedItemId || !version || !draft) {
-      setFeedback({ tone: 'error', message: 'Select item and revision version.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision version.', '请选择条目和修订版本。') });
       return;
     }
     setIsCreatingRevision(true);
@@ -478,7 +558,7 @@ export function SkillDesignPage() {
         channel: publishChannel,
         manifest: toSkillManifest({ ...draft, id: selectedItemId }),
       });
-      setFeedback({ tone: 'success', message: `Created revision ${selectedItemId}@${version}.` });
+      setFeedback({ tone: 'success', message: t(`Created revision ${selectedItemId}@${version}.`, `已创建修订 ${selectedItemId}@${version}。`) });
       await loadRevisions(selectedItemId, version);
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -489,7 +569,7 @@ export function SkillDesignPage() {
 
   async function handleSaveDraft() {
     if (!selectedItemId || !selectedVersion || !draft || selectedRevision?.status !== 'draft') {
-      setFeedback({ tone: 'error', message: 'Select draft revision before saving.' });
+      setFeedback({ tone: 'error', message: t('Select draft revision before saving.', '保存前请先选择草稿修订。') });
       return;
     }
     setIsSavingDraft(true);
@@ -498,7 +578,7 @@ export function SkillDesignPage() {
         channel: publishChannel,
         manifest: toSkillManifest({ ...draft, id: selectedItemId }),
       });
-      setFeedback({ tone: 'success', message: `Draft saved: ${selectedItemId}@${selectedVersion}.` });
+      setFeedback({ tone: 'success', message: t(`Draft saved: ${selectedItemId}@${selectedVersion}.`, `草稿已保存：${selectedItemId}@${selectedVersion}。`) });
       await loadRevisions(selectedItemId, selectedVersion);
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -512,13 +592,13 @@ export function SkillDesignPage() {
     setInvocationPreview(preview);
     setFeedback({
       tone: preview && preview.readiness === 'ready' ? 'success' : 'info',
-      message: preview ? `Invocation preview generated (${preview.readiness}).` : 'Draft unavailable.',
+      message: preview ? t(`Invocation preview generated (${preview.readiness}).`, `调用预览已生成（${preview.readiness}）。`) : t('Draft unavailable.', '草稿不可用。'),
     });
   }
 
   async function handleRunLiveModelPreview() {
     if (!draft) {
-      setFeedback({ tone: 'error', message: 'Draft not initialized.' });
+      setFeedback({ tone: 'error', message: t('Draft not initialized.', '草稿未初始化。') });
       return;
     }
     setIsRunningLiveModelPreview(true);
@@ -534,7 +614,7 @@ export function SkillDesignPage() {
       setLiveModelResult(result);
       setFeedback({
         tone: 'success',
-        message: `DeepSeek skill preview completed in ${result.latencyMs}ms (${result.model}).`,
+        message: t(`DeepSeek skill preview completed in ${result.latencyMs}ms (${result.model}).`, `DeepSeek 技能预览完成：${result.latencyMs}ms（${result.model}）。`),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -547,7 +627,9 @@ export function SkillDesignPage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Skill Studio / Design"
+        titleZh="技能工作台 / 设计"
         description="Edit declaration/runtime, validate parameters JSON, and run invocation test preview."
+        descriptionZh="编辑声明与运行配置，校验 parameters JSON，并执行调用测试预览。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="design" />
       {feedback && <FeedbackBanner feedback={feedback} />}
@@ -556,23 +638,23 @@ export function SkillDesignPage() {
         <CardContent className="space-y-3 p-4">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div className="lg:col-span-2">
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Skill Item</label>
-              <Select value={selectedItemId || ''} onChange={(value) => setSelectedItemId(value)} options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: 'No item' }]} />
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Skill Item', '技能条目')}</label>
+              <Select value={selectedItemId || ''} onChange={(value) => setSelectedItemId(value)} options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: t('No item', '无条目') }]} />
             </div>
             <div className="lg:col-span-2">
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Revision</label>
-              <Select value={selectedVersion || ''} onChange={(value) => setSelectedVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: 'No revision' }]} />
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Revision', '修订')}</label>
+              <Select value={selectedVersion || ''} onChange={(value) => setSelectedVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: t('No revision', '无修订') }]} />
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1" onClick={() => void loadEntries(selectedItemId || undefined)} disabled={isLoadingEntries}>
               {isLoadingEntries ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
             {isLoadingRevisions && (
               <div className="flex items-center gap-1 text-xs text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading revisions...
+                {t('loading revisions...', '正在加载修订...')}
               </div>
             )}
           </div>
@@ -581,24 +663,24 @@ export function SkillDesignPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-white">Create and Save</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Create and Save', '创建与保存')}</h2>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-5">
-            <input className={INPUT_CLASS} value={newItemId} onChange={(event) => setNewItemId(event.target.value)} placeholder="new item id" />
-            <input className={INPUT_CLASS} value={newEntryVersion} onChange={(event) => setNewEntryVersion(event.target.value)} placeholder="entry version" />
-            <input className={INPUT_CLASS} value={newRevisionVersion} onChange={(event) => setNewRevisionVersion(event.target.value)} placeholder="revision version" />
-            <Select value={publishChannel} onChange={(value) => setPublishChannel(value as CatalogChannel)} options={CHANNEL_OPTIONS} />
+            <input className={INPUT_CLASS} value={newItemId} onChange={(event) => setNewItemId(event.target.value)} placeholder={t('new item id', '新条目 ID')} />
+            <input className={INPUT_CLASS} value={newEntryVersion} onChange={(event) => setNewEntryVersion(event.target.value)} placeholder={t('entry version', '条目版本')} />
+            <input className={INPUT_CLASS} value={newRevisionVersion} onChange={(event) => setNewRevisionVersion(event.target.value)} placeholder={t('revision version', '修订版本')} />
+            <Select value={publishChannel} onChange={(value) => setPublishChannel(value as CatalogChannel)} options={channelOptions} />
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void handleCreateEntry()} disabled={isCreatingEntry} className="gap-2">
                 {isCreatingEntry ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Create
+                {t('Create', '创建')}
               </Button>
               <Button variant="outline" onClick={() => void handleCreateRevision()} disabled={isCreatingRevision || !selectedItemId} className="gap-2">
                 {isCreatingRevision ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Revision
+                {t('Revision', '修订')}
               </Button>
               <Button variant="outline" onClick={() => void handleSaveDraft()} disabled={isSavingDraft || selectedRevision?.status !== 'draft'} className="gap-2">
                 {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Save
+                {t('Save', '保存')}
               </Button>
             </div>
           </div>
@@ -608,16 +690,16 @@ export function SkillDesignPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold text-white">Draft Builder</h2>
-            {!draft && <div className="text-xs text-zinc-500">Draft not initialized.</div>}
+            <h2 className="text-sm font-semibold text-white">{t('Draft Builder', '草稿构建器')}</h2>
+            {!draft && <div className="text-xs text-zinc-500">{t('Draft not initialized.', '草稿未初始化。')}</div>}
             {draft && (
               <>
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                   <input className={INPUT_CLASS} value={draft.id} onChange={(event) => updateDraft({ id: event.target.value })} placeholder="id" />
-                  <input className={INPUT_CLASS} value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} placeholder="name" />
+                  <input className={INPUT_CLASS} value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} placeholder={t('name', '名称')} />
                   <input className={INPUT_CLASS} value={draft.minAppVersion} onChange={(event) => updateDraft({ minAppVersion: event.target.value })} placeholder="minAppVersion" />
                 </div>
-                <textarea className={TEXTAREA_CLASS} value={draft.description} onChange={(event) => updateDraft({ description: event.target.value })} placeholder="description" />
+                <textarea className={TEXTAREA_CLASS} value={draft.description} onChange={(event) => updateDraft({ description: event.target.value })} placeholder={t('description', '描述')} />
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                   <input className={INPUT_CLASS} value={draft.declarationName} onChange={(event) => updateDraft({ declarationName: event.target.value })} placeholder="declaration.name" />
                   <input className={INPUT_CLASS} value={draft.targetSkill} onChange={(event) => updateDraft({ targetSkill: event.target.value })} placeholder="runtime.targetSkill" />
@@ -632,19 +714,19 @@ export function SkillDesignPage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-white">Validation and Invocation Preview</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Validation and Invocation Preview', '验证与调用预览')}</h2>
               <Button onClick={handleRunInvocationPreview} className="gap-2">
                 <PackageCheck className="h-4 w-4" />
-                Test Preview
+                {t('Test Preview', '测试预览')}
               </Button>
             </div>
             <div className={`rounded-lg border px-3 py-2 text-xs ${localIssues.length === 0 ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-red-500/20 bg-red-500/10 text-red-300'}`}>
-              {localIssues.length === 0 ? 'Local validation passed.' : `${localIssues.length} local issues.`}
+              {localIssues.length === 0 ? t('Local validation passed.', '本地验证通过。') : t(`${localIssues.length} local issues.`, `本地问题 ${localIssues.length} 项。`)}
             </div>
             {localIssues.length > 0 && (
               <ul className="list-disc space-y-1 pl-5 text-xs text-zinc-300">
                 {localIssues.map((issue) => (
-                  <li key={issue}>{issue}</li>
+                  <li key={issue}>{localizeSkillIssue(issue, t)}</li>
                 ))}
               </ul>
             )}
@@ -652,16 +734,16 @@ export function SkillDesignPage() {
             {invocationPreview && (
               <div className="rounded-lg border border-white/10 bg-zinc-900/40 p-3 text-xs text-zinc-300">
                 <div className={invocationPreview.readiness === 'ready' ? 'text-emerald-300' : 'text-amber-300'}>
-                  preview status: {invocationPreview.readiness}
+                  {t('preview status', '预览状态')}: {invocationPreview.readiness}
                 </div>
-                <div>required keys: {invocationPreview.requiredKeys.join(', ') || '-'}</div>
-                <div>payload keys: {invocationPreview.payloadKeys.join(', ') || '-'}</div>
-                <div>missing keys: {invocationPreview.missingRequiredKeys.join(', ') || '-'}</div>
-                <div>generatedAt: {formatTime(invocationPreview.generatedAt)}</div>
+                <div>{t('required keys', '必需键')}: {invocationPreview.requiredKeys.join(', ') || '-'}</div>
+                <div>{t('payload keys', '载荷键')}: {invocationPreview.payloadKeys.join(', ') || '-'}</div>
+                <div>{t('missing keys', '缺失键')}: {invocationPreview.missingRequiredKeys.join(', ') || '-'}</div>
+                <div>{t('generatedAt', '生成时间')}: {formatTime(invocationPreview.generatedAt)}</div>
                 {invocationPreview.warnings.length > 0 && (
                   <ul className="mt-1 list-disc space-y-1 pl-5 text-amber-300">
                     {invocationPreview.warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
+                      <li key={warning}>{localizeSkillIssue(warning, t)}</li>
                     ))}
                   </ul>
                 )}
@@ -670,42 +752,42 @@ export function SkillDesignPage() {
 
             <div className="border-t border-white/10 pt-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">DeepSeek Live Invocation Preview</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">{t('DeepSeek Live Invocation Preview', 'DeepSeek 实时调用预览')}</h3>
                 <Button
                   onClick={() => void handleRunLiveModelPreview()}
                   disabled={isRunningLiveModelPreview}
                   className="gap-2"
                 >
                   {isRunningLiveModelPreview ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
-                  Run Live Preview
+                  {t('Run Live Preview', '运行实时预览')}
                 </Button>
               </div>
               <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">model</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('model', '模型')}</label>
                   <input className={INPUT_CLASS} value={liveModelName} onChange={(event) => setLiveModelName(event.target.value)} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">temperature</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('temperature', '温度')}</label>
                   <input className={INPUT_CLASS} value={liveTemperature} onChange={(event) => setLiveTemperature(event.target.value)} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">maxTokens</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('maxTokens', '最大 Tokens')}</label>
                   <input className={INPUT_CLASS} value={liveMaxTokens} onChange={(event) => setLiveMaxTokens(event.target.value)} />
                 </div>
               </div>
               {liveModelResult && (
                 <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-zinc-200">
                   <div className="font-semibold text-emerald-300">
-                    provider={liveModelResult.provider}, model={liveModelResult.model}, latency={liveModelResult.latencyMs}ms
+                    {t('provider', '提供方')}={liveModelResult.provider}, {t('model', '模型')}={liveModelResult.model}, {t('latency', '延迟')}={liveModelResult.latencyMs}ms
                   </div>
                   <div className="mt-2 text-zinc-400">
-                    usage: {JSON.stringify(liveModelResult.usage)}
+                    {t('usage', '用量')}: {JSON.stringify(liveModelResult.usage)}
                   </div>
                   <div className="mt-2">
-                    invocation target: {liveModelResult.invocation.targetSkill || '-'} | missing required:
+                    {t('invocation target', '调用目标')}: {liveModelResult.invocation.targetSkill || '-'} | {t('missing required', '缺失必需项')}:
                     {' '}
-                    {liveModelResult.invocation.missingRequiredKeys.join(', ') || 'none'}
+                    {liveModelResult.invocation.missingRequiredKeys.join(', ') || t('none', '无')}
                   </div>
                   <div className="mt-2 whitespace-pre-wrap rounded border border-white/10 bg-black/20 p-2">
                     {liveModelResult.output.content}
@@ -719,7 +801,7 @@ export function SkillDesignPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="p-4">
-          <h2 className="mb-2 text-sm font-semibold text-white">Manifest Preview</h2>
+          <h2 className="mb-2 text-sm font-semibold text-white">{t('Manifest Preview', '清单预览')}</h2>
           <textarea readOnly className="min-h-[240px] w-full rounded-lg border border-white/10 bg-zinc-900 p-3 font-mono text-xs text-zinc-200 focus:outline-none" value={manifestPreview} spellCheck={false} />
         </CardContent>
       </Card>
@@ -728,6 +810,7 @@ export function SkillDesignPage() {
 }
 
 export function SkillManagePage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -799,14 +882,14 @@ export function SkillManagePage() {
 
   async function handleDiff() {
     if (!selectedItemId || !diffFromVersion || !diffToVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and diff versions.' });
+      setFeedback({ tone: 'error', message: t('Select item and diff versions.', '请选择条目与对比版本。') });
       return;
     }
     setIsDiffing(true);
     try {
       const result = await getCatalogRevisionDiff('skill', selectedItemId, diffFromVersion, diffToVersion);
       setDiffResult(result);
-      setFeedback({ tone: 'info', message: `Loaded diff ${diffFromVersion} -> ${diffToVersion}.` });
+      setFeedback({ tone: 'info', message: t(`Loaded diff ${diffFromVersion} -> ${diffToVersion}.`, `已加载差异 ${diffFromVersion} -> ${diffToVersion}。`) });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
     } finally {
@@ -830,25 +913,30 @@ export function SkillManagePage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
-      <WorkspaceHeader title="Skill Studio / Manage" description="Compare revisions and inspect declaration/runtime quality." />
+      <WorkspaceHeader
+        title="Skill Studio / Manage"
+        titleZh="技能工作台 / 管理"
+        description="Compare revisions and inspect declaration/runtime quality."
+        descriptionZh="对比修订并检查声明与运行时质量。"
+      />
       <DomainStageTabs basePath={BASE_PATH} activeStage="manage" />
       {feedback && <FeedbackBanner feedback={feedback} />}
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <Select value={selectedItemId || ''} onChange={(value) => setSelectedItemId(value)} options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: 'No item' }]} />
-            <Select value={selectedVersion || ''} onChange={(value) => setSelectedVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: 'No revision' }]} />
+            <Select value={selectedItemId || ''} onChange={(value) => setSelectedItemId(value)} options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: t('No item', '无条目') }]} />
+            <Select value={selectedVersion || ''} onChange={(value) => setSelectedVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: t('No revision', '无修订') }]} />
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1" onClick={() => void loadEntries(selectedItemId || undefined)} disabled={isLoadingEntries}>
               {isLoadingEntries ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
             {isLoadingRevisions && (
               <div className="flex items-center gap-1 text-xs text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading revisions...
+                {t('loading revisions...', '正在加载修订...')}
               </div>
             )}
           </div>
@@ -859,23 +947,23 @@ export function SkillManagePage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-white">Diff</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Diff', '差异')}</h2>
               <Button variant="outline" size="sm" onClick={() => void handleDiff()} disabled={isDiffing} className="gap-1">
                 {isDiffing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitCompare className="h-3.5 w-3.5" />}
-                Run
+                {t('Run', '运行')}
               </Button>
             </div>
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <Select value={diffFromVersion || ''} onChange={(value) => setDiffFromVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: 'No revision' }]} />
-              <Select value={diffToVersion || ''} onChange={(value) => setDiffToVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: 'No revision' }]} />
+              <Select value={diffFromVersion || ''} onChange={(value) => setDiffFromVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: t('No revision', '无修订') }]} />
+              <Select value={diffToVersion || ''} onChange={(value) => setDiffToVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: t('No revision', '无修订') }]} />
             </div>
-            {!diffResult && <div className="text-xs text-zinc-500">Run diff to inspect manifest changes.</div>}
+            {!diffResult && <div className="text-xs text-zinc-500">{t('Run diff to inspect manifest changes.', '运行差异对比以检查清单变更。')}</div>}
             {diffResult && (
               <div className="rounded-lg border border-white/10 bg-zinc-900/40 p-3 text-xs text-zinc-300">
-                <div>totalChanges: {diffResult.diff.summary.totalChanges}</div>
-                <div>added: {diffResult.diff.summary.addedCount}</div>
-                <div>removed: {diffResult.diff.summary.removedCount}</div>
-                <div>changed: {diffResult.diff.summary.changedCount}</div>
+                <div>{t('totalChanges', '总变更数')}: {diffResult.diff.summary.totalChanges}</div>
+                <div>{t('added', '新增')}: {diffResult.diff.summary.addedCount}</div>
+                <div>{t('removed', '移除')}: {diffResult.diff.summary.removedCount}</div>
+                <div>{t('changed', '变更')}: {diffResult.diff.summary.changedCount}</div>
               </div>
             )}
           </CardContent>
@@ -883,7 +971,7 @@ export function SkillManagePage() {
 
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold text-white">Manifest Inspector</h2>
+            <h2 className="text-sm font-semibold text-white">{t('Manifest Inspector', '清单检查')}</h2>
             <textarea
               readOnly
               value={selectedRevision ? JSON.stringify(selectedRevision.manifest || {}, null, 2) : ''}
@@ -891,7 +979,7 @@ export function SkillManagePage() {
               className="min-h-[220px] w-full rounded-lg border border-white/10 bg-zinc-900 p-3 font-mono text-xs text-zinc-200 focus:outline-none"
             />
             <div className={`rounded-lg border px-3 py-2 text-xs ${qualityIssues.length === 0 ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-red-500/20 bg-red-500/10 text-red-300'}`}>
-              {qualityIssues.length === 0 ? 'Quality checks passed.' : `${qualityIssues.length} quality issues.`}
+              {qualityIssues.length === 0 ? t('Quality checks passed.', '质量检查通过。') : t(`${qualityIssues.length} quality issues.`, `质量问题 ${qualityIssues.length} 项。`)}
             </div>
           </CardContent>
         </Card>
@@ -899,8 +987,8 @@ export function SkillManagePage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-2 p-4">
-          <h2 className="text-sm font-semibold text-white">Release History</h2>
-          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">No release records.</div>}
+          <h2 className="text-sm font-semibold text-white">{t('Release History', '发布历史')}</h2>
+          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">{t('No release records.', '暂无发布记录。')}</div>}
           {releaseHistory.slice(0, 20).map((record) => (
             <div key={record.id} className="rounded-lg border border-white/10 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-300">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -921,6 +1009,7 @@ export function SkillManagePage() {
 }
 
 export function SkillPublishPage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -949,6 +1038,32 @@ export function SkillPublishPage() {
   const publishGatePassed = useMemo(
     () => !!validationRun && validationRun.status === 'succeeded' && !hasValidationFailure(validationRun),
     [validationRun],
+  );
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
+  );
+  const validationTypeOptions = useMemo(
+    () =>
+      VALIDATION_TYPE_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'catalog_validate'
+            ? t('catalog_validate', '目录验证')
+            : item.value === 'pre_publish'
+              ? t('pre_publish', '发布前验证')
+              : t('post_publish', '发布后验证'),
+      })),
+    [t],
   );
 
   async function loadEntries(preferredItemId?: string) {
@@ -1006,7 +1121,7 @@ export function SkillPublishPage() {
 
   async function handleRunValidation() {
     if (!selectedItemId || !selectedVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and revision before validation.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision before validation.', '验证前请先选择条目和修订。') });
       return;
     }
     setIsRunningValidation(true);
@@ -1019,7 +1134,7 @@ export function SkillPublishPage() {
       });
       setValidationRun(created);
       setValidationLookupRunId(created.id);
-      setFeedback({ tone: 'info', message: `Validation started: ${created.id} (${created.status}).` });
+      setFeedback({ tone: 'info', message: t(`Validation started: ${created.id} (${created.status}).`, `验证已启动：${created.id}（${created.status}）。`) });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
     } finally {
@@ -1030,7 +1145,7 @@ export function SkillPublishPage() {
   async function handleFetchValidationRun() {
     const runId = asText(validationLookupRunId);
     if (!runId) {
-      setFeedback({ tone: 'error', message: 'Provide runId first.' });
+      setFeedback({ tone: 'error', message: t('Provide runId first.', '请先填写 runId。') });
       return;
     }
     setIsFetchingValidation(true);
@@ -1050,11 +1165,11 @@ export function SkillPublishPage() {
 
   async function handlePublish() {
     if (!selectedItemId || !selectedVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and revision before publish.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision before publish.', '发布前请先选择条目和修订。') });
       return;
     }
     if (!publishGatePassed) {
-      setFeedback({ tone: 'error', message: 'Publish gate blocked: validation not passed.' });
+      setFeedback({ tone: 'error', message: t('Publish gate blocked: validation not passed.', '发布门禁阻塞：验证未通过。') });
       return;
     }
     setIsPublishing(true);
@@ -1066,7 +1181,7 @@ export function SkillPublishPage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Published ${selectedItemId}@${selectedVersion} to ${publishChannel}.`,
+        message: t(`Published ${selectedItemId}@${selectedVersion} to ${publishChannel}.`, `已发布 ${selectedItemId}@${selectedVersion} 到 ${publishChannel}。`),
       });
       await loadRevisions(selectedItemId, selectedVersion);
       await loadHistory();
@@ -1079,7 +1194,7 @@ export function SkillPublishPage() {
 
   async function handleRollback() {
     if (!selectedItemId || !rollbackVersion) {
-      setFeedback({ tone: 'error', message: 'Select rollback target version.' });
+      setFeedback({ tone: 'error', message: t('Select rollback target version.', '请选择回滚目标版本。') });
       return;
     }
     setIsRollbacking(true);
@@ -1089,7 +1204,7 @@ export function SkillPublishPage() {
         channel: publishChannel,
         validationRunId: validationRun?.id || undefined,
       });
-      setFeedback({ tone: 'success', message: `Rollback submitted: ${selectedItemId} -> ${rollbackVersion}.` });
+      setFeedback({ tone: 'success', message: t(`Rollback submitted: ${selectedItemId} -> ${rollbackVersion}.`, `回滚已提交：${selectedItemId} -> ${rollbackVersion}。`) });
       await loadRevisions(selectedItemId, rollbackVersion);
       await loadHistory();
     } catch (error) {
@@ -1121,7 +1236,12 @@ export function SkillPublishPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
-      <WorkspaceHeader title="Skill Studio / Publish" description="Run validation gate, publish, and rollback safely." />
+      <WorkspaceHeader
+        title="Skill Studio / Publish"
+        titleZh="技能工作台 / 发布"
+        description="Run validation gate, publish, and rollback safely."
+        descriptionZh="执行验证门禁并安全发布、回滚。"
+      />
       <DomainStageTabs basePath={BASE_PATH} activeStage="publish" />
       {feedback && <FeedbackBanner feedback={feedback} />}
 
@@ -1129,32 +1249,32 @@ export function SkillPublishPage() {
         <CardContent className="space-y-3 p-4">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div className="lg:col-span-2">
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Skill Item</label>
-              <Select value={selectedItemId || ''} onChange={(value) => setSelectedItemId(value)} options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: 'No item' }]} />
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Skill Item', '技能条目')}</label>
+              <Select value={selectedItemId || ''} onChange={(value) => setSelectedItemId(value)} options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: t('No item', '无条目') }]} />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Revision</label>
-              <Select value={selectedVersion || ''} onChange={(value) => setSelectedVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: 'No revision' }]} />
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Revision', '修订')}</label>
+              <Select value={selectedVersion || ''} onChange={(value) => setSelectedVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: t('No revision', '无修订') }]} />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Channel</label>
-              <Select value={publishChannel} onChange={(value) => setPublishChannel(value as CatalogChannel)} options={CHANNEL_OPTIONS} />
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Channel', '通道')}</label>
+              <Select value={publishChannel} onChange={(value) => setPublishChannel(value as CatalogChannel)} options={channelOptions} />
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1" onClick={() => void loadEntries(selectedItemId || undefined)} disabled={isLoadingEntries}>
               {isLoadingEntries ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
             {isLoadingRevisions && (
               <div className="flex items-center gap-1 text-xs text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading revisions...
+                {t('loading revisions...', '正在加载修订...')}
               </div>
             )}
             {selectedRevision && (
               <div className="rounded-lg border border-white/10 bg-zinc-900/40 px-2 py-1 text-xs text-zinc-400">
-                status={selectedRevision.status}, publishedAt={formatTime(selectedRevision.publishedAt)}
+                {t('status', '状态')}={selectedRevision.status}, {t('publishedAt', '发布时间')}={formatTime(selectedRevision.publishedAt)}
               </div>
             )}
           </div>
@@ -1163,28 +1283,28 @@ export function SkillPublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-white">Validation Gate</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Validation Gate', '验证门禁')}</h2>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
-            <Select value={validationType} onChange={(value) => setValidationType(value as ValidationRunType)} options={VALIDATION_TYPE_OPTIONS} />
-            <input className={`xl:col-span-2 ${INPUT_CLASS}`} value={validationLookupRunId} onChange={(event) => setValidationLookupRunId(event.target.value)} placeholder="validation run id" />
+            <Select value={validationType} onChange={(value) => setValidationType(value as ValidationRunType)} options={validationTypeOptions} />
+            <input className={`xl:col-span-2 ${INPUT_CLASS}`} value={validationLookupRunId} onChange={(event) => setValidationLookupRunId(event.target.value)} placeholder={t('validation run id', '验证任务 ID')} />
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => void handleRunValidation()} disabled={isRunningValidation || !selectedItemId || !selectedVersion} className="gap-2">
                 {isRunningValidation ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                Run
+                {t('Run', '运行')}
               </Button>
               <Button variant="outline" onClick={() => void handleFetchValidationRun()} disabled={isFetchingValidation} className="gap-2">
                 {isFetchingValidation ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Fetch
+                {t('Fetch', '查询')}
               </Button>
             </div>
           </div>
           <div className={`rounded-lg border px-3 py-2 text-xs ${publishGatePassed ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/20 bg-amber-500/10 text-amber-300'}`}>
-            Publish Gate: {publishGatePassed ? 'Passed' : 'Blocked'}
+            {t('Publish Gate', '发布门禁')}: {publishGatePassed ? t('Passed', '通过') : t('Blocked', '阻塞')}
           </div>
           {validationRun && (
             <div className="space-y-1 rounded-lg border border-white/10 bg-zinc-900/40 p-3 text-xs text-zinc-300">
-              <div>runId={validationRun.id}, status={validationRun.status}</div>
-              {validationChecks.length === 0 && <div className="text-zinc-500">No checks returned.</div>}
+              <div>runId={validationRun.id}, {t('status', '状态')}={validationRun.status}</div>
+              {validationChecks.length === 0 && <div className="text-zinc-500">{t('No checks returned.', '未返回检查项。')}</div>}
               {validationChecks.map((check, index) => (
                 <div key={`${check.name}-${index}`}>
                   [{check.status}] {check.name}: {check.message}
@@ -1197,18 +1317,18 @@ export function SkillPublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-white">Publish and Rollback</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Publish and Rollback', '发布与回滚')}</h2>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
             <div className="xl:col-span-2">
-              <Select value={rollbackVersion || ''} onChange={(value) => setRollbackVersion(value)} options={rollbackOptions.length > 0 ? rollbackOptions : [{ value: '', label: 'No published revision' }]} />
+              <Select value={rollbackVersion || ''} onChange={(value) => setRollbackVersion(value)} options={rollbackOptions.length > 0 ? rollbackOptions : [{ value: '', label: t('No published revision', '无已发布修订') }]} />
             </div>
             <Button onClick={() => void handlePublish()} disabled={!publishGatePassed || isPublishing || !selectedItemId || !selectedVersion} className="gap-2">
               {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Publish
+              {t('Publish', '发布')}
             </Button>
             <Button variant="outline" onClick={() => void handleRollback()} disabled={isRollbacking || !selectedItemId || !rollbackVersion} className="gap-2">
               {isRollbacking ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
-              Rollback
+              {t('Rollback', '回滚')}
             </Button>
           </div>
         </CardContent>
@@ -1216,8 +1336,8 @@ export function SkillPublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-2 p-4">
-          <h2 className="text-sm font-semibold text-white">Release History</h2>
-          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">No release records.</div>}
+          <h2 className="text-sm font-semibold text-white">{t('Release History', '发布历史')}</h2>
+          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">{t('No release records.', '暂无发布记录。')}</div>}
           {releaseHistory.slice(0, 20).map((record) => (
             <div key={record.id} className="rounded-lg border border-white/10 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-300">
               <div className="flex flex-wrap items-center justify-between gap-2">

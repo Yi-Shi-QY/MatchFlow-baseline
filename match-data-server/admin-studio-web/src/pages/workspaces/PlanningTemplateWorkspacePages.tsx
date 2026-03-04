@@ -14,6 +14,7 @@ import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import DomainStageTabs from '@/src/components/layout/DomainStageTabs';
 import { Select } from '@/src/components/ui/Select';
+import { useI18n } from '@/src/i18n';
 import {
   AdminStudioApiError,
   CatalogEntry,
@@ -283,6 +284,63 @@ function getPlanningDraftIssues(draft: PlanningTemplateDraft | null) {
   return issues;
 }
 
+function localizePlanningDraftIssue(issue: string, t: (en: string, zh: string) => string) {
+  if (issue === 'Draft not initialized.') {
+    return t('Draft not initialized.', '草稿未初始化。');
+  }
+  if (issue === 'id is required.') {
+    return t('id is required.', 'id 为必填项。');
+  }
+  if (issue === 'name is required.') {
+    return t('name is required.', 'name 为必填项。');
+  }
+  if (issue === 'At least one segment is required.') {
+    return t('At least one segment is required.', '至少需要一个分段。');
+  }
+  if (issue === 'segment[1] should use contextMode = independent.') {
+    return t('segment[1] should use contextMode = independent.', 'segment[1] 的 contextMode 应为 independent。');
+  }
+  if (issue.startsWith('segment id duplicated: ')) {
+    const duplicatedId = issue.slice('segment id duplicated: '.length);
+    return t(`segment id duplicated: ${duplicatedId}`, `segment id 重复：${duplicatedId}`);
+  }
+  if (issue.startsWith('requiredAgents missing in segments: ')) {
+    const missing = issue.slice('requiredAgents missing in segments: '.length);
+    return t(`requiredAgents missing in segments: ${missing}`, `segments 中缺少 requiredAgents：${missing}`);
+  }
+
+  const segmentIdRequired = issue.match(/^segment\[(\d+)\] id is required\.$/);
+  if (segmentIdRequired) {
+    return t(
+      `segment[${segmentIdRequired[1]}] id is required.`,
+      `segment[${segmentIdRequired[1]}] 的 id 为必填项。`,
+    );
+  }
+  const agentTypeRequired = issue.match(/^segment\[(\d+)\] agentType is required\.$/);
+  if (agentTypeRequired) {
+    return t(
+      `segment[${agentTypeRequired[1]}] agentType is required.`,
+      `segment[${agentTypeRequired[1]}] 的 agentType 为必填项。`,
+    );
+  }
+  const titleRequired = issue.match(/^segment\[(\d+)\] title \(EN or ZH\) is required\.$/);
+  if (titleRequired) {
+    return t(
+      `segment[${titleRequired[1]}] title (EN or ZH) is required.`,
+      `segment[${titleRequired[1]}] 的 title（EN 或 ZH）为必填项。`,
+    );
+  }
+  const focusRequired = issue.match(/^segment\[(\d+)\] focus \(EN or ZH\) is required\.$/);
+  if (focusRequired) {
+    return t(
+      `segment[${focusRequired[1]}] focus (EN or ZH) is required.`,
+      `segment[${focusRequired[1]}] 的 focus（EN 或 ZH）为必填项。`,
+    );
+  }
+
+  return issue;
+}
+
 function buildPlanningTestPreview(draft: PlanningTemplateDraft | null): PlanningTestPreview | null {
   if (!draft) {
     return null;
@@ -396,11 +454,22 @@ function hasValidationFailure(run: ValidationRunRecord | null) {
   return getValidationChecks(run).some((check) => check.status !== 'passed');
 }
 
-function WorkspaceHeader({ title, description }: { title: string; description: string }) {
+function WorkspaceHeader({
+  title,
+  titleZh,
+  description,
+  descriptionZh,
+}: {
+  title: string;
+  titleZh?: string;
+  description: string;
+  descriptionZh?: string;
+}) {
+  const { t } = useI18n();
   return (
     <div>
-      <h1 className="text-base font-bold text-white">{title}</h1>
-      <p className="text-xs text-zinc-500">{description}</p>
+      <h1 className="text-base font-bold text-white">{t(title, titleZh)}</h1>
+      <p className="text-xs text-zinc-500">{t(description, descriptionZh)}</p>
     </div>
   );
 }
@@ -422,6 +491,7 @@ function FeedbackBanner({ feedback }: { feedback: FeedbackState }) {
 }
 
 export function PlanningTemplateDesignPage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -454,7 +524,36 @@ export function PlanningTemplateDesignPage() {
     return JSON.stringify(toPlanningTemplateManifest(draft), null, 2);
   }, [draft]);
 
-  const localIssues = useMemo(() => getPlanningDraftIssues(draft), [draft]);
+  const localIssues = useMemo(
+    () => getPlanningDraftIssues(draft).map((issue) => localizePlanningDraftIssue(issue, t)),
+    [draft, t],
+  );
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
+  );
+  const contextModeOptions = useMemo(
+    () =>
+      CONTEXT_MODE_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'independent'
+            ? t('independent', '独立')
+            : item.value === 'build_upon'
+              ? t('build_upon', '基于上文')
+              : t('all', '全部'),
+      })),
+    [t],
+  );
 
   async function loadEntries(preferredItemId?: string) {
     setIsLoadingEntries(true);
@@ -535,7 +634,10 @@ export function PlanningTemplateDesignPage() {
       setTestPreview(null);
       setFeedback({
         tone: 'info',
-        message: `Loaded ${selectedItemId}@${revision.version} (${revision.status})`,
+        message: t(
+          `Loaded ${selectedItemId}@${revision.version} (${revision.status})`,
+          `已加载 ${selectedItemId}@${revision.version}（${revision.status}）`,
+        ),
       });
     }
   }
@@ -609,7 +711,10 @@ export function PlanningTemplateDesignPage() {
     const itemId = newItemId.trim();
     const version = newEntryVersion.trim();
     if (!itemId || !version) {
-      setFeedback({ tone: 'error', message: 'itemId and version are required to create a template entry.' });
+      setFeedback({
+        tone: 'error',
+        message: t('itemId and version are required to create a template entry.', '创建模板条目需要填写 itemId 和 version。'),
+      });
       return;
     }
 
@@ -625,7 +730,10 @@ export function PlanningTemplateDesignPage() {
       });
 
       setNewItemId('');
-      setFeedback({ tone: 'success', message: `Created planning template ${itemId}@${version}.` });
+      setFeedback({
+        tone: 'success',
+        message: t(`Created planning template ${itemId}@${version}.`, `已创建规划模板 ${itemId}@${version}。`),
+      });
       await loadEntries(itemId);
       await loadRevisions(itemId, version);
     } catch (error) {
@@ -638,7 +746,10 @@ export function PlanningTemplateDesignPage() {
   async function handleCreateRevision() {
     const version = newRevisionVersion.trim();
     if (!selectedItemId || !draft || !version) {
-      setFeedback({ tone: 'error', message: 'Select an item and prepare draft content before creating revision.' });
+      setFeedback({
+        tone: 'error',
+        message: t('Select an item and prepare draft content before creating revision.', '创建修订前请先选择条目并准备草稿内容。'),
+      });
       return;
     }
 
@@ -651,7 +762,10 @@ export function PlanningTemplateDesignPage() {
         channel: publishChannel,
       });
       setNewRevisionVersion('');
-      setFeedback({ tone: 'success', message: `Created draft revision ${selectedItemId}@${version}.` });
+      setFeedback({
+        tone: 'success',
+        message: t(`Created draft revision ${selectedItemId}@${version}.`, `已创建草稿修订 ${selectedItemId}@${version}。`),
+      });
       await loadRevisions(selectedItemId, version);
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -662,7 +776,7 @@ export function PlanningTemplateDesignPage() {
 
   async function handleSaveDraft() {
     if (!selectedItemId || !selectedVersion || !draft) {
-      setFeedback({ tone: 'error', message: 'Select a revision first before saving.' });
+      setFeedback({ tone: 'error', message: t('Select a revision first before saving.', '保存前请先选择修订。') });
       return;
     }
 
@@ -674,7 +788,10 @@ export function PlanningTemplateDesignPage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Saved ${selectedItemId}@${selectedVersion} draft manifest.`,
+        message: t(
+          `Saved ${selectedItemId}@${selectedVersion} draft manifest.`,
+          `已保存 ${selectedItemId}@${selectedVersion} 草稿清单。`,
+        ),
       });
       await loadRevisions(selectedItemId, selectedVersion);
     } catch (error) {
@@ -686,13 +803,14 @@ export function PlanningTemplateDesignPage() {
 
   async function handleRunTestPreview() {
     if (!draft) {
-      setFeedback({ tone: 'error', message: 'Select revision and edit draft before test preview.' });
+      setFeedback({ tone: 'error', message: t('Select revision and edit draft before test preview.', '测试预览前请先选择修订并编辑草稿。') });
       return;
     }
 
     const issues = getPlanningDraftIssues(draft);
     if (issues.length > 0) {
-      setFeedback({ tone: 'error', message: `Fix local issues first: ${issues[0]}` });
+      const firstIssue = localizePlanningDraftIssue(issues[0], t);
+      setFeedback({ tone: 'error', message: t(`Fix local issues first: ${firstIssue}`, `请先修复本地问题：${firstIssue}`) });
       return;
     }
 
@@ -703,8 +821,11 @@ export function PlanningTemplateDesignPage() {
       setFeedback({
         tone: preview && preview.missingRequiredAgents.length === 0 ? 'success' : 'info',
         message: preview
-          ? `Test preview generated with ${preview.segments.length} segments.`
-          : 'Failed to generate test preview.',
+          ? t(
+            `Test preview generated with ${preview.segments.length} segments.`,
+            `测试预览已生成，共 ${preview.segments.length} 个分段。`,
+          )
+          : t('Failed to generate test preview.', '生成测试预览失败。'),
       });
     } finally {
       setIsRunningPreview(false);
@@ -715,7 +836,9 @@ export function PlanningTemplateDesignPage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Planning Template Studio / Design"
+        titleZh="规划模板工作台 / 设计"
         description="Build planning-template manifests with structured segment editing and revision-safe draft operations."
+        descriptionZh="构建规划模板清单，支持结构化分段编辑与安全草稿修订。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="design" />
 
@@ -725,7 +848,7 @@ export function PlanningTemplateDesignPage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-4 p-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-white">Template Catalog</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Template Catalog', '模板目录')}</h2>
               <Button
                 variant="outline"
                 size="sm"
@@ -734,14 +857,14 @@ export function PlanningTemplateDesignPage() {
                 disabled={isLoadingEntries}
               >
                 {isLoadingEntries ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Refresh
+                {t('Refresh', '刷新')}
               </Button>
             </div>
 
             <div className="max-h-[280px] space-y-2 overflow-auto pr-1">
               {entries.length === 0 && (
                 <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                  No planning template item exists yet.
+                  {t('No planning template item exists yet.', '当前还没有规划模板条目。')}
                 </div>
               )}
               {entries.map((entry) => {
@@ -768,25 +891,25 @@ export function PlanningTemplateDesignPage() {
             </div>
 
             <div className="rounded-lg border border-white/10 bg-zinc-900 p-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">Create New Entry</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">{t('Create New Entry', '创建新条目')}</h3>
               <div className="mt-2 space-y-2">
                 <input
                   type="text"
                   value={newItemId}
                   onChange={(event) => setNewItemId(event.target.value)}
-                  placeholder="itemId (e.g. football_pre_match)"
+                  placeholder={t('itemId (e.g. football_pre_match)', 'itemId（例如 football_pre_match）')}
                   className={INPUT_CLASS}
                 />
                 <input
                   type="text"
                   value={newEntryVersion}
                   onChange={(event) => setNewEntryVersion(event.target.value)}
-                  placeholder="version (e.g. 1.0.0)"
+                  placeholder={t('version (e.g. 1.0.0)', 'version（例如 1.0.0）')}
                   className={INPUT_CLASS}
                 />
                 <Button onClick={() => void handleCreateEntry()} disabled={isCreatingEntry} className="w-full gap-2">
                   {isCreatingEntry ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  Create Entry
+                  {t('Create Entry', '创建条目')}
                 </Button>
               </div>
             </div>
@@ -798,35 +921,35 @@ export function PlanningTemplateDesignPage() {
             <CardContent className="space-y-4 p-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div className="md:col-span-2">
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Item</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Item', '条目')}</label>
                   <Select
                     value={selectedItemId || ''}
                     onChange={(value) => setSelectedItemId(value)}
                     options={
                       entries.length > 0
                         ? toEntryOptions(entries)
-                        : [{ value: '', label: 'No item available' }]
+                        : [{ value: '', label: t('No item available', '暂无可用条目') }]
                     }
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Revision</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Revision', '修订')}</label>
                   <Select
                     value={selectedVersion || ''}
                     onChange={handleChangeVersion}
                     options={
                       revisions.length > 0
                         ? toRevisionOptions(revisions)
-                        : [{ value: '', label: isLoadingRevisions ? 'Loading...' : 'No revision' }]
+                        : [{ value: '', label: isLoadingRevisions ? t('Loading...', '加载中...') : t('No revision', '无修订') }]
                     }
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Channel</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Channel', '通道')}</label>
                   <Select
                     value={publishChannel}
                     onChange={(value) => setPublishChannel(value as CatalogChannel)}
-                    options={CHANNEL_OPTIONS}
+                    options={channelOptions}
                   />
                 </div>
               </div>
@@ -839,7 +962,7 @@ export function PlanningTemplateDesignPage() {
                   disabled={!selectedItemId || isLoadingRevisions}
                 >
                   {isLoadingRevisions ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  Reload Revisions
+                  {t('Reload Revisions', '重新加载修订')}
                 </Button>
                 <Button
                   className="gap-2"
@@ -847,7 +970,7 @@ export function PlanningTemplateDesignPage() {
                   disabled={!selectedItemId || !selectedVersion || !draft || isSavingDraft}
                 >
                   {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save Draft
+                  {t('Save Draft', '保存草稿')}
                 </Button>
                 <Button
                   variant="outline"
@@ -856,7 +979,7 @@ export function PlanningTemplateDesignPage() {
                   disabled={!draft || isRunningPreview}
                 >
                   {isRunningPreview ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                  Test Preview
+                  {t('Test Preview', '测试预览')}
                 </Button>
               </div>
 
@@ -865,7 +988,7 @@ export function PlanningTemplateDesignPage() {
                   type="text"
                   value={newRevisionVersion}
                   onChange={(event) => setNewRevisionVersion(event.target.value)}
-                  placeholder="new revision version (e.g. 1.0.1)"
+                  placeholder={t('new revision version (e.g. 1.0.1)', '新修订版本（例如 1.0.1）')}
                   className={INPUT_CLASS}
                 />
                 <Button
@@ -875,16 +998,16 @@ export function PlanningTemplateDesignPage() {
                   disabled={!selectedItemId || !draft || isCreatingRevision}
                 >
                   {isCreatingRevision ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  Create Revision
+                  {t('Create Revision', '创建修订')}
                 </Button>
               </div>
 
               {selectedRevision && (
                 <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-300">
                   <div className="flex flex-wrap gap-4">
-                    <span>status: {selectedRevision.status}</span>
-                    <span>channel: {selectedRevision.channel}</span>
-                    <span>updated: {formatTime(selectedRevision.updatedAt)}</span>
+                    <span>{t('status', '状态')}: {selectedRevision.status}</span>
+                    <span>{t('channel', '通道')}: {selectedRevision.channel}</span>
+                    <span>{t('updated', '更新时间')}: {formatTime(selectedRevision.updatedAt)}</span>
                   </div>
                 </div>
               )}
@@ -894,7 +1017,7 @@ export function PlanningTemplateDesignPage() {
           {!draft && (
             <Card className="border-zinc-800 bg-zinc-950">
               <CardContent className="p-4 text-xs text-zinc-500">
-                Select an item/revision to start design editing.
+                {t('Select an item/revision to start design editing.', '请选择条目/修订以开始设计编辑。')}
               </CardContent>
             </Card>
           )}
@@ -902,11 +1025,11 @@ export function PlanningTemplateDesignPage() {
           {draft && (
             <Card className="border-zinc-800 bg-zinc-950">
               <CardContent className="space-y-4 p-4">
-                <h2 className="text-sm font-semibold text-white">Manifest Draft Editor</h2>
+                <h2 className="text-sm font-semibold text-white">{t('Manifest Draft Editor', '清单草稿编辑器')}</h2>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Template ID</label>
+                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Template ID', '模板 ID')}</label>
                     <input
                       type="text"
                       value={draft.id}
@@ -915,7 +1038,7 @@ export function PlanningTemplateDesignPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Template Name</label>
+                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Template Name', '模板名称')}</label>
                     <input
                       type="text"
                       value={draft.name}
@@ -926,47 +1049,47 @@ export function PlanningTemplateDesignPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Planning Rule</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Planning Rule', '规划规则')}</label>
                   <textarea
                     value={draft.rule}
                     onChange={(event) => updateDraft({ rule: event.target.value })}
                     className={TEXTAREA_CLASS}
-                    placeholder="rule or policy summary used by runtime planner"
+                    placeholder={t('rule or policy summary used by runtime planner', '运行时规划器使用的规则或策略摘要')}
                   />
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">
-                      Required Agents (CSV)
+                      {t('Required Agents (CSV)', '必需 Agents（CSV）')}
                     </label>
                     <input
                       type="text"
                       value={draft.requiredAgentsText}
                       onChange={(event) => updateDraft({ requiredAgentsText: event.target.value })}
                       className={INPUT_CLASS}
-                      placeholder="summary_agent, odds_agent"
+                      placeholder={t('summary_agent, odds_agent', 'summary_agent, odds_agent')}
                     />
                   </div>
                   <div>
                     <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">
-                      Required Skills (CSV)
+                      {t('Required Skills (CSV)', '必需 Skills（CSV）')}
                     </label>
                     <input
                       type="text"
                       value={draft.requiredSkillsText}
                       onChange={(event) => updateDraft({ requiredSkillsText: event.target.value })}
                       className={INPUT_CLASS}
-                      placeholder="calc_risk, normalize_market"
+                      placeholder={t('calc_risk, normalize_market', 'calc_risk, normalize_market')}
                     />
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Segments</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{t('Segments', '分段')}</h3>
                   <Button variant="outline" size="sm" className="gap-1" onClick={addSegment}>
                     <Plus className="h-3.5 w-3.5" />
-                    Add Segment
+                    {t('Add Segment', '新增分段')}
                   </Button>
                 </div>
 
@@ -974,7 +1097,7 @@ export function PlanningTemplateDesignPage() {
                   {draft.segments.map((segment, index) => (
                     <div key={`${segment.id}-${index}`} className="rounded-lg border border-white/10 bg-zinc-900 p-3">
                       <div className="mb-3 flex items-center justify-between">
-                        <div className="text-xs font-semibold text-zinc-200">segment #{index + 1}</div>
+                        <div className="text-xs font-semibold text-zinc-200">{t('segment', '分段')} #{index + 1}</div>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -982,13 +1105,13 @@ export function PlanningTemplateDesignPage() {
                           onClick={() => removeSegment(index)}
                           disabled={draft.segments.length <= 1}
                         >
-                          Remove
+                          {t('Remove', '移除')}
                         </Button>
                       </div>
 
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                         <div>
-                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Segment ID</label>
+                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Segment ID', '分段 ID')}</label>
                           <input
                             type="text"
                             value={segment.id}
@@ -997,7 +1120,7 @@ export function PlanningTemplateDesignPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Agent Type</label>
+                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Agent Type', 'Agent 类型')}</label>
                           <input
                             type="text"
                             value={segment.agentType}
@@ -1006,7 +1129,7 @@ export function PlanningTemplateDesignPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Animation Type</label>
+                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Animation Type', '动画类型')}</label>
                           <input
                             type="text"
                             value={segment.animationType}
@@ -1015,18 +1138,18 @@ export function PlanningTemplateDesignPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Context Mode</label>
+                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Context Mode', '上下文模式')}</label>
                           <Select
                             value={segment.contextMode}
                             onChange={(value) => updateSegment(index, { contextMode: value as PlanningContextMode })}
-                            options={CONTEXT_MODE_OPTIONS}
+                            options={contextModeOptions}
                           />
                         </div>
                       </div>
 
                       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div>
-                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Title EN</label>
+                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Title EN', '标题 EN')}</label>
                           <input
                             type="text"
                             value={segment.titleEn}
@@ -1035,7 +1158,7 @@ export function PlanningTemplateDesignPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Title ZH</label>
+                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Title ZH', '标题 ZH')}</label>
                           <input
                             type="text"
                             value={segment.titleZh}
@@ -1047,7 +1170,7 @@ export function PlanningTemplateDesignPage() {
 
                       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div>
-                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Focus EN</label>
+                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Focus EN', '重点 EN')}</label>
                           <textarea
                             value={segment.focusEn}
                             onChange={(event) => updateSegment(index, { focusEn: event.target.value })}
@@ -1055,7 +1178,7 @@ export function PlanningTemplateDesignPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Focus ZH</label>
+                          <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Focus ZH', '重点 ZH')}</label>
                           <textarea
                             value={segment.focusZh}
                             onChange={(event) => updateSegment(index, { focusZh: event.target.value })}
@@ -1072,12 +1195,12 @@ export function PlanningTemplateDesignPage() {
 
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-white">Local Validation</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Local Validation', '本地校验')}</h2>
               {localIssues.length === 0 && (
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
                   <span className="inline-flex items-center gap-1">
                     <ShieldCheck className="h-4 w-4" />
-                    Draft local checks passed.
+                    {t('Draft local checks passed.', '草稿本地检查通过。')}
                   </span>
                 </div>
               )}
@@ -1096,7 +1219,7 @@ export function PlanningTemplateDesignPage() {
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-white">Test Preview</h2>
+                <h2 className="text-sm font-semibold text-white">{t('Test Preview', '测试预览')}</h2>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1105,13 +1228,13 @@ export function PlanningTemplateDesignPage() {
                   disabled={!draft || isRunningPreview}
                 >
                   {isRunningPreview ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                  Run
+                  {t('Run', '运行')}
                 </Button>
               </div>
 
               {!testPreview && (
                 <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                  Edit draft then run test preview to inspect segment flow and dependency coverage.
+                  {t('Edit draft then run test preview to inspect segment flow and dependency coverage.', '先编辑草稿，再运行测试预览以检查分段流程与依赖覆盖。')}
                 </div>
               )}
 
@@ -1119,30 +1242,30 @@ export function PlanningTemplateDesignPage() {
                 <div className="space-y-3">
                   <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-300">
                     <div className="flex flex-wrap gap-4">
-                      <span>generatedAt: {formatTime(testPreview.generatedAt)}</span>
-                      <span>segments: {testPreview.segments.length}</span>
-                      <span>requiredAgents: {testPreview.requiredAgents.length}</span>
-                      <span>requiredSkills: {testPreview.requiredSkills.length}</span>
+                      <span>{t('generatedAt', '生成时间')}: {formatTime(testPreview.generatedAt)}</span>
+                      <span>{t('segments', '分段')}: {testPreview.segments.length}</span>
+                      <span>{t('requiredAgents', '必需 Agents')}: {testPreview.requiredAgents.length}</span>
+                      <span>{t('requiredSkills', '必需 Skills')}: {testPreview.requiredSkills.length}</span>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="rounded-lg border border-white/10 bg-zinc-900 p-3">
-                      <div className="mb-2 text-xs font-semibold text-zinc-300">Agent Coverage</div>
+                      <div className="mb-2 text-xs font-semibold text-zinc-300">{t('Agent Coverage', 'Agent 覆盖')}</div>
                       <div className="text-[11px] text-zinc-400">
-                        Segment agents: {testPreview.segmentAgentTypes.join(', ') || '-'}
+                        {t('Segment agents', '分段 Agents')}: {testPreview.segmentAgentTypes.join(', ') || '-'}
                       </div>
                       <div className={`mt-2 text-[11px] ${
                         testPreview.missingRequiredAgents.length > 0 ? 'text-red-300' : 'text-emerald-300'
                       }`}>
-                        Missing required agents: {testPreview.missingRequiredAgents.join(', ') || 'none'}
+                        {t('Missing required agents', '缺失必需 Agents')}: {testPreview.missingRequiredAgents.join(', ') || t('none', '无')}
                       </div>
                     </div>
 
                     <div className="rounded-lg border border-white/10 bg-zinc-900 p-3">
-                      <div className="mb-2 text-xs font-semibold text-zinc-300">Context Flow</div>
+                      <div className="mb-2 text-xs font-semibold text-zinc-300">{t('Context Flow', '上下文流')}</div>
                       {testPreview.contextFlowIssues.length === 0 && (
-                        <div className="text-[11px] text-emerald-300">No flow warning.</div>
+                        <div className="text-[11px] text-emerald-300">{t('No flow warning.', '没有流程告警。')}</div>
                       )}
                       {testPreview.contextFlowIssues.length > 0 && (
                         <div className="space-y-1 text-[11px] text-amber-300">
@@ -1155,20 +1278,20 @@ export function PlanningTemplateDesignPage() {
                   </div>
 
                   <div className="rounded-lg border border-white/10 bg-zinc-900 p-3">
-                    <div className="mb-2 text-xs font-semibold text-zinc-300">Segment Sequence Preview</div>
+                    <div className="mb-2 text-xs font-semibold text-zinc-300">{t('Segment Sequence Preview', '分段序列预览')}</div>
                     <div className="space-y-2">
                       {testPreview.segments.map((segment) => (
                         <div key={`${segment.id}-${segment.index}`} className="rounded border border-white/10 bg-zinc-950 px-3 py-2 text-[11px] text-zinc-300">
                           <div className="flex flex-wrap items-center gap-3">
                             <span className="font-mono">#{segment.index} {segment.id}</span>
-                            <span className="text-zinc-400">agent: {segment.agentType || '-'}</span>
-                            <span className="text-zinc-400">context: {segment.contextMode}</span>
-                            <span className="text-zinc-400">animation: {segment.animationType || '-'}</span>
+                            <span className="text-zinc-400">{t('agent', 'agent')}: {segment.agentType || '-'}</span>
+                            <span className="text-zinc-400">{t('context', '上下文')}: {segment.contextMode}</span>
+                            <span className="text-zinc-400">{t('animation', '动画')}: {segment.animationType || '-'}</span>
                             <span className={segment.completeness === 'ready' ? 'text-emerald-300' : 'text-amber-300'}>
                               {segment.completeness}
                             </span>
                           </div>
-                          <div className="mt-1 text-zinc-400">title: {segment.titlePreview || '-'}</div>
+                          <div className="mt-1 text-zinc-400">{t('title', '标题')}: {segment.titlePreview || '-'}</div>
                         </div>
                       ))}
                     </div>
@@ -1180,9 +1303,9 @@ export function PlanningTemplateDesignPage() {
 
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-white">Manifest Preview</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Manifest Preview', '清单预览')}</h2>
               <pre className="max-h-[320px] overflow-auto rounded-lg border border-white/10 bg-zinc-900 p-3 text-[11px] text-zinc-300">
-                {manifestPreview || '// no draft selected'}
+                {manifestPreview || t('// no draft selected', '// 未选择草稿')}
               </pre>
             </CardContent>
           </Card>
@@ -1193,6 +1316,7 @@ export function PlanningTemplateDesignPage() {
 }
 
 export function PlanningTemplateManagePage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [releaseHistory, setReleaseHistory] = useState<ReleaseRecord[]>([]);
@@ -1291,11 +1415,11 @@ export function PlanningTemplateManagePage() {
 
   async function handleLoadDiff() {
     if (!selectedItemId || !fromVersion || !toVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and two revisions before loading diff.' });
+      setFeedback({ tone: 'error', message: t('Select item and two revisions before loading diff.', '加载差异前请先选择条目和两个修订。') });
       return;
     }
     if (fromVersion === toVersion) {
-      setFeedback({ tone: 'error', message: 'fromVersion and toVersion should be different.' });
+      setFeedback({ tone: 'error', message: t('fromVersion and toVersion should be different.', 'fromVersion 与 toVersion 不能相同。') });
       return;
     }
 
@@ -1305,7 +1429,10 @@ export function PlanningTemplateManagePage() {
       setDiffResult(diff);
       setFeedback({
         tone: 'info',
-        message: `Loaded diff ${selectedItemId}: ${fromVersion} -> ${toVersion}.`,
+        message: t(
+          `Loaded diff ${selectedItemId}: ${fromVersion} -> ${toVersion}.`,
+          `已加载差异 ${selectedItemId}: ${fromVersion} -> ${toVersion}。`,
+        ),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -1325,7 +1452,9 @@ export function PlanningTemplateManagePage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Planning Template Studio / Manage"
+        titleZh="规划模板工作台 / 管理"
         description="Inspect revisions, compare manifest diffs, and track release records for planning templates."
+        descriptionZh="检查修订、对比清单差异并跟踪发布记录。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="manage" />
 
@@ -1335,7 +1464,7 @@ export function PlanningTemplateManagePage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-4 p-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-white">Revision Explorer</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Revision Explorer', '修订浏览')}</h2>
               <Button
                 variant="outline"
                 size="sm"
@@ -1344,19 +1473,19 @@ export function PlanningTemplateManagePage() {
                 disabled={isLoadingEntries}
               >
                 {isLoadingEntries ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Refresh
+                {t('Refresh', '刷新')}
               </Button>
             </div>
 
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Item</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Item', '条目')}</label>
               <Select
                 value={selectedItemId || ''}
                 onChange={(value) => setSelectedItemId(value)}
                 options={
                   entries.length > 0
                     ? toEntryOptions(entries)
-                    : [{ value: '', label: 'No item available' }]
+                    : [{ value: '', label: t('No item available', '暂无可用条目') }]
                 }
               />
             </div>
@@ -1364,7 +1493,9 @@ export function PlanningTemplateManagePage() {
             <div className="max-h-[330px] space-y-2 overflow-auto pr-1">
               {revisions.length === 0 && (
                 <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                  {isLoadingRevisions ? 'Loading revisions...' : 'No revisions in selected item.'}
+                  {isLoadingRevisions
+                    ? t('Loading revisions...', '正在加载修订...')
+                    : t('No revisions in selected item.', '当前条目暂无修订。')}
                 </div>
               )}
               {revisions.map((revision) => (
@@ -1392,29 +1523,29 @@ export function PlanningTemplateManagePage() {
         <section className="space-y-4">
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-white">Diff Control</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Diff Control', '差异控制')}</h2>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">From</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('From', '从')}</label>
                   <Select
                     value={fromVersion || ''}
                     onChange={(value) => setFromVersion(value)}
                     options={
                       revisions.length > 0
                         ? toRevisionOptions(revisions)
-                        : [{ value: '', label: 'No revision' }]
+                        : [{ value: '', label: t('No revision', '无修订') }]
                     }
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">To</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('To', '到')}</label>
                   <Select
                     value={toVersion || ''}
                     onChange={(value) => setToVersion(value)}
                     options={
                       revisions.length > 0
                         ? toRevisionOptions(revisions)
-                        : [{ value: '', label: 'No revision' }]
+                        : [{ value: '', label: t('No revision', '无修订') }]
                     }
                   />
                 </div>
@@ -1426,7 +1557,7 @@ export function PlanningTemplateManagePage() {
                     disabled={!selectedItemId || !fromVersion || !toVersion || isDiffLoading}
                   >
                     {isDiffLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitCompare className="h-4 w-4" />}
-                    Load Diff
+                    {t('Load Diff', '加载差异')}
                   </Button>
                 </div>
               </div>
@@ -1435,62 +1566,62 @@ export function PlanningTemplateManagePage() {
 
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-white">Diff Result</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Diff Result', '差异结果')}</h2>
               {!diffResult && (
                 <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                  Load a diff to view manifest changes.
+                  {t('Load a diff to view manifest changes.', '加载差异以查看清单变更。')}
                 </div>
               )}
               {diffResult && (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
                     <div className="flex flex-wrap gap-4">
-                      <span>from: {diffResult.fromRevision.version}</span>
-                      <span>to: {diffResult.toRevision.version}</span>
-                      <span>total: {diffResult.diff.summary.totalChanges}</span>
+                      <span>{t('from', '从')}: {diffResult.fromRevision.version}</span>
+                      <span>{t('to', '到')}: {diffResult.toRevision.version}</span>
+                      <span>{t('total', '总计')}: {diffResult.diff.summary.totalChanges}</span>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                     <div className="rounded-lg border border-white/10 bg-zinc-900 p-3">
                       <div className="mb-2 text-xs font-semibold text-emerald-400">
-                        Added ({diffResult.diff.summary.addedCount})
+                        {t('Added', '新增')} ({diffResult.diff.summary.addedCount})
                       </div>
                       <div className="max-h-40 space-y-1 overflow-auto text-[11px] text-zinc-300">
                         {diffResult.diff.changes.addedPaths.map((path) => (
                           <div key={path} className="font-mono">{path}</div>
                         ))}
                         {diffResult.diff.changes.addedPaths.length === 0 && (
-                          <div className="text-zinc-500">None</div>
+                          <div className="text-zinc-500">{t('None', '无')}</div>
                         )}
                       </div>
                     </div>
                     <div className="rounded-lg border border-white/10 bg-zinc-900 p-3">
                       <div className="mb-2 text-xs font-semibold text-amber-400">
-                        Removed ({diffResult.diff.summary.removedCount})
+                        {t('Removed', '删除')} ({diffResult.diff.summary.removedCount})
                       </div>
                       <div className="max-h-40 space-y-1 overflow-auto text-[11px] text-zinc-300">
                         {diffResult.diff.changes.removedPaths.map((path) => (
                           <div key={path} className="font-mono">{path}</div>
                         ))}
                         {diffResult.diff.changes.removedPaths.length === 0 && (
-                          <div className="text-zinc-500">None</div>
+                          <div className="text-zinc-500">{t('None', '无')}</div>
                         )}
                       </div>
                     </div>
                     <div className="rounded-lg border border-white/10 bg-zinc-900 p-3">
                       <div className="mb-2 text-xs font-semibold text-blue-400">
-                        Changed ({diffResult.diff.summary.changedCount})
+                        {t('Changed', '变更')} ({diffResult.diff.summary.changedCount})
                       </div>
                       <div className="max-h-40 space-y-2 overflow-auto text-[11px] text-zinc-300">
                         {diffResult.diff.changes.changedPaths.map((item) => (
                           <div key={item.path}>
                             <div className="font-mono text-zinc-200">{item.path}</div>
-                            <div className="font-mono text-zinc-500">from: {JSON.stringify(item.from)}</div>
-                            <div className="font-mono text-zinc-500">to: {JSON.stringify(item.to)}</div>
+                            <div className="font-mono text-zinc-500">{t('from', '从')}: {JSON.stringify(item.from)}</div>
+                            <div className="font-mono text-zinc-500">{t('to', '到')}: {JSON.stringify(item.to)}</div>
                           </div>
                         ))}
                         {diffResult.diff.changes.changedPaths.length === 0 && (
-                          <div className="text-zinc-500">None</div>
+                          <div className="text-zinc-500">{t('None', '无')}</div>
                         )}
                       </div>
                     </div>
@@ -1502,9 +1633,9 @@ export function PlanningTemplateManagePage() {
 
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-white">Manifest Inspector</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Manifest Inspector', '清单检查器')}</h2>
               <pre className="max-h-[260px] overflow-auto rounded-lg border border-white/10 bg-zinc-900 p-3 text-[11px] text-zinc-300">
-                {inspectRevision ? JSON.stringify(inspectRevision.manifest || {}, null, 2) : '// select revision'}
+                {inspectRevision ? JSON.stringify(inspectRevision.manifest || {}, null, 2) : t('// select revision', '// 选择修订')}
               </pre>
             </CardContent>
           </Card>
@@ -1512,7 +1643,7 @@ export function PlanningTemplateManagePage() {
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-white">Release History</h2>
+                <h2 className="text-sm font-semibold text-white">{t('Release History', '发布历史')}</h2>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1521,13 +1652,13 @@ export function PlanningTemplateManagePage() {
                   disabled={isHistoryLoading}
                 >
                   {isHistoryLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Refresh
+                  {t('Refresh', '刷新')}
                 </Button>
               </div>
               <div className="max-h-[250px] space-y-2 overflow-auto pr-1">
                 {filteredHistory.length === 0 && (
                   <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                    No release record for selected planning template.
+                    {t('No release record for selected planning template.', '当前规划模板暂无发布记录。')}
                   </div>
                 )}
                 {filteredHistory.map((record) => (
@@ -1535,7 +1666,11 @@ export function PlanningTemplateManagePage() {
                     <div className="flex items-center justify-between">
                       <span className="font-mono">{record.itemId}</span>
                       <span className={record.action === 'publish' ? 'text-emerald-400' : 'text-amber-300'}>
-                        {record.action}
+                        {record.action === 'publish'
+                          ? t('publish', '发布')
+                          : record.action === 'rollback'
+                            ? t('rollback', '回滚')
+                            : record.action}
                       </span>
                     </div>
                     <div className="mt-1 text-zinc-500">
@@ -1554,6 +1689,7 @@ export function PlanningTemplateManagePage() {
 }
 
 export function PlanningTemplatePublishPage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [releaseHistory, setReleaseHistory] = useState<ReleaseRecord[]>([]);
@@ -1588,6 +1724,32 @@ export function PlanningTemplatePublishPage() {
     && validationRun.status === 'succeeded'
     && !hasValidationFailure(validationRun)
   ), [validationRun]);
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
+  );
+  const validationTypeOptions = useMemo(
+    () =>
+      VALIDATION_TYPE_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'catalog_validate'
+            ? t('catalog_validate', '目录验证')
+            : item.value === 'pre_publish'
+              ? t('pre_publish', '发布前验证')
+              : t('post_publish', '发布后验证'),
+      })),
+    [t],
+  );
 
   async function refreshEntries(preferredItemId?: string) {
     setIsLoadingEntries(true);
@@ -1673,7 +1835,7 @@ export function PlanningTemplatePublishPage() {
 
   async function handleRunValidation() {
     if (!selectedItemId || !selectedVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and revision before validation.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision before validation.', '校验前请先选择条目和修订。') });
       return;
     }
     setIsRunningValidation(true);
@@ -1688,7 +1850,7 @@ export function PlanningTemplatePublishPage() {
       setValidationLookupRunId(created.id);
       setFeedback({
         tone: 'info',
-        message: `Validation started: ${created.id} (${created.status})`,
+        message: t(`Validation started: ${created.id} (${created.status})`, `校验已启动：${created.id}（${created.status}）`),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -1700,7 +1862,7 @@ export function PlanningTemplatePublishPage() {
   async function handleFetchValidationRun() {
     const runId = validationLookupRunId.trim();
     if (!runId) {
-      setFeedback({ tone: 'error', message: 'Provide runId to fetch validation result.' });
+      setFeedback({ tone: 'error', message: t('Provide runId to fetch validation result.', '请提供 runId 以查询校验结果。') });
       return;
     }
     setIsFetchingValidation(true);
@@ -1709,7 +1871,7 @@ export function PlanningTemplatePublishPage() {
       setValidationRun(record);
       setFeedback({
         tone: record.status === 'succeeded' && !hasValidationFailure(record) ? 'success' : 'info',
-        message: `Validation run ${record.id}: ${record.status}`,
+        message: t(`Validation run ${record.id}: ${record.status}`, `校验任务 ${record.id}：${record.status}`),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -1720,13 +1882,16 @@ export function PlanningTemplatePublishPage() {
 
   async function handlePublish() {
     if (!selectedItemId || !selectedVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and revision before publish.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision before publish.', '发布前请先选择条目和修订。') });
       return;
     }
     if (!publishGatePassed) {
       setFeedback({
         tone: 'error',
-        message: 'Publish gate blocked: run validation and ensure status=succeeded with no failed checks.',
+        message: t(
+          'Publish gate blocked: run validation and ensure status=succeeded with no failed checks.',
+          '发布门禁阻塞：请先运行校验并确保状态为 succeeded 且无失败检查项。',
+        ),
       });
       return;
     }
@@ -1741,7 +1906,10 @@ export function PlanningTemplatePublishPage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Published ${selectedItemId}@${selectedVersion} to ${channel}.`,
+        message: t(
+          `Published ${selectedItemId}@${selectedVersion} to ${channel}.`,
+          `已发布 ${selectedItemId}@${selectedVersion} 到 ${channel}。`,
+        ),
       });
       await refreshRevisions(selectedItemId, selectedVersion);
       await refreshHistory();
@@ -1754,7 +1922,7 @@ export function PlanningTemplatePublishPage() {
 
   async function handleRollback() {
     if (!selectedItemId || !rollbackVersion) {
-      setFeedback({ tone: 'error', message: 'Select rollback target version first.' });
+      setFeedback({ tone: 'error', message: t('Select rollback target version first.', '请先选择回滚目标版本。') });
       return;
     }
 
@@ -1768,7 +1936,10 @@ export function PlanningTemplatePublishPage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Rollback request submitted: ${selectedItemId} -> ${rollbackVersion} (${channel}).`,
+        message: t(
+          `Rollback request submitted: ${selectedItemId} -> ${rollbackVersion} (${channel}).`,
+          `回滚请求已提交：${selectedItemId} -> ${rollbackVersion}（${channel}）。`,
+        ),
       });
       await refreshRevisions(selectedItemId, rollbackVersion);
       await refreshHistory();
@@ -1798,7 +1969,9 @@ export function PlanningTemplatePublishPage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Planning Template Studio / Publish"
+        titleZh="规划模板工作台 / 发布"
         description="Validate, publish, and rollback planning-template revisions with explicit release gates."
+        descriptionZh="通过明确门禁执行验证、发布与回滚。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="publish" />
 
@@ -1806,38 +1979,38 @@ export function PlanningTemplatePublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-4 p-4">
-          <h2 className="text-sm font-semibold text-white">Release Target</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Release Target', '发布目标')}</h2>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div className="lg:col-span-2">
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Item</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Item', '条目')}</label>
               <Select
                 value={selectedItemId || ''}
                 onChange={(value) => setSelectedItemId(value)}
                 options={
                   entries.length > 0
                     ? toEntryOptions(entries)
-                    : [{ value: '', label: 'No item available' }]
+                    : [{ value: '', label: t('No item available', '暂无可用条目') }]
                 }
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Revision</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Revision', '修订')}</label>
               <Select
                 value={selectedVersion || ''}
                 onChange={(value) => setSelectedVersion(value)}
                 options={
                   revisions.length > 0
                     ? toRevisionOptions(revisions)
-                    : [{ value: '', label: isLoadingRevisions ? 'Loading...' : 'No revision' }]
+                    : [{ value: '', label: isLoadingRevisions ? t('Loading...', '加载中...') : t('No revision', '无修订') }]
                 }
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Channel</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Channel', '通道')}</label>
               <Select
                 value={channel}
                 onChange={(value) => setChannel(value as CatalogChannel)}
-                options={CHANNEL_OPTIONS}
+                options={channelOptions}
               />
             </div>
           </div>
@@ -1846,7 +2019,7 @@ export function PlanningTemplatePublishPage() {
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="release notes (optional)"
+              placeholder={t('release notes (optional)', '发布备注（可选）')}
               className={TEXTAREA_CLASS}
             />
             <div className="flex items-end">
@@ -1863,7 +2036,7 @@ export function PlanningTemplatePublishPage() {
                 {(isLoadingEntries || isLoadingRevisions || isLoadingHistory)
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <RefreshCw className="h-4 w-4" />}
-                Refresh Data
+                {t('Refresh Data', '刷新数据')}
               </Button>
             </div>
           </div>
@@ -1871,9 +2044,9 @@ export function PlanningTemplatePublishPage() {
           {selectedRevision && (
             <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-300">
               <div className="flex flex-wrap gap-4">
-                <span>status: {selectedRevision.status}</span>
-                <span>channel: {selectedRevision.channel}</span>
-                <span>updated: {formatTime(selectedRevision.updatedAt)}</span>
+                <span>{t('status', '状态')}: {selectedRevision.status}</span>
+                <span>{t('channel', '通道')}: {selectedRevision.channel}</span>
+                <span>{t('updated', '更新时间')}: {formatTime(selectedRevision.updatedAt)}</span>
               </div>
             </div>
           )}
@@ -1882,23 +2055,23 @@ export function PlanningTemplatePublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-4 p-4">
-          <h2 className="text-sm font-semibold text-white">Validation Gate</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Validation Gate', '验证门禁')}</h2>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Validation Type</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Validation Type', '验证类型')}</label>
               <Select
                 value={validationType}
                 onChange={(value) => setValidationType(value as ValidationRunType)}
-                options={VALIDATION_TYPE_OPTIONS}
+                options={validationTypeOptions}
               />
             </div>
             <div className="lg:col-span-2">
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Run ID</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Run ID', '任务 ID')}</label>
               <input
                 type="text"
                 value={validationLookupRunId}
                 onChange={(event) => setValidationLookupRunId(event.target.value)}
-                placeholder="validation run id"
+                placeholder={t('validation run id', '验证任务 ID')}
                 className={INPUT_CLASS}
               />
             </div>
@@ -1910,7 +2083,7 @@ export function PlanningTemplatePublishPage() {
                 disabled={!selectedItemId || !selectedVersion || isRunningValidation}
               >
                 {isRunningValidation ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                Run
+                {t('Run', '运行')}
               </Button>
               <Button
                 variant="outline"
@@ -1919,7 +2092,7 @@ export function PlanningTemplatePublishPage() {
                 disabled={isFetchingValidation}
               >
                 {isFetchingValidation ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Fetch
+                {t('Fetch', '查询')}
               </Button>
             </div>
           </div>
@@ -1931,14 +2104,14 @@ export function PlanningTemplatePublishPage() {
                 : 'border-red-500/20 bg-red-500/10 text-red-300'
             }`}
           >
-            <div className="font-semibold">Publish Gate: {publishGatePassed ? 'Passed' : 'Blocked'}</div>
+            <div className="font-semibold">{t('Publish Gate', '发布门禁')}: {publishGatePassed ? t('Passed', '通过') : t('Blocked', '阻塞')}</div>
             <div className="mt-1 text-[11px]">
-              Need validation status = succeeded and no failed checks.
+              {t('Need validation status = succeeded and no failed checks.', '需要校验状态为 succeeded 且无失败检查项。')}
             </div>
             {validationRun && (
               <div className="mt-1 text-[11px]">
-                runId={validationRun.id}, status={validationRun.status}
-                {validationRun.finishedAt ? `, finished=${formatTime(validationRun.finishedAt)}` : ''}
+                {t('runId', '任务 ID')}={validationRun.id}, {t('status', '状态')}={validationRun.status}
+                {validationRun.finishedAt ? `, ${t('finished', '结束时间')}=${formatTime(validationRun.finishedAt)}` : ''}
               </div>
             )}
           </div>
@@ -1946,7 +2119,7 @@ export function PlanningTemplatePublishPage() {
           <div className="space-y-2">
             {validationChecks.length === 0 && (
               <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                No validation checks loaded yet.
+                {t('No validation checks loaded yet.', '尚未加载验证检查项。')}
               </div>
             )}
             {validationChecks.map((check, index) => {
@@ -1971,17 +2144,17 @@ export function PlanningTemplatePublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-4 p-4">
-          <h2 className="text-sm font-semibold text-white">Publish / Rollback Action</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Publish / Rollback Action', '发布 / 回滚操作')}</h2>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Rollback Target</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Rollback Target', '回滚目标')}</label>
               <Select
                 value={rollbackVersion || ''}
                 onChange={(value) => setRollbackVersion(value)}
                 options={
                   rollbackOptions.length > 0
                     ? rollbackOptions
-                    : [{ value: '', label: 'No published revision' }]
+                    : [{ value: '', label: t('No published revision', '无已发布修订') }]
                 }
               />
             </div>
@@ -1992,7 +2165,7 @@ export function PlanningTemplatePublishPage() {
                 disabled={!selectedItemId || !selectedVersion || !publishGatePassed || isPublishing}
               >
                 {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
-                Publish Revision
+                {t('Publish Revision', '发布修订')}
               </Button>
             </div>
             <div className="flex items-end">
@@ -2003,7 +2176,7 @@ export function PlanningTemplatePublishPage() {
                 disabled={!selectedItemId || !rollbackVersion || isRollbacking}
               >
                 {isRollbacking ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
-                Rollback Version
+                {t('Rollback Version', '回滚版本')}
               </Button>
             </div>
           </div>
@@ -2013,7 +2186,7 @@ export function PlanningTemplatePublishPage() {
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-white">Release History</h2>
+            <h2 className="text-sm font-semibold text-white">{t('Release History', '发布历史')}</h2>
             <Button
               variant="outline"
               size="sm"
@@ -2022,13 +2195,13 @@ export function PlanningTemplatePublishPage() {
               disabled={isLoadingHistory}
             >
               {isLoadingHistory ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
           </div>
           <div className="max-h-[280px] space-y-2 overflow-auto pr-1">
             {filteredHistory.length === 0 && (
               <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                No release activity yet for selected planning template.
+                {t('No release activity yet for selected planning template.', '当前规划模板暂无发布活动。')}
               </div>
             )}
             {filteredHistory.map((record) => (
@@ -2036,14 +2209,18 @@ export function PlanningTemplatePublishPage() {
                 <div className="flex items-center justify-between">
                   <span className="font-mono">{record.itemId}</span>
                   <span className={record.action === 'publish' ? 'text-emerald-400' : 'text-amber-300'}>
-                    {record.action}
+                    {record.action === 'publish'
+                      ? t('publish', '发布')
+                      : record.action === 'rollback'
+                        ? t('rollback', '回滚')
+                        : record.action}
                   </span>
                 </div>
                 <div className="mt-1 text-zinc-500">
                   {record.fromVersion || '-'} -&gt; {record.toVersion} ({record.channel}) · {record.status}
                 </div>
                 {record.validationRunId && (
-                  <div className="mt-1 font-mono text-zinc-500">validationRunId: {record.validationRunId}</div>
+                  <div className="mt-1 font-mono text-zinc-500">{t('validationRunId', '校验任务 ID')}: {record.validationRunId}</div>
                 )}
                 <div className="mt-1 text-zinc-500">{formatTime(record.createdAt)}</div>
               </div>

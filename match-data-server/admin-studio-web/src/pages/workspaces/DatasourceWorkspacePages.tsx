@@ -16,6 +16,7 @@ import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import DomainStageTabs from '@/src/components/layout/DomainStageTabs';
 import { Select } from '@/src/components/ui/Select';
+import { useI18n } from '@/src/i18n';
 import {
   AdminStudioApiError,
   CatalogEntry,
@@ -323,6 +324,21 @@ function getDatasourceDraftIssues(draft: DatasourceManifestDraft | null) {
   return issues;
 }
 
+function localizeDatasourceDraftIssue(issue: string, t: (en: string, zh: string) => string) {
+  switch (issue) {
+    case 'Draft not initialized.':
+      return t('Draft not initialized.', '草稿未初始化。');
+    case 'id is required.':
+      return t('id is required.', 'id 为必填项。');
+    case 'name is required.':
+      return t('name is required.', 'name 为必填项。');
+    case 'At least one field is required.':
+      return t('At least one field is required.', '至少需要一个字段。');
+    default:
+      return issue;
+  }
+}
+
 function describeError(error: unknown) {
   if (error instanceof AdminStudioApiError) {
     return `${error.code ? `${error.code}: ` : ''}${error.message}`;
@@ -381,11 +397,22 @@ function hasValidationFailure(run: ValidationRunRecord | null) {
   return getValidationChecks(run).some((check) => check.status !== 'passed');
 }
 
-function WorkspaceHeader({ title, description }: { title: string; description: string }) {
+function WorkspaceHeader({
+  title,
+  titleZh,
+  description,
+  descriptionZh,
+}: {
+  title: string;
+  titleZh?: string;
+  description: string;
+  descriptionZh?: string;
+}) {
+  const { t } = useI18n();
   return (
     <div>
-      <h1 className="text-base font-bold text-white">{title}</h1>
-      <p className="text-xs text-zinc-500">{description}</p>
+      <h1 className="text-base font-bold text-white">{t(title, titleZh)}</h1>
+      <p className="text-xs text-zinc-500">{t(description, descriptionZh)}</p>
     </div>
   );
 }
@@ -407,6 +434,7 @@ function FeedbackBanner({ feedback }: { feedback: FeedbackState }) {
 }
 
 export function DatasourceDesignPage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -448,7 +476,23 @@ export function DatasourceDesignPage() {
     return JSON.stringify(toDatasourceManifest(draft), null, 2);
   }, [draft]);
 
-  const localIssues = useMemo(() => getDatasourceDraftIssues(draft), [draft]);
+  const localIssues = useMemo(
+    () => getDatasourceDraftIssues(draft).map((issue) => localizeDatasourceDraftIssue(issue, t)),
+    [draft, t],
+  );
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
+  );
 
   async function loadEntries(preferredItemId?: string) {
     setIsLoadingEntries(true);
@@ -533,7 +577,10 @@ export function DatasourceDesignPage() {
       setPreviewPipeline(null);
       setFeedback({
         tone: 'info',
-        message: `Loaded ${selectedItemId}@${revision.version} (${revision.status})`,
+        message: t(
+          `Loaded ${selectedItemId}@${revision.version} (${revision.status})`,
+          `已加载 ${selectedItemId}@${revision.version}（${revision.status}）`,
+        ),
       });
     }
   }
@@ -600,7 +647,10 @@ export function DatasourceDesignPage() {
     const itemId = newItemId.trim();
     const version = newEntryVersion.trim();
     if (!itemId || !version) {
-      setFeedback({ tone: 'error', message: 'itemId and version are required to create datasource entry.' });
+      setFeedback({
+        tone: 'error',
+        message: t('itemId and version are required to create datasource entry.', '创建数据源条目需要填写 itemId 和 version。'),
+      });
       return;
     }
 
@@ -616,7 +666,10 @@ export function DatasourceDesignPage() {
       });
 
       setNewItemId('');
-      setFeedback({ tone: 'success', message: `Created datasource ${itemId}@${version}.` });
+      setFeedback({
+        tone: 'success',
+        message: t(`Created datasource ${itemId}@${version}.`, `已创建数据源 ${itemId}@${version}。`),
+      });
       await loadEntries(itemId);
       await loadRevisions(itemId, version);
     } catch (error) {
@@ -629,7 +682,10 @@ export function DatasourceDesignPage() {
   async function handleCreateRevision() {
     const version = newRevisionVersion.trim();
     if (!selectedItemId || !draft || !version) {
-      setFeedback({ tone: 'error', message: 'Select item and draft content before creating revision.' });
+      setFeedback({
+        tone: 'error',
+        message: t('Select item and draft content before creating revision.', '创建修订前请先选择条目并准备草稿内容。'),
+      });
       return;
     }
 
@@ -642,7 +698,10 @@ export function DatasourceDesignPage() {
         channel: publishChannel,
       });
       setNewRevisionVersion('');
-      setFeedback({ tone: 'success', message: `Created revision ${selectedItemId}@${version}.` });
+      setFeedback({
+        tone: 'success',
+        message: t(`Created revision ${selectedItemId}@${version}.`, `已创建修订 ${selectedItemId}@${version}。`),
+      });
       await loadRevisions(selectedItemId, version);
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -653,7 +712,7 @@ export function DatasourceDesignPage() {
 
   async function handleSaveDraft() {
     if (!selectedItemId || !selectedVersion || !draft) {
-      setFeedback({ tone: 'error', message: 'Select revision before saving draft.' });
+      setFeedback({ tone: 'error', message: t('Select revision before saving draft.', '保存草稿前请先选择修订。') });
       return;
     }
 
@@ -663,7 +722,10 @@ export function DatasourceDesignPage() {
         manifest: toDatasourceManifest(draft),
         channel: publishChannel,
       });
-      setFeedback({ tone: 'success', message: `Saved ${selectedItemId}@${selectedVersion}.` });
+      setFeedback({
+        tone: 'success',
+        message: t(`Saved ${selectedItemId}@${selectedVersion}.`, `已保存 ${selectedItemId}@${selectedVersion}。`),
+      });
       await loadRevisions(selectedItemId, selectedVersion);
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -674,12 +736,16 @@ export function DatasourceDesignPage() {
 
   async function handlePreviewStructure() {
     if (!draft) {
-      setFeedback({ tone: 'error', message: 'Draft is empty, cannot preview structure.' });
+      setFeedback({ tone: 'error', message: t('Draft is empty, cannot preview structure.', '草稿为空，无法预览结构。') });
       return;
     }
     const issues = getDatasourceDraftIssues(draft);
     if (issues.length > 0) {
-      setFeedback({ tone: 'error', message: `Fix local issues first: ${issues[0]}` });
+      const firstIssue = localizeDatasourceDraftIssue(issues[0], t);
+      setFeedback({
+        tone: 'error',
+        message: t(`Fix local issues first: ${firstIssue}`, `请先修复本地问题：${firstIssue}`),
+      });
       return;
     }
 
@@ -691,7 +757,10 @@ export function DatasourceDesignPage() {
       setStructurePreview(preview);
       setFeedback({
         tone: preview.validation.status === 'passed' ? 'success' : 'error',
-        message: `Structure preview finished: ${preview.validation.status}.`,
+        message: t(
+          `Structure preview finished: ${preview.validation.status}.`,
+          `结构预览完成：${preview.validation.status}。`,
+        ),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -703,7 +772,7 @@ export function DatasourceDesignPage() {
 
   async function handlePreviewData() {
     if (!draft) {
-      setFeedback({ tone: 'error', message: 'Draft is empty, cannot preview data.' });
+      setFeedback({ tone: 'error', message: t('Draft is empty, cannot preview data.', '草稿为空，无法预览数据。') });
       return;
     }
 
@@ -719,7 +788,13 @@ export function DatasourceDesignPage() {
         includeSourceRecord: previewIncludeSourceRecord,
       });
       setDataPreview(preview);
-      setFeedback({ tone: 'success', message: `Data preview loaded: ${preview.summary.rowCount} rows.` });
+      setFeedback({
+        tone: 'success',
+        message: t(
+          `Data preview loaded: ${preview.summary.rowCount} rows.`,
+          `数据预览已加载：${preview.summary.rowCount} 行。`,
+        ),
+      });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
       setDataPreview(null);
@@ -730,13 +805,17 @@ export function DatasourceDesignPage() {
 
   async function handleRunPreviewSuite() {
     if (!draft) {
-      setFeedback({ tone: 'error', message: 'Draft is empty, cannot run test preview.' });
+      setFeedback({ tone: 'error', message: t('Draft is empty, cannot run test preview.', '草稿为空，无法运行测试预览。') });
       return;
     }
 
     const issues = getDatasourceDraftIssues(draft);
     if (issues.length > 0) {
-      setFeedback({ tone: 'error', message: `Fix local issues first: ${issues[0]}` });
+      const firstIssue = localizeDatasourceDraftIssue(issues[0], t);
+      setFeedback({
+        tone: 'error',
+        message: t(`Fix local issues first: ${firstIssue}`, `请先修复本地问题：${firstIssue}`),
+      });
       return;
     }
 
@@ -750,7 +829,7 @@ export function DatasourceDesignPage() {
       runAt: new Date().toISOString(),
       structure: 'running',
       data: 'idle',
-      note: 'Running structure preview...',
+      note: t('Running structure preview...', '正在运行结构预览...'),
     });
 
     try {
@@ -762,9 +841,12 @@ export function DatasourceDesignPage() {
           runAt: previous?.runAt || new Date().toISOString(),
           structure: 'failed',
           data: 'idle',
-          note: `Structure preview failed: ${structure.validation.failedChecks.join(', ') || 'validation_failed'}`,
+          note: t(
+            `Structure preview failed: ${structure.validation.failedChecks.join(', ') || 'validation_failed'}`,
+            `结构预览失败：${structure.validation.failedChecks.join(', ') || 'validation_failed'}`,
+          ),
         }));
-        setFeedback({ tone: 'error', message: 'Test preview stopped: structure validation failed.' });
+        setFeedback({ tone: 'error', message: t('Test preview stopped: structure validation failed.', '测试预览已停止：结构校验失败。') });
         return;
       }
 
@@ -772,7 +854,7 @@ export function DatasourceDesignPage() {
         runAt: previous?.runAt || new Date().toISOString(),
         structure: 'passed',
         data: 'running',
-        note: 'Structure passed, running data preview...',
+        note: t('Structure passed, running data preview...', '结构校验通过，正在运行数据预览...'),
       }));
 
       const data = await previewDatasourceData({
@@ -787,11 +869,17 @@ export function DatasourceDesignPage() {
         runAt: previous?.runAt || new Date().toISOString(),
         structure: 'passed',
         data: 'passed',
-        note: `All preview steps passed (${data.summary.rowCount} rows).`,
+        note: t(
+          `All preview steps passed (${data.summary.rowCount} rows).`,
+          `预览流程全部通过（${data.summary.rowCount} 行）。`,
+        ),
       }));
       setFeedback({
         tone: 'success',
-        message: `Test preview passed: ${data.summary.rowCount} rows loaded.`,
+        message: t(
+          `Test preview passed: ${data.summary.rowCount} rows loaded.`,
+          `测试预览通过：已加载 ${data.summary.rowCount} 行。`,
+        ),
       });
     } catch (error) {
       setPreviewPipeline((previous) => {
@@ -800,7 +888,7 @@ export function DatasourceDesignPage() {
             runAt: new Date().toISOString(),
             structure: 'failed',
             data: 'failed',
-            note: 'Preview failed unexpectedly.',
+            note: t('Preview failed unexpectedly.', '预览意外失败。'),
           } satisfies DatasourcePreviewPipeline;
         }
         if (previous.structure === 'running') {
@@ -808,13 +896,13 @@ export function DatasourceDesignPage() {
             ...previous,
             structure: 'failed',
             data: 'idle',
-            note: 'Structure preview request failed.',
+            note: t('Structure preview request failed.', '结构预览请求失败。'),
           } satisfies DatasourcePreviewPipeline;
         }
         return {
           ...previous,
           data: 'failed',
-          note: 'Data preview request failed.',
+          note: t('Data preview request failed.', '数据预览请求失败。'),
         } satisfies DatasourcePreviewPipeline;
       });
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -827,7 +915,9 @@ export function DatasourceDesignPage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Datasource Studio / Design"
+        titleZh="数据源工作台 / 设计"
         description="Design datasource schema and field mappings with draft revision control and preview capabilities."
+        descriptionZh="设计数据源 schema 与字段映射，并支持草稿修订控制和预览。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="design" />
 
@@ -837,7 +927,7 @@ export function DatasourceDesignPage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-4 p-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-white">Datasource Catalog</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Datasource Catalog', '数据源目录')}</h2>
               <Button
                 variant="outline"
                 size="sm"
@@ -846,14 +936,14 @@ export function DatasourceDesignPage() {
                 disabled={isLoadingEntries}
               >
                 {isLoadingEntries ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Refresh
+                {t('Refresh', '刷新')}
               </Button>
             </div>
 
             <div className="max-h-[280px] space-y-2 overflow-auto pr-1">
               {entries.length === 0 && (
                 <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                  No datasource item exists yet.
+                  {t('No datasource item exists yet.', '当前还没有数据源条目。')}
                 </div>
               )}
               {entries.map((entry) => {
@@ -880,25 +970,25 @@ export function DatasourceDesignPage() {
             </div>
 
             <div className="rounded-lg border border-white/10 bg-zinc-900 p-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">Create New Entry</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">{t('Create New Entry', '创建新条目')}</h3>
               <div className="mt-2 space-y-2">
                 <input
                   type="text"
                   value={newItemId}
                   onChange={(event) => setNewItemId(event.target.value)}
-                  placeholder="itemId (e.g. football_matches)"
+                  placeholder={t('itemId (e.g. football_matches)', 'itemId（例如 football_matches）')}
                   className={INPUT_CLASS}
                 />
                 <input
                   type="text"
                   value={newEntryVersion}
                   onChange={(event) => setNewEntryVersion(event.target.value)}
-                  placeholder="version (e.g. 1.0.0)"
+                  placeholder={t('version (e.g. 1.0.0)', 'version（例如 1.0.0）')}
                   className={INPUT_CLASS}
                 />
                 <Button onClick={() => void handleCreateEntry()} disabled={isCreatingEntry} className="w-full gap-2">
                   {isCreatingEntry ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  Create Entry
+                  {t('Create Entry', '创建条目')}
                 </Button>
               </div>
             </div>
@@ -910,35 +1000,35 @@ export function DatasourceDesignPage() {
             <CardContent className="space-y-4 p-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div className="md:col-span-2">
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Item</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Item', '条目')}</label>
                   <Select
                     value={selectedItemId || ''}
                     onChange={(value) => setSelectedItemId(value)}
                     options={
                       entries.length > 0
                         ? toEntryOptions(entries)
-                        : [{ value: '', label: 'No item available' }]
+                        : [{ value: '', label: t('No item available', '暂无可用条目') }]
                     }
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Revision</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Revision', '修订')}</label>
                   <Select
                     value={selectedVersion || ''}
                     onChange={handleChangeVersion}
                     options={
                       revisions.length > 0
                         ? toRevisionOptions(revisions)
-                        : [{ value: '', label: isLoadingRevisions ? 'Loading...' : 'No revision' }]
+                        : [{ value: '', label: isLoadingRevisions ? t('Loading...', '加载中...') : t('No revision', '无修订') }]
                     }
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Channel</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Channel', '通道')}</label>
                   <Select
                     value={publishChannel}
                     onChange={(value) => setPublishChannel(value as CatalogChannel)}
-                    options={CHANNEL_OPTIONS}
+                    options={channelOptions}
                   />
                 </div>
               </div>
@@ -951,7 +1041,7 @@ export function DatasourceDesignPage() {
                   disabled={!selectedItemId || isLoadingRevisions}
                 >
                   {isLoadingRevisions ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  Reload Revisions
+                  {t('Reload Revisions', '重新加载修订')}
                 </Button>
                 <Button
                   className="gap-2"
@@ -959,7 +1049,7 @@ export function DatasourceDesignPage() {
                   disabled={!selectedItemId || !selectedVersion || !draft || isSavingDraft}
                 >
                   {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save Draft
+                  {t('Save Draft', '保存草稿')}
                 </Button>
                 <Button
                   variant="outline"
@@ -968,7 +1058,7 @@ export function DatasourceDesignPage() {
                   disabled={!draft || isPreviewingStructure}
                 >
                   {isPreviewingStructure ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                  Preview Structure
+                  {t('Preview Structure', '预览结构')}
                 </Button>
                 <Button
                   variant="outline"
@@ -977,7 +1067,7 @@ export function DatasourceDesignPage() {
                   disabled={!draft || isPreviewingData}
                 >
                   {isPreviewingData ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
-                  Preview Data
+                  {t('Preview Data', '预览数据')}
                 </Button>
                 <Button
                   variant="outline"
@@ -986,7 +1076,7 @@ export function DatasourceDesignPage() {
                   disabled={!draft || isPreviewingSuite || isPreviewingStructure || isPreviewingData}
                 >
                   {isPreviewingSuite ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  Test Preview (All)
+                  {t('Test Preview (All)', '测试预览（全部）')}
                 </Button>
               </div>
 
@@ -995,7 +1085,7 @@ export function DatasourceDesignPage() {
                   type="text"
                   value={newRevisionVersion}
                   onChange={(event) => setNewRevisionVersion(event.target.value)}
-                  placeholder="new revision version (e.g. 1.0.1)"
+                  placeholder={t('new revision version (e.g. 1.0.1)', '新修订版本（例如 1.0.1）')}
                   className={INPUT_CLASS}
                 />
                 <Button
@@ -1005,7 +1095,7 @@ export function DatasourceDesignPage() {
                   disabled={!selectedItemId || !draft || isCreatingRevision}
                 >
                   {isCreatingRevision ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  Create Revision
+                  {t('Create Revision', '创建修订')}
                 </Button>
               </div>
 
@@ -1014,14 +1104,14 @@ export function DatasourceDesignPage() {
                   type="text"
                   value={previewLimit}
                   onChange={(event) => setPreviewLimit(event.target.value)}
-                  placeholder="preview row limit"
+                  placeholder={t('preview row limit', '预览行数上限')}
                   className={INPUT_CLASS}
                 />
                 <input
                   type="text"
                   value={previewStatusesText}
                   onChange={(event) => setPreviewStatusesText(event.target.value)}
-                  placeholder="statuses CSV"
+                  placeholder={t('statuses CSV', '状态 CSV')}
                   className={INPUT_CLASS}
                 />
                 <button
@@ -1033,26 +1123,28 @@ export function DatasourceDesignPage() {
                       : 'border-white/10 bg-zinc-900 text-zinc-400'
                   }`}
                 >
-                  includeSourceRecord: {previewIncludeSourceRecord ? 'true' : 'false'}
+                  {t('includeSourceRecord', '包含原始记录')}:
+                  {' '}
+                  {previewIncludeSourceRecord ? t('true', '是') : t('false', '否')}
                 </button>
               </div>
 
               {selectedRevision && (
-                <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-300">
-                  <div className="flex flex-wrap gap-4">
-                    <span>status: {selectedRevision.status}</span>
-                    <span>channel: {selectedRevision.channel}</span>
-                    <span>updated: {formatTime(selectedRevision.updatedAt)}</span>
+                  <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-300">
+                    <div className="flex flex-wrap gap-4">
+                      <span>{t('status', '状态')}: {selectedRevision.status}</span>
+                      <span>{t('channel', '通道')}: {selectedRevision.channel}</span>
+                      <span>{t('updated', '更新时间')}: {formatTime(selectedRevision.updatedAt)}</span>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </CardContent>
           </Card>
 
           {!draft && (
             <Card className="border-zinc-800 bg-zinc-950">
               <CardContent className="p-4 text-xs text-zinc-500">
-                Select an item/revision to start datasource editing.
+                {t('Select an item/revision to start datasource editing.', '请选择条目/修订以开始数据源编辑。')}
               </CardContent>
             </Card>
           )}
@@ -1060,11 +1152,11 @@ export function DatasourceDesignPage() {
           {draft && (
             <Card className="border-zinc-800 bg-zinc-950">
               <CardContent className="space-y-4 p-4">
-                <h2 className="text-sm font-semibold text-white">Datasource Draft Editor</h2>
+                <h2 className="text-sm font-semibold text-white">{t('Datasource Draft Editor', '数据源草稿编辑器')}</h2>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Datasource ID</label>
+                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Datasource ID', '数据源 ID')}</label>
                     <input
                       type="text"
                       value={draft.id}
@@ -1073,7 +1165,7 @@ export function DatasourceDesignPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Datasource Name</label>
+                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Datasource Name', '数据源名称')}</label>
                     <input
                       type="text"
                       value={draft.name}
@@ -1085,7 +1177,7 @@ export function DatasourceDesignPage() {
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div>
-                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">labelKey</label>
+                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('labelKey', 'labelKey')}</label>
                     <input
                       type="text"
                       value={draft.labelKey}
@@ -1094,18 +1186,18 @@ export function DatasourceDesignPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">cardSpan</label>
+                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('cardSpan', '卡片宽度')}</label>
                     <Select
                       value={draft.cardSpan}
                       onChange={(value) => updateDraft({ cardSpan: value === '2' ? '2' : '1' })}
                       options={[
-                        { value: '1', label: '1 column' },
-                        { value: '2', label: '2 columns' },
+                        { value: '1', label: t('1 column', '1 列') },
+                        { value: '2', label: t('2 columns', '2 列') },
                       ]}
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">defaultSelected</label>
+                    <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('defaultSelected', '默认选中')}</label>
                     <button
                       type="button"
                       onClick={() => updateDraft({ defaultSelected: !draft.defaultSelected })}
@@ -1115,29 +1207,29 @@ export function DatasourceDesignPage() {
                           : 'border-white/10 bg-zinc-900 text-zinc-400'
                       }`}
                     >
-                      {draft.defaultSelected ? 'true' : 'false'}
+                      {draft.defaultSelected ? t('true', '是') : t('false', '否')}
                     </button>
                   </div>
                 </div>
 
                 <div>
                   <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">
-                    requiredPermissions (CSV)
+                    {t('requiredPermissions (CSV)', 'requiredPermissions（CSV）')}
                   </label>
                   <input
                     type="text"
                     value={draft.requiredPermissionsText}
                     onChange={(event) => updateDraft({ requiredPermissionsText: event.target.value })}
                     className={INPUT_CLASS}
-                    placeholder="match.read,odds.read"
+                    placeholder={t('match.read,odds.read', 'match.read,odds.read')}
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Fields</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{t('Fields', '字段')}</h3>
                   <Button variant="outline" size="sm" className="gap-1" onClick={addField}>
                     <Plus className="h-3.5 w-3.5" />
-                    Add Field
+                    {t('Add Field', '新增字段')}
                   </Button>
                 </div>
 
@@ -1150,7 +1242,7 @@ export function DatasourceDesignPage() {
                     return (
                       <div key={`${field.id}-${index}`} className="rounded-lg border border-white/10 bg-zinc-900 p-3">
                         <div className="mb-3 flex items-center justify-between">
-                          <div className="text-xs font-semibold text-zinc-200">field #{index + 1}</div>
+                          <div className="text-xs font-semibold text-zinc-200">{t('field', '字段')} #{index + 1}</div>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1158,13 +1250,13 @@ export function DatasourceDesignPage() {
                             onClick={() => removeField(index)}
                             disabled={draft.fields.length <= 1}
                           >
-                            Remove
+                            {t('Remove', '移除')}
                           </Button>
                         </div>
 
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                           <div>
-                            <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Field ID</label>
+                            <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Field ID', '字段 ID')}</label>
                             <input
                               type="text"
                               value={field.id}
@@ -1173,7 +1265,7 @@ export function DatasourceDesignPage() {
                             />
                           </div>
                           <div>
-                            <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Field Type</label>
+                            <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Field Type', '字段类型')}</label>
                             <Select
                               value={field.type}
                               onChange={(value) => updateField(index, { type: value as DatasourceFieldType })}
@@ -1182,7 +1274,7 @@ export function DatasourceDesignPage() {
                           </div>
                           {needSinglePath && (
                             <div>
-                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Path</label>
+                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Path', '路径')}</label>
                               <input
                                 type="text"
                                 value={field.pathText}
@@ -1197,7 +1289,7 @@ export function DatasourceDesignPage() {
                         {needVersus && (
                           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                             <div>
-                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">homePath</label>
+                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('homePath', 'homePath')}</label>
                               <input
                                 type="text"
                                 value={field.homePathText}
@@ -1207,7 +1299,7 @@ export function DatasourceDesignPage() {
                               />
                             </div>
                             <div>
-                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">awayPath</label>
+                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('awayPath', 'awayPath')}</label>
                               <input
                                 type="text"
                                 value={field.awayPathText}
@@ -1222,7 +1314,7 @@ export function DatasourceDesignPage() {
                         {needOddsTriplet && (
                           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
                             <div>
-                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">homePath</label>
+                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('homePath', 'homePath')}</label>
                               <input
                                 type="text"
                                 value={field.homePathText}
@@ -1232,7 +1324,7 @@ export function DatasourceDesignPage() {
                               />
                             </div>
                             <div>
-                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">drawPath</label>
+                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('drawPath', 'drawPath')}</label>
                               <input
                                 type="text"
                                 value={field.drawPathText}
@@ -1242,7 +1334,7 @@ export function DatasourceDesignPage() {
                               />
                             </div>
                             <div>
-                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">awayPath</label>
+                              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('awayPath', 'awayPath')}</label>
                               <input
                                 type="text"
                                 value={field.awayPathText}
@@ -1263,11 +1355,11 @@ export function DatasourceDesignPage() {
 
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-white">Local Validation</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Local Validation', '本地校验')}</h2>
               {localIssues.length === 0 && (
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
                   <CheckCircle2 className="mr-1 inline h-4 w-4" />
-                  Local draft checks passed.
+                  {t('Local draft checks passed.', '本地草稿校验通过。')}
                 </div>
               )}
               {localIssues.length > 0 && (
@@ -1286,7 +1378,7 @@ export function DatasourceDesignPage() {
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-white">Preview Pipeline</h2>
+                <h2 className="text-sm font-semibold text-white">{t('Preview Pipeline', '预览流水线')}</h2>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1295,13 +1387,13 @@ export function DatasourceDesignPage() {
                   disabled={!draft || isPreviewingSuite || isPreviewingStructure || isPreviewingData}
                 >
                   {isPreviewingSuite ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                  Run All
+                  {t('Run All', '全部运行')}
                 </Button>
               </div>
 
               {!previewPipeline && (
                 <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                  Run test preview to execute structure + data preview in one flow.
+                  {t('Run test preview to execute structure + data preview in one flow.', '运行测试预览可在一个流程中执行结构 + 数据预览。')}
                 </div>
               )}
 
@@ -1309,12 +1401,12 @@ export function DatasourceDesignPage() {
                 <div className="space-y-3">
                   <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-300">
                     <div className="flex flex-wrap gap-4">
-                      <span>runAt: {formatTime(previewPipeline.runAt)}</span>
+                      <span>{t('runAt', '运行时间')}: {formatTime(previewPipeline.runAt)}</span>
                       <span className={previewPipeline.structure === 'passed' ? 'text-emerald-300' : previewPipeline.structure === 'failed' ? 'text-red-300' : 'text-zinc-400'}>
-                        structure: {previewPipeline.structure}
+                        {t('structure', '结构')}: {previewPipeline.structure}
                       </span>
                       <span className={previewPipeline.data === 'passed' ? 'text-emerald-300' : previewPipeline.data === 'failed' ? 'text-red-300' : 'text-zinc-400'}>
-                        data: {previewPipeline.data}
+                        {t('data', '数据')}: {previewPipeline.data}
                       </span>
                     </div>
                     <div className="mt-1 text-zinc-500">{previewPipeline.note}</div>
@@ -1326,30 +1418,32 @@ export function DatasourceDesignPage() {
 
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-white">Manifest Preview</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Manifest Preview', '清单预览')}</h2>
               <pre className="max-h-[320px] overflow-auto rounded-lg border border-white/10 bg-zinc-900 p-3 text-[11px] text-zinc-300">
-                {manifestPreview || '// no draft selected'}
+                {manifestPreview || t('// no draft selected', '// 未选择草稿')}
               </pre>
             </CardContent>
           </Card>
 
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-white">Structure Preview</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Structure Preview', '结构预览')}</h2>
               {!structurePreview && (
                 <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                  Run "Preview Structure" to inspect mapping quality and check results.
+                  {t('Run "Preview Structure" to inspect mapping quality and check results.', '运行“预览结构”以检查映射质量和校验结果。')}
                 </div>
               )}
               {structurePreview && (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-300">
                     <div className="flex flex-wrap gap-4">
-                      <span>sourceId: {structurePreview.sourceId}</span>
-                      <span>fields: {structurePreview.summary.totalFields}</span>
-                      <span>mappedPaths: {structurePreview.summary.mappedPathCount}</span>
+                      <span>{t('sourceId', 'sourceId')}: {structurePreview.sourceId}</span>
+                      <span>{t('fields', '字段数')}: {structurePreview.summary.totalFields}</span>
+                      <span>{t('mappedPaths', '映射路径')}: {structurePreview.summary.mappedPathCount}</span>
                       <span>
-                        validation: <span className={structurePreview.validation.status === 'passed' ? 'text-emerald-400' : 'text-red-400'}>{structurePreview.validation.status}</span>
+                        {t('validation', '校验')}:
+                        {' '}
+                        <span className={structurePreview.validation.status === 'passed' ? 'text-emerald-400' : 'text-red-400'}>{structurePreview.validation.status}</span>
                       </span>
                     </div>
                   </div>
@@ -1369,14 +1463,14 @@ export function DatasourceDesignPage() {
                     ))}
                   </div>
                   <div className="rounded-lg border border-white/10 bg-zinc-900 p-3">
-                    <div className="mb-2 text-xs font-semibold text-zinc-300">Top Path Catalog</div>
+                    <div className="mb-2 text-xs font-semibold text-zinc-300">{t('Top Path Catalog', '路径目录 Top')}</div>
                     <div className="max-h-40 space-y-1 overflow-auto text-[11px] text-zinc-300">
                       {structurePreview.pathCatalog.slice(0, 20).map((item) => (
                         <div key={item.pathText} className="font-mono">
                           {item.pathText} ({item.fieldRefs.length})
                         </div>
                       ))}
-                      {structurePreview.pathCatalog.length === 0 && <div className="text-zinc-500">No mapped path.</div>}
+                      {structurePreview.pathCatalog.length === 0 && <div className="text-zinc-500">{t('No mapped path.', '暂无映射路径。')}</div>}
                     </div>
                   </div>
                 </div>
@@ -1386,31 +1480,31 @@ export function DatasourceDesignPage() {
 
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-white">Data Preview</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Data Preview', '数据预览')}</h2>
               {!dataPreview && (
                 <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                  Run "Preview Data" to sample mapped output rows.
+                  {t('Run "Preview Data" to sample mapped output rows.', '运行“预览数据”以抽样查看映射结果行。')}
                 </div>
               )}
               {dataPreview && (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-300">
                     <div className="flex flex-wrap gap-4">
-                      <span>source: {dataPreview.source}</span>
-                      <span>sampledAt: {formatTime(dataPreview.sampledAt)}</span>
-                      <span>rows: {dataPreview.summary.rowCount}</span>
+                      <span>{t('source', '来源')}: {dataPreview.source}</span>
+                      <span>{t('sampledAt', '采样时间')}: {formatTime(dataPreview.sampledAt)}</span>
+                      <span>{t('rows', '行数')}: {dataPreview.summary.rowCount}</span>
                     </div>
                   </div>
                   <div className="max-h-[300px] overflow-auto rounded-lg border border-white/10 bg-zinc-900">
                     <table className="w-full min-w-[760px] text-left text-[11px] text-zinc-300">
                       <thead className="border-b border-white/10 text-zinc-400">
                         <tr>
-                          <th className="px-3 py-2">row</th>
-                          <th className="px-3 py-2">matchId</th>
-                          <th className="px-3 py-2">league</th>
-                          <th className="px-3 py-2">status</th>
-                          <th className="px-3 py-2">matchDate</th>
-                          <th className="px-3 py-2">values</th>
+                          <th className="px-3 py-2">{t('row', '行')}</th>
+                          <th className="px-3 py-2">{t('matchId', 'matchId')}</th>
+                          <th className="px-3 py-2">{t('league', '联赛')}</th>
+                          <th className="px-3 py-2">{t('status', '状态')}</th>
+                          <th className="px-3 py-2">{t('matchDate', '比赛时间')}</th>
+                          <th className="px-3 py-2">{t('values', '值')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1426,7 +1520,7 @@ export function DatasourceDesignPage() {
                         ))}
                         {dataPreview.rows.length === 0 && (
                           <tr>
-                            <td colSpan={6} className="px-3 py-4 text-center text-zinc-500">No rows.</td>
+                            <td colSpan={6} className="px-3 py-4 text-center text-zinc-500">{t('No rows.', '暂无数据行。')}</td>
                           </tr>
                         )}
                       </tbody>
@@ -1443,6 +1537,7 @@ export function DatasourceDesignPage() {
 }
 
 export function DatasourceManagePage() {
+  const { t } = useI18n();
   const [sourceEntries, setSourceEntries] = useState<CatalogEntry[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState('');
 
@@ -1478,6 +1573,19 @@ export function DatasourceManagePage() {
   const selectedCollector = useMemo(
     () => collectors.find((collector) => collector.id === selectedCollectorId) || null,
     [collectors, selectedCollectorId],
+  );
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
   );
 
   async function refreshSources(preferredSourceId?: string) {
@@ -1611,7 +1719,7 @@ export function DatasourceManagePage() {
 
   async function handleCreateCollector() {
     if (!selectedSourceId || !createCollectorName.trim()) {
-      setFeedback({ tone: 'error', message: 'Select source and enter collector name.' });
+      setFeedback({ tone: 'error', message: t('Select source and enter collector name.', '请选择来源并填写采集器名称。') });
       return;
     }
 
@@ -1625,7 +1733,7 @@ export function DatasourceManagePage() {
         isEnabled: createCollectorEnabled,
       });
       setCreateCollectorName('');
-      setFeedback({ tone: 'success', message: `Collector created: ${created.name}` });
+      setFeedback({ tone: 'success', message: t(`Collector created: ${created.name}`, `采集器已创建：${created.name}`) });
       await refreshCollectors(selectedSourceId);
       setSelectedCollectorId(created.id);
       await refreshHealth(selectedSourceId);
@@ -1638,7 +1746,7 @@ export function DatasourceManagePage() {
 
   async function handleToggleCollectorEnabled() {
     if (!selectedCollector) {
-      setFeedback({ tone: 'error', message: 'Select collector first.' });
+      setFeedback({ tone: 'error', message: t('Select collector first.', '请先选择采集器。') });
       return;
     }
 
@@ -1649,7 +1757,10 @@ export function DatasourceManagePage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Collector ${selectedCollector.name} is now ${selectedCollector.isEnabled ? 'disabled' : 'enabled'}.`,
+        message: t(
+          `Collector ${selectedCollector.name} is now ${selectedCollector.isEnabled ? 'disabled' : 'enabled'}.`,
+          `采集器 ${selectedCollector.name} 当前已${selectedCollector.isEnabled ? '禁用' : '启用'}。`,
+        ),
       });
       await refreshCollectors(selectedSourceId);
       await refreshHealth(selectedSourceId);
@@ -1662,7 +1773,7 @@ export function DatasourceManagePage() {
 
   async function handleTriggerRun() {
     if (!selectedCollector) {
-      setFeedback({ tone: 'error', message: 'Select collector first.' });
+      setFeedback({ tone: 'error', message: t('Select collector first.', '请先选择采集器。') });
       return;
     }
 
@@ -1672,7 +1783,7 @@ export function DatasourceManagePage() {
         triggerType: 'manual',
         force: true,
       });
-      setFeedback({ tone: 'success', message: `Triggered run ${result.run.id}.` });
+      setFeedback({ tone: 'success', message: t(`Triggered run ${result.run.id}.`, `已触发运行 ${result.run.id}。`) });
       await refreshRuns(selectedCollector.id);
       await refreshSnapshots(selectedCollector.id);
       await refreshCollectors(selectedSourceId);
@@ -1691,7 +1802,12 @@ export function DatasourceManagePage() {
         action,
         notes: snapshotNotes.trim() || undefined,
       });
-      setFeedback({ tone: 'success', message: `${action} snapshot: ${snapshotId}` });
+      setFeedback({
+        tone: 'success',
+        message: action === 'confirm'
+          ? t(`confirm snapshot: ${snapshotId}`, `已确认快照：${snapshotId}`)
+          : t(`reject snapshot: ${snapshotId}`, `已拒绝快照：${snapshotId}`),
+      });
       await refreshSnapshots(selectedCollectorId);
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -1706,7 +1822,13 @@ export function DatasourceManagePage() {
       await releaseDatasourceCollectionSnapshot(snapshotId, {
         channel: snapshotReleaseChannel,
       });
-      setFeedback({ tone: 'success', message: `Released snapshot: ${snapshotId} -> ${snapshotReleaseChannel}` });
+      setFeedback({
+        tone: 'success',
+        message: t(
+          `Released snapshot: ${snapshotId} -> ${snapshotReleaseChannel}`,
+          `已发布快照：${snapshotId} -> ${snapshotReleaseChannel}`,
+        ),
+      });
       await refreshSnapshots(selectedCollectorId);
       await refreshHealth(selectedSourceId);
     } catch (error) {
@@ -1723,7 +1845,7 @@ export function DatasourceManagePage() {
         triggerType: 'manual',
         force: true,
       });
-      setFeedback({ tone: 'success', message: `Replayed snapshot: ${snapshotId}` });
+      setFeedback({ tone: 'success', message: t(`Replayed snapshot: ${snapshotId}`, `已重放快照：${snapshotId}`) });
       await refreshRuns(selectedCollectorId);
       await refreshSnapshots(selectedCollectorId);
       await refreshHealth(selectedSourceId);
@@ -1738,7 +1860,9 @@ export function DatasourceManagePage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Datasource Studio / Manage"
+        titleZh="数据源工作台 / 管理"
         description="Manage collectors, run history, snapshot confirmations, and collection health for each datasource."
+        descriptionZh="管理采集器、运行历史、快照确认与采集健康。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="manage" />
 
@@ -1748,7 +1872,7 @@ export function DatasourceManagePage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-4 p-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-white">Collector Scope</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Collector Scope', '采集范围')}</h2>
               <Button
                 variant="outline"
                 size="sm"
@@ -1765,19 +1889,19 @@ export function DatasourceManagePage() {
                 {(isLoadingSources || isLoadingCollectors || isLoadingHealth)
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <RefreshCw className="h-3.5 w-3.5" />}
-                Refresh
+                {t('Refresh', '刷新')}
               </Button>
             </div>
 
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Datasource Item</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Datasource Item', '数据源条目')}</label>
               <Select
                 value={selectedSourceId || ''}
                 onChange={(value) => setSelectedSourceId(value)}
                 options={
                   sourceEntries.length > 0
                     ? toEntryOptions(sourceEntries)
-                    : [{ value: '', label: 'No datasource available' }]
+                    : [{ value: '', label: t('No datasource available', '暂无可用数据源') }]
                 }
               />
             </div>
@@ -1785,7 +1909,9 @@ export function DatasourceManagePage() {
             <div className="max-h-[220px] space-y-2 overflow-auto pr-1">
               {collectors.length === 0 && (
                 <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                  {isLoadingCollectors ? 'Loading collectors...' : 'No collector in selected datasource.'}
+                  {isLoadingCollectors
+                    ? t('Loading collectors...', '正在加载采集器...')
+                    : t('No collector in selected datasource.', '当前数据源下暂无采集器。')}
                 </div>
               )}
               {collectors.map((collector) => (
@@ -1800,20 +1926,24 @@ export function DatasourceManagePage() {
                   }`}
                 >
                   <div className="font-semibold text-zinc-200">{collector.name}</div>
-                  <div className="mt-1 text-zinc-500">{collector.provider} · {collector.isEnabled ? 'enabled' : 'disabled'}</div>
-                  <div className="mt-1 text-zinc-500">lastRun: {collector.lastRunStatus} · {formatTime(collector.lastRunAt)}</div>
+                  <div className="mt-1 text-zinc-500">
+                    {collector.provider}
+                    {' · '}
+                    {collector.isEnabled ? t('enabled', '启用') : t('disabled', '禁用')}
+                  </div>
+                  <div className="mt-1 text-zinc-500">{t('lastRun', '最近运行')}: {collector.lastRunStatus} · {formatTime(collector.lastRunAt)}</div>
                 </button>
               ))}
             </div>
 
             <div className="rounded-lg border border-white/10 bg-zinc-900 p-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">Create Collector</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">{t('Create Collector', '创建采集器')}</h3>
               <div className="mt-2 space-y-2">
                 <input
                   type="text"
                   value={createCollectorName}
                   onChange={(event) => setCreateCollectorName(event.target.value)}
-                  placeholder="collector name"
+                  placeholder={t('collector name', '采集器名称')}
                   className={INPUT_CLASS}
                 />
                 <Select
@@ -1825,7 +1955,7 @@ export function DatasourceManagePage() {
                   type="text"
                   value={createCollectorSchedule}
                   onChange={(event) => setCreateCollectorSchedule(event.target.value)}
-                  placeholder="schedule cron (optional)"
+                  placeholder={t('schedule cron (optional)', '调度 cron（可选）')}
                   className={INPUT_CLASS}
                 />
                 <button
@@ -1837,11 +1967,11 @@ export function DatasourceManagePage() {
                       : 'border-white/10 bg-zinc-900 text-zinc-400'
                   }`}
                 >
-                  enabled: {createCollectorEnabled ? 'true' : 'false'}
+                  {t('enabled', '启用')}: {createCollectorEnabled ? t('true', '是') : t('false', '否')}
                 </button>
                 <Button className="w-full gap-2" onClick={() => void handleCreateCollector()} disabled={isCreatingCollector}>
                   {isCreatingCollector ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  Create Collector
+                  {t('Create Collector', '创建采集器')}
                 </Button>
               </div>
             </div>
@@ -1854,7 +1984,7 @@ export function DatasourceManagePage() {
                 disabled={!selectedCollector || isTogglingCollector}
               >
                 {isTogglingCollector ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Toggle Enabled
+                {t('Toggle Enabled', '切换启用状态')}
               </Button>
               <Button
                 className="w-full gap-2"
@@ -1862,7 +1992,7 @@ export function DatasourceManagePage() {
                 disabled={!selectedCollector || isTriggeringRun}
               >
                 {isTriggeringRun ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
-                Trigger Manual Run
+                {t('Trigger Manual Run', '触发手动运行')}
               </Button>
             </div>
           </CardContent>
@@ -1871,22 +2001,22 @@ export function DatasourceManagePage() {
         <section className="space-y-4">
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-white">Collection Health</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Collection Health', '采集健康')}</h2>
               <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
-                <div className="rounded border border-white/10 bg-zinc-900 p-2 text-zinc-300">total: {healthSummary.total}</div>
-                <div className="rounded border border-emerald-500/20 bg-emerald-500/10 p-2 text-emerald-300">healthy: {healthSummary.healthy}</div>
-                <div className="rounded border border-amber-500/20 bg-amber-500/10 p-2 text-amber-300">stale: {healthSummary.stale}</div>
-                <div className="rounded border border-red-500/20 bg-red-500/10 p-2 text-red-300">failed: {healthSummary.failed}</div>
-                <div className="rounded border border-white/10 bg-zinc-900 p-2 text-zinc-300">neverRun: {healthSummary.neverRun}</div>
-                <div className="rounded border border-white/10 bg-zinc-900 p-2 text-zinc-300">disabled: {healthSummary.disabled}</div>
+                <div className="rounded border border-white/10 bg-zinc-900 p-2 text-zinc-300">{t('total', '总数')}: {healthSummary.total}</div>
+                <div className="rounded border border-emerald-500/20 bg-emerald-500/10 p-2 text-emerald-300">{t('healthy', '健康')}: {healthSummary.healthy}</div>
+                <div className="rounded border border-amber-500/20 bg-amber-500/10 p-2 text-amber-300">{t('stale', '过期')}: {healthSummary.stale}</div>
+                <div className="rounded border border-red-500/20 bg-red-500/10 p-2 text-red-300">{t('failed', '失败')}: {healthSummary.failed}</div>
+                <div className="rounded border border-white/10 bg-zinc-900 p-2 text-zinc-300">{t('neverRun', '未运行')}: {healthSummary.neverRun}</div>
+                <div className="rounded border border-white/10 bg-zinc-900 p-2 text-zinc-300">{t('disabled', '已禁用')}: {healthSummary.disabled}</div>
               </div>
               <div className="max-h-[200px] space-y-2 overflow-auto pr-1">
                 {isLoadingHealth && (
-                  <div className="text-xs text-zinc-500">Loading health...</div>
+                  <div className="text-xs text-zinc-500">{t('Loading health...', '正在加载健康状态...')}</div>
                 )}
                 {!isLoadingHealth && healthItems.length === 0 && (
                   <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                    No health item for current source.
+                    {t('No health item for current source.', '当前来源暂无健康项。')}
                   </div>
                 )}
                 {healthItems.map((item) => (
@@ -1896,10 +2026,10 @@ export function DatasourceManagePage() {
                       <span className="text-zinc-400">{item.health.status}</span>
                     </div>
                     <div className="mt-1 text-zinc-500">
-                      lastRun: {item.health.lastRunStatus} · {formatTime(item.health.lastRunAt)}
+                      {t('lastRun', '最近运行')}: {item.health.lastRunStatus} · {formatTime(item.health.lastRunAt)}
                     </div>
                     {item.health.reasons.length > 0 && (
-                      <div className="mt-1 text-zinc-500">reasons: {item.health.reasons.join(', ')}</div>
+                      <div className="mt-1 text-zinc-500">{t('reasons', '原因')}: {item.health.reasons.join(', ')}</div>
                     )}
                   </div>
                 ))}
@@ -1910,7 +2040,7 @@ export function DatasourceManagePage() {
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-white">Run History</h2>
+                <h2 className="text-sm font-semibold text-white">{t('Run History', '运行历史')}</h2>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1919,13 +2049,13 @@ export function DatasourceManagePage() {
                   disabled={!selectedCollectorId || isLoadingRuns}
                 >
                   {isLoadingRuns ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Refresh
+                  {t('Refresh', '刷新')}
                 </Button>
               </div>
               <div className="max-h-[240px] space-y-2 overflow-auto pr-1">
                 {runs.length === 0 && (
                   <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                    No run record.
+                    {t('No run record.', '暂无运行记录。')}
                   </div>
                 )}
                 {runs.map((run) => (
@@ -1934,9 +2064,9 @@ export function DatasourceManagePage() {
                       <span className="font-mono">{run.id}</span>
                       <span className={run.status === 'succeeded' ? 'text-emerald-400' : run.status === 'failed' ? 'text-red-400' : 'text-zinc-400'}>{run.status}</span>
                     </div>
-                    <div className="mt-1 text-zinc-500">trigger: {run.triggerType} · source: {run.sourceId}</div>
-                    <div className="mt-1 text-zinc-500">started: {formatTime(run.startedAt)} · finished: {formatTime(run.finishedAt)}</div>
-                    {run.errorMessage && <div className="mt-1 text-red-300">error: {run.errorMessage}</div>}
+                    <div className="mt-1 text-zinc-500">{t('trigger', '触发方式')}: {run.triggerType} · {t('source', '来源')}: {run.sourceId}</div>
+                    <div className="mt-1 text-zinc-500">{t('started', '开始')}: {formatTime(run.startedAt)} · {t('finished', '结束')}: {formatTime(run.finishedAt)}</div>
+                    {run.errorMessage && <div className="mt-1 text-red-300">{t('error', '错误')}: {run.errorMessage}</div>}
                   </div>
                 ))}
               </div>
@@ -1946,7 +2076,7 @@ export function DatasourceManagePage() {
           <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="space-y-3 p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-white">Snapshot Governance</h2>
+                <h2 className="text-sm font-semibold text-white">{t('Snapshot Governance', '快照治理')}</h2>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1955,7 +2085,7 @@ export function DatasourceManagePage() {
                   disabled={!selectedCollectorId || isLoadingSnapshots}
                 >
                   {isLoadingSnapshots ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Refresh
+                  {t('Refresh', '刷新')}
                 </Button>
               </div>
 
@@ -1963,15 +2093,15 @@ export function DatasourceManagePage() {
                 <textarea
                   value={snapshotNotes}
                   onChange={(event) => setSnapshotNotes(event.target.value)}
-                  placeholder="confirmation notes"
+                  placeholder={t('confirmation notes', '确认备注')}
                   className={TEXTAREA_CLASS}
                 />
                 <div className="space-y-2">
-                  <label className="block text-[11px] uppercase tracking-wider text-zinc-500">Release Channel</label>
+                  <label className="block text-[11px] uppercase tracking-wider text-zinc-500">{t('Release Channel', '发布通道')}</label>
                   <Select
                     value={snapshotReleaseChannel}
                     onChange={(value) => setSnapshotReleaseChannel(value as CatalogChannel)}
-                    options={CHANNEL_OPTIONS}
+                    options={channelOptions}
                   />
                 </div>
               </div>
@@ -1979,7 +2109,7 @@ export function DatasourceManagePage() {
               <div className="max-h-[340px] space-y-2 overflow-auto pr-1">
                 {snapshots.length === 0 && (
                   <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                    No snapshot for selected collector.
+                    {t('No snapshot for selected collector.', '当前采集器暂无快照。')}
                   </div>
                 )}
                 {snapshots.map((snapshot) => {
@@ -1988,13 +2118,13 @@ export function DatasourceManagePage() {
                     <div key={snapshot.id} className="rounded-lg border border-white/10 bg-zinc-900 p-3 text-[11px] text-zinc-300">
                       <div className="flex items-center justify-between">
                         <span className="font-mono">{snapshot.id}</span>
-                        <span className="text-zinc-400">records: {snapshot.recordCount}</span>
+                        <span className="text-zinc-400">{t('records', '记录数')}: {snapshot.recordCount}</span>
                       </div>
                       <div className="mt-1 text-zinc-500">
-                        confirmation: {snapshot.confirmationStatus} · release: {snapshot.releaseStatus}
+                        {t('confirmation', '确认')}: {snapshot.confirmationStatus} · {t('release', '发布')}: {snapshot.releaseStatus}
                         {snapshot.releaseChannel ? ` (${snapshot.releaseChannel})` : ''}
                       </div>
-                      <div className="mt-1 text-zinc-500">created: {formatTime(snapshot.createdAt)}</div>
+                      <div className="mt-1 text-zinc-500">{t('created', '创建时间')}: {formatTime(snapshot.createdAt)}</div>
 
                       <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                         <Button
@@ -2005,7 +2135,7 @@ export function DatasourceManagePage() {
                           disabled={activeAction}
                         >
                           {activeAction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                          Confirm
+                          {t('Confirm', '确认')}
                         </Button>
                         <Button
                           variant="outline"
@@ -2015,7 +2145,7 @@ export function DatasourceManagePage() {
                           disabled={activeAction}
                         >
                           {activeAction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
-                          Reject
+                          {t('Reject', '拒绝')}
                         </Button>
                         <Button
                           size="sm"
@@ -2024,7 +2154,7 @@ export function DatasourceManagePage() {
                           disabled={activeAction}
                         >
                           {activeAction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                          Release
+                          {t('Release', '发布')}
                         </Button>
                         <Button
                           variant="outline"
@@ -2034,7 +2164,7 @@ export function DatasourceManagePage() {
                           disabled={activeAction}
                         >
                           {activeAction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <History className="h-3.5 w-3.5" />}
-                          Replay
+                          {t('Replay', '重放')}
                         </Button>
                       </div>
                     </div>
@@ -2050,6 +2180,7 @@ export function DatasourceManagePage() {
 }
 
 export function DatasourcePublishPage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [releaseHistory, setReleaseHistory] = useState<ReleaseRecord[]>([]);
@@ -2084,6 +2215,32 @@ export function DatasourcePublishPage() {
     && validationRun.status === 'succeeded'
     && !hasValidationFailure(validationRun)
   ), [validationRun]);
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
+  );
+  const validationTypeOptions = useMemo(
+    () =>
+      VALIDATION_TYPE_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'catalog_validate'
+            ? t('catalog_validate', '目录验证')
+            : item.value === 'pre_publish'
+              ? t('pre_publish', '发布前验证')
+              : t('post_publish', '发布后验证'),
+      })),
+    [t],
+  );
 
   async function refreshEntries(preferredItemId?: string) {
     setIsLoadingEntries(true);
@@ -2169,7 +2326,7 @@ export function DatasourcePublishPage() {
 
   async function handleRunValidation() {
     if (!selectedItemId || !selectedVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and revision before validation.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision before validation.', '校验前请先选择条目和修订。') });
       return;
     }
     setIsRunningValidation(true);
@@ -2184,7 +2341,7 @@ export function DatasourcePublishPage() {
       setValidationLookupRunId(created.id);
       setFeedback({
         tone: 'info',
-        message: `Validation started: ${created.id} (${created.status})`,
+        message: t(`Validation started: ${created.id} (${created.status})`, `校验已启动：${created.id}（${created.status}）`),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -2196,7 +2353,7 @@ export function DatasourcePublishPage() {
   async function handleFetchValidationRun() {
     const runId = validationLookupRunId.trim();
     if (!runId) {
-      setFeedback({ tone: 'error', message: 'Provide runId to fetch validation result.' });
+      setFeedback({ tone: 'error', message: t('Provide runId to fetch validation result.', '请提供 runId 以查询校验结果。') });
       return;
     }
     setIsFetchingValidation(true);
@@ -2205,7 +2362,7 @@ export function DatasourcePublishPage() {
       setValidationRun(record);
       setFeedback({
         tone: record.status === 'succeeded' && !hasValidationFailure(record) ? 'success' : 'info',
-        message: `Validation run ${record.id}: ${record.status}`,
+        message: t(`Validation run ${record.id}: ${record.status}`, `校验任务 ${record.id}：${record.status}`),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -2216,13 +2373,16 @@ export function DatasourcePublishPage() {
 
   async function handlePublish() {
     if (!selectedItemId || !selectedVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and revision before publish.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision before publish.', '发布前请先选择条目和修订。') });
       return;
     }
     if (!publishGatePassed) {
       setFeedback({
         tone: 'error',
-        message: 'Publish gate blocked: run validation and ensure status=succeeded with no failed checks.',
+        message: t(
+          'Publish gate blocked: run validation and ensure status=succeeded with no failed checks.',
+          '发布门禁阻塞：请先运行校验并确保状态为 succeeded 且无失败检查项。',
+        ),
       });
       return;
     }
@@ -2237,7 +2397,10 @@ export function DatasourcePublishPage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Published ${selectedItemId}@${selectedVersion} to ${channel}.`,
+        message: t(
+          `Published ${selectedItemId}@${selectedVersion} to ${channel}.`,
+          `已发布 ${selectedItemId}@${selectedVersion} 到 ${channel}。`,
+        ),
       });
       await refreshRevisions(selectedItemId, selectedVersion);
       await refreshHistory();
@@ -2250,7 +2413,7 @@ export function DatasourcePublishPage() {
 
   async function handleRollback() {
     if (!selectedItemId || !rollbackVersion) {
-      setFeedback({ tone: 'error', message: 'Select rollback target version first.' });
+      setFeedback({ tone: 'error', message: t('Select rollback target version first.', '请先选择回滚目标版本。') });
       return;
     }
 
@@ -2264,7 +2427,10 @@ export function DatasourcePublishPage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Rollback request submitted: ${selectedItemId} -> ${rollbackVersion} (${channel}).`,
+        message: t(
+          `Rollback request submitted: ${selectedItemId} -> ${rollbackVersion} (${channel}).`,
+          `回滚请求已提交：${selectedItemId} -> ${rollbackVersion}（${channel}）。`,
+        ),
       });
       await refreshRevisions(selectedItemId, rollbackVersion);
       await refreshHistory();
@@ -2294,7 +2460,9 @@ export function DatasourcePublishPage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Datasource Studio / Publish"
+        titleZh="数据源工作台 / 发布"
         description="Validate, publish, and rollback datasource revisions with explicit release gates."
+        descriptionZh="通过明确的发布门禁校验后发布或回滚数据源修订。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="publish" />
 
@@ -2302,38 +2470,38 @@ export function DatasourcePublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-4 p-4">
-          <h2 className="text-sm font-semibold text-white">Release Target</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Release Target', '发布目标')}</h2>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div className="lg:col-span-2">
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Item</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Item', '条目')}</label>
               <Select
                 value={selectedItemId || ''}
                 onChange={(value) => setSelectedItemId(value)}
                 options={
                   entries.length > 0
                     ? toEntryOptions(entries)
-                    : [{ value: '', label: 'No item available' }]
+                    : [{ value: '', label: t('No item available', '暂无可用条目') }]
                 }
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Revision</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Revision', '修订')}</label>
               <Select
                 value={selectedVersion || ''}
                 onChange={(value) => setSelectedVersion(value)}
                 options={
                   revisions.length > 0
                     ? toRevisionOptions(revisions)
-                    : [{ value: '', label: isLoadingRevisions ? 'Loading...' : 'No revision' }]
+                    : [{ value: '', label: isLoadingRevisions ? t('Loading...', '加载中...') : t('No revision', '无修订') }]
                 }
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Channel</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Channel', '通道')}</label>
               <Select
                 value={channel}
                 onChange={(value) => setChannel(value as CatalogChannel)}
-                options={CHANNEL_OPTIONS}
+                options={channelOptions}
               />
             </div>
           </div>
@@ -2342,7 +2510,7 @@ export function DatasourcePublishPage() {
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="release notes (optional)"
+              placeholder={t('release notes (optional)', '发布备注（可选）')}
               className={TEXTAREA_CLASS}
             />
             <div className="flex items-end">
@@ -2359,7 +2527,7 @@ export function DatasourcePublishPage() {
                 {(isLoadingEntries || isLoadingRevisions || isLoadingHistory)
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <RefreshCw className="h-4 w-4" />}
-                Refresh Data
+                {t('Refresh Data', '刷新数据')}
               </Button>
             </div>
           </div>
@@ -2367,9 +2535,9 @@ export function DatasourcePublishPage() {
           {selectedRevision && (
             <div className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-300">
               <div className="flex flex-wrap gap-4">
-                <span>status: {selectedRevision.status}</span>
-                <span>channel: {selectedRevision.channel}</span>
-                <span>updated: {formatTime(selectedRevision.updatedAt)}</span>
+                <span>{t('status', '状态')}: {selectedRevision.status}</span>
+                <span>{t('channel', '通道')}: {selectedRevision.channel}</span>
+                <span>{t('updated', '更新时间')}: {formatTime(selectedRevision.updatedAt)}</span>
               </div>
             </div>
           )}
@@ -2378,23 +2546,23 @@ export function DatasourcePublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-4 p-4">
-          <h2 className="text-sm font-semibold text-white">Validation Gate</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Validation Gate', '验证门禁')}</h2>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Validation Type</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Validation Type', '验证类型')}</label>
               <Select
                 value={validationType}
                 onChange={(value) => setValidationType(value as ValidationRunType)}
-                options={VALIDATION_TYPE_OPTIONS}
+                options={validationTypeOptions}
               />
             </div>
             <div className="lg:col-span-2">
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Run ID</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Run ID', '任务 ID')}</label>
               <input
                 type="text"
                 value={validationLookupRunId}
                 onChange={(event) => setValidationLookupRunId(event.target.value)}
-                placeholder="validation run id"
+                placeholder={t('validation run id', '验证任务 ID')}
                 className={INPUT_CLASS}
               />
             </div>
@@ -2406,7 +2574,7 @@ export function DatasourcePublishPage() {
                 disabled={!selectedItemId || !selectedVersion || isRunningValidation}
               >
                 {isRunningValidation ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                Run
+                {t('Run', '运行')}
               </Button>
               <Button
                 variant="outline"
@@ -2415,7 +2583,7 @@ export function DatasourcePublishPage() {
                 disabled={isFetchingValidation}
               >
                 {isFetchingValidation ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Fetch
+                {t('Fetch', '查询')}
               </Button>
             </div>
           </div>
@@ -2427,12 +2595,12 @@ export function DatasourcePublishPage() {
                 : 'border-red-500/20 bg-red-500/10 text-red-300'
             }`}
           >
-            <div className="font-semibold">Publish Gate: {publishGatePassed ? 'Passed' : 'Blocked'}</div>
-            <div className="mt-1 text-[11px]">Need validation status = succeeded and no failed checks.</div>
+            <div className="font-semibold">{t('Publish Gate', '发布门禁')}: {publishGatePassed ? t('Passed', '通过') : t('Blocked', '阻塞')}</div>
+            <div className="mt-1 text-[11px]">{t('Need validation status = succeeded and no failed checks.', '需要校验状态为 succeeded 且无失败检查项。')}</div>
             {validationRun && (
               <div className="mt-1 text-[11px]">
-                runId={validationRun.id}, status={validationRun.status}
-                {validationRun.finishedAt ? `, finished=${formatTime(validationRun.finishedAt)}` : ''}
+                {t('runId', '任务 ID')}={validationRun.id}, {t('status', '状态')}={validationRun.status}
+                {validationRun.finishedAt ? `, ${t('finished', '结束时间')}=${formatTime(validationRun.finishedAt)}` : ''}
               </div>
             )}
           </div>
@@ -2440,7 +2608,7 @@ export function DatasourcePublishPage() {
           <div className="space-y-2">
             {validationChecks.length === 0 && (
               <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                No validation checks loaded yet.
+                {t('No validation checks loaded yet.', '尚未加载验证检查项。')}
               </div>
             )}
             {validationChecks.map((check, index) => {
@@ -2465,17 +2633,17 @@ export function DatasourcePublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-4 p-4">
-          <h2 className="text-sm font-semibold text-white">Publish / Rollback Action</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Publish / Rollback Action', '发布 / 回滚操作')}</h2>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Rollback Target</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Rollback Target', '回滚目标')}</label>
               <Select
                 value={rollbackVersion || ''}
                 onChange={(value) => setRollbackVersion(value)}
                 options={
                   rollbackOptions.length > 0
                     ? rollbackOptions
-                    : [{ value: '', label: 'No published revision' }]
+                    : [{ value: '', label: t('No published revision', '无已发布修订') }]
                 }
               />
             </div>
@@ -2486,7 +2654,7 @@ export function DatasourcePublishPage() {
                 disabled={!selectedItemId || !selectedVersion || !publishGatePassed || isPublishing}
               >
                 {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
-                Publish Revision
+                {t('Publish Revision', '发布修订')}
               </Button>
             </div>
             <div className="flex items-end">
@@ -2497,7 +2665,7 @@ export function DatasourcePublishPage() {
                 disabled={!selectedItemId || !rollbackVersion || isRollbacking}
               >
                 {isRollbacking ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
-                Rollback Version
+                {t('Rollback Version', '回滚版本')}
               </Button>
             </div>
           </div>
@@ -2507,7 +2675,7 @@ export function DatasourcePublishPage() {
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-white">Release History</h2>
+            <h2 className="text-sm font-semibold text-white">{t('Release History', '发布历史')}</h2>
             <Button
               variant="outline"
               size="sm"
@@ -2516,13 +2684,13 @@ export function DatasourcePublishPage() {
               disabled={isLoadingHistory}
             >
               {isLoadingHistory ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
           </div>
           <div className="max-h-[280px] space-y-2 overflow-auto pr-1">
             {filteredHistory.length === 0 && (
               <div className="rounded-lg border border-dashed border-white/10 p-3 text-xs text-zinc-500">
-                No release activity yet for selected datasource.
+                {t('No release activity yet for selected datasource.', '当前数据源暂无发布活动。')}
               </div>
             )}
             {filteredHistory.map((record) => (
@@ -2530,14 +2698,18 @@ export function DatasourcePublishPage() {
                 <div className="flex items-center justify-between">
                   <span className="font-mono">{record.itemId}</span>
                   <span className={record.action === 'publish' ? 'text-emerald-400' : 'text-amber-300'}>
-                    {record.action}
+                    {record.action === 'publish'
+                      ? t('publish', '发布')
+                      : record.action === 'rollback'
+                        ? t('rollback', '回滚')
+                        : record.action}
                   </span>
                 </div>
                 <div className="mt-1 text-zinc-500">
                   {record.fromVersion || '-'} -&gt; {record.toVersion} ({record.channel}) · {record.status}
                 </div>
                 {record.validationRunId && (
-                  <div className="mt-1 font-mono text-zinc-500">validationRunId: {record.validationRunId}</div>
+                  <div className="mt-1 font-mono text-zinc-500">{t('validationRunId', '校验任务 ID')}: {record.validationRunId}</div>
                 )}
                 <div className="mt-1 text-zinc-500">{formatTime(record.createdAt)}</div>
               </div>

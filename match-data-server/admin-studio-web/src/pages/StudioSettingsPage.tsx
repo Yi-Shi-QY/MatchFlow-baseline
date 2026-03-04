@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
+import { useI18n } from '@/src/i18n';
 import {
   AdminStudioApiError,
   getCurrentUserProfile,
@@ -45,6 +46,7 @@ function formatAuthUserLabel(user: AdminStudioAuthUser | null) {
 }
 
 export default function StudioSettingsPage() {
+  const { t } = useI18n();
   const initial = getSettings();
   const [serverUrlInput, setServerUrlInput] = useState(initial.matchDataServerUrl);
   const [apiKeyInput, setApiKeyInput] = useState(initial.matchDataApiKey);
@@ -62,7 +64,7 @@ export default function StudioSettingsPage() {
     const serverUrl = serverUrlInput.trim();
     const apiKey = apiKeyInput.trim();
     if (!serverUrl) {
-      setFeedback({ tone: 'error', message: 'Server URL is required.' });
+      setFeedback({ tone: 'error', message: t('Server URL is required.', '必须填写服务端地址。') });
       return;
     }
 
@@ -89,7 +91,7 @@ export default function StudioSettingsPage() {
 
     setFeedback({
       tone: 'success',
-      message: 'Settings saved.',
+      message: t('Settings saved.', '设置已保存。'),
     });
   }
 
@@ -98,13 +100,13 @@ export default function StudioSettingsPage() {
     const identifier = accountIdentifierInput.trim();
     const password = accountPasswordInput;
     if (!serverUrl) {
-      setFeedback({ tone: 'error', message: 'Server URL is required.' });
+      setFeedback({ tone: 'error', message: t('Server URL is required.', '必须填写服务端地址。') });
       return;
     }
     if (!identifier || !password) {
       setFeedback({
         tone: 'error',
-        message: 'Account login requires identifier and password.',
+        message: t('Account login requires identifier and password.', '账号登录需要填写账号与密码。'),
       });
       return;
     }
@@ -125,7 +127,10 @@ export default function StudioSettingsPage() {
       setAccountPasswordInput('');
       setFeedback({
         tone: 'success',
-        message: `Logged in as ${formatAuthUserLabel(data.user || null)}.`,
+        message: t(
+          `Logged in as ${formatAuthUserLabel(data.user || null)}.`,
+          `已登录：${formatAuthUserLabel(data.user || null)}。`,
+        ),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: summarizeError(error) });
@@ -145,7 +150,10 @@ export default function StudioSettingsPage() {
       );
       setFeedback({
         tone: 'success',
-        message: `Profile refreshed: ${formatAuthUserLabel(user)}.`,
+        message: t(
+          `Profile refreshed: ${formatAuthUserLabel(user)}.`,
+          `身份信息已刷新：${formatAuthUserLabel(user)}。`,
+        ),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: summarizeError(error) });
@@ -162,7 +170,7 @@ export default function StudioSettingsPage() {
       setCapabilitiesSummary('');
       setFeedback({
         tone: 'info',
-        message: 'Account session cleared.',
+        message: t('Account session cleared.', '账号会话已清除。'),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: summarizeError(error) });
@@ -176,8 +184,13 @@ export default function StudioSettingsPage() {
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-4 p-4">
           <div>
-            <h1 className="text-base font-bold text-white">Studio Settings</h1>
-            <p className="text-xs text-zinc-500">Manage connection and auth session outside business pages.</p>
+            <h1 className="text-base font-bold text-white">{t('Studio Settings', '工作台设置')}</h1>
+            <p className="text-xs text-zinc-500">
+              {t(
+                'Manage connection and auth session outside business pages.',
+                '在业务页面之外管理连接配置和认证会话。',
+              )}
+            </p>
           </div>
 
           {feedback && (
@@ -201,7 +214,7 @@ export default function StudioSettingsPage() {
               type="text"
               value={serverUrlInput}
               onChange={(event) => setServerUrlInput(event.target.value)}
-              placeholder="Server URL (e.g. http://127.0.0.1:3001)"
+              placeholder={t('Server URL (e.g. http://127.0.0.1:3001)', '服务端地址（例如 http://127.0.0.1:3001）')}
               data-testid="settings-server-url"
               className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
             />
@@ -209,12 +222,17 @@ export default function StudioSettingsPage() {
               type="password"
               value={apiKeyInput}
               onChange={(event) => setApiKeyInput(event.target.value)}
-              placeholder="API Key"
+              placeholder={t('API Key', 'API Key')}
               data-testid="settings-api-key"
               className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
             />
-            <Button variant="secondary" size="sm" onClick={handleSaveConnectionSettings} data-testid="settings-save-connection">
-              Save
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSaveConnectionSettings}
+              data-testid="settings-save-connection"
+            >
+              {t('Save', '保存')}
             </Button>
           </div>
 
@@ -222,20 +240,26 @@ export default function StudioSettingsPage() {
             <Select
               value={authModeInput}
               onChange={(value) => setAuthModeInput(value as AdminStudioAuthMode)}
-              options={AUTH_MODE_OPTIONS}
+              options={AUTH_MODE_OPTIONS.map((item) => ({
+                ...item,
+                label:
+                  item.value === 'account'
+                    ? t('account token', '账号令牌')
+                    : t('api key', 'API Key'),
+              }))}
             />
             <input
               type="text"
               value={accountIdentifierInput}
               onChange={(event) => setAccountIdentifierInput(event.target.value)}
-              placeholder="Account (username/email)"
+              placeholder={t('Account (username/email)', '账号（用户名/邮箱）')}
               className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
             />
             <input
               type="password"
               value={accountPasswordInput}
               onChange={(event) => setAccountPasswordInput(event.target.value)}
-              placeholder="Account Password"
+              placeholder={t('Account Password', '账号密码')}
               className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
             />
             <Button
@@ -244,7 +268,7 @@ export default function StudioSettingsPage() {
               onClick={() => void handleAccountLogin()}
               disabled={isAuthenticating}
             >
-              {isAuthenticating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Login'}
+              {isAuthenticating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('Login', '登录')}
             </Button>
             <Button
               variant="outline"
@@ -253,7 +277,7 @@ export default function StudioSettingsPage() {
               disabled={isAuthenticating}
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Me
+              {t('Me', '我的信息')}
             </Button>
             <Button
               variant="outline"
@@ -261,11 +285,11 @@ export default function StudioSettingsPage() {
               onClick={() => void handleLogout()}
               disabled={isAuthenticating}
             >
-              Logout
+              {t('Logout', '退出')}
             </Button>
           </div>
           <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-400">
-            auth: {authModeInput} | user: {formatAuthUserLabel(currentAuthUser)}
+            {t('auth', '认证')}: {authModeInput} | {t('user', '用户')}: {formatAuthUserLabel(currentAuthUser)}
             {capabilitiesSummary ? <span> | {capabilitiesSummary}</span> : null}
           </div>
         </CardContent>

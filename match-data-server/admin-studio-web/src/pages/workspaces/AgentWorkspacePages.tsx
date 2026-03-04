@@ -14,6 +14,7 @@ import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import DomainStageTabs from '@/src/components/layout/DomainStageTabs';
 import { Select } from '@/src/components/ui/Select';
+import { useI18n } from '@/src/i18n';
 import {
   AgentModelPreviewResult,
   AdminStudioApiError,
@@ -275,6 +276,35 @@ function buildAgentTestPreview(draft: AgentManifestDraft | null): AgentTestPrevi
   };
 }
 
+function localizeAgentIssue(issue: string, t: (en: string, zh?: string) => string) {
+  switch (issue) {
+    case 'Draft not initialized.':
+      return t('Draft not initialized.', '草稿未初始化。');
+    case 'id is required.':
+      return t('id is required.', 'id 为必填项。');
+    case 'name is required.':
+      return t('name is required.', 'name 为必填项。');
+    case 'Provide rolePrompt.en or rolePrompt.zh.':
+      return t('Provide rolePrompt.en or rolePrompt.zh.', '请提供 rolePrompt.en 或 rolePrompt.zh。');
+    case 'At least one skill is required.':
+      return t('At least one skill is required.', '至少需要一个 skill。');
+    case 'contextDependencies is required when mode=list.':
+      return t('contextDependencies is required when mode=list.', '当 mode=list 时，必须提供 contextDependencies。');
+    case 'contextDependencies cannot include current id.':
+      return t('contextDependencies cannot include current id.', 'contextDependencies 不能包含当前 id。');
+    case 'No linked skill.':
+      return t('No linked skill.', '未关联任何 skill。');
+    case 'rolePrompt.en is empty.':
+      return t('rolePrompt.en is empty.', 'rolePrompt.en 为空。');
+    case 'rolePrompt.zh is empty.':
+      return t('rolePrompt.zh is empty.', 'rolePrompt.zh 为空。');
+    case 'mode=list but contextDependencies is empty.':
+      return t('mode=list but contextDependencies is empty.', 'mode=list 但 contextDependencies 为空。');
+    default:
+      return issue;
+  }
+}
+
 function describeError(error: unknown) {
   if (error instanceof AdminStudioApiError) {
     return `${error.code ? `${error.code}: ` : ''}${error.message}`;
@@ -333,11 +363,22 @@ function hasValidationFailure(run: ValidationRunRecord | null) {
   return getValidationChecks(run).some((check) => check.status !== 'passed');
 }
 
-function WorkspaceHeader({ title, description }: { title: string; description: string }) {
+function WorkspaceHeader({
+  title,
+  titleZh,
+  description,
+  descriptionZh,
+}: {
+  title: string;
+  titleZh?: string;
+  description: string;
+  descriptionZh?: string;
+}) {
+  const { t } = useI18n();
   return (
     <div>
-      <h1 className="text-base font-bold text-white">{title}</h1>
-      <p className="text-xs text-zinc-500">{description}</p>
+      <h1 className="text-base font-bold text-white">{t(title, titleZh)}</h1>
+      <p className="text-xs text-zinc-500">{t(description, descriptionZh)}</p>
     </div>
   );
 }
@@ -359,6 +400,7 @@ function FeedbackBanner({ feedback }: { feedback: FeedbackState }) {
 }
 
 export function AgentDesignPage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -395,6 +437,32 @@ export function AgentDesignPage() {
   const manifestPreview = useMemo(
     () => (draft ? JSON.stringify(toAgentManifest(draft), null, 2) : ''),
     [draft],
+  );
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
+  );
+  const dependencyModeOptions = useMemo(
+    () =>
+      DEPENDENCY_MODE_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'all'
+            ? t('all', '全部')
+            : item.value === 'none'
+              ? t('none', '无')
+              : t('list', '列表'),
+      })),
+    [t],
   );
 
   async function loadEntries(preferredItemId?: string) {
@@ -470,7 +538,7 @@ export function AgentDesignPage() {
     const itemId = asText(newItemId);
     const version = asText(newEntryVersion);
     if (!itemId || !version) {
-      setFeedback({ tone: 'error', message: 'Provide itemId and version.' });
+      setFeedback({ tone: 'error', message: t('Provide itemId and version.', '请填写 itemId 和版本。') });
       return;
     }
     setIsCreatingEntry(true);
@@ -481,7 +549,7 @@ export function AgentDesignPage() {
         channel: publishChannel,
         manifest: toAgentManifest({ ...(draft || buildEmptyAgentDraft(itemId)), id: itemId }),
       });
-      setFeedback({ tone: 'success', message: `Created agent:${itemId}@${version}.` });
+      setFeedback({ tone: 'success', message: t(`Created agent:${itemId}@${version}.`, `已创建 agent:${itemId}@${version}。`) });
       await loadEntries(itemId);
       await loadRevisions(itemId, version);
       setNewItemId('');
@@ -495,7 +563,7 @@ export function AgentDesignPage() {
   async function handleCreateRevision() {
     const version = asText(newRevisionVersion);
     if (!selectedItemId || !version || !draft) {
-      setFeedback({ tone: 'error', message: 'Select item and revision version.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision version.', '请选择条目和修订版本。') });
       return;
     }
     setIsCreatingRevision(true);
@@ -505,7 +573,7 @@ export function AgentDesignPage() {
         channel: publishChannel,
         manifest: toAgentManifest({ ...draft, id: selectedItemId }),
       });
-      setFeedback({ tone: 'success', message: `Created revision ${selectedItemId}@${version}.` });
+      setFeedback({ tone: 'success', message: t(`Created revision ${selectedItemId}@${version}.`, `已创建修订 ${selectedItemId}@${version}。`) });
       await loadRevisions(selectedItemId, version);
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -516,7 +584,7 @@ export function AgentDesignPage() {
 
   async function handleSaveDraft() {
     if (!selectedItemId || !selectedVersion || !draft || selectedRevision?.status !== 'draft') {
-      setFeedback({ tone: 'error', message: 'Select draft revision before saving.' });
+      setFeedback({ tone: 'error', message: t('Select draft revision before saving.', '保存前请先选择草稿修订。') });
       return;
     }
     setIsSavingDraft(true);
@@ -525,7 +593,7 @@ export function AgentDesignPage() {
         channel: publishChannel,
         manifest: toAgentManifest({ ...draft, id: selectedItemId }),
       });
-      setFeedback({ tone: 'success', message: `Draft saved: ${selectedItemId}@${selectedVersion}.` });
+      setFeedback({ tone: 'success', message: t(`Draft saved: ${selectedItemId}@${selectedVersion}.`, `草稿已保存：${selectedItemId}@${selectedVersion}。`) });
       await loadRevisions(selectedItemId, selectedVersion);
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -539,13 +607,13 @@ export function AgentDesignPage() {
     setTestPreview(preview);
     setFeedback({
       tone: preview && preview.readiness === 'ready' ? 'success' : 'info',
-      message: preview ? `Test preview generated (${preview.readiness}).` : 'Draft unavailable.',
+      message: preview ? t(`Test preview generated (${preview.readiness}).`, `测试预览已生成（${preview.readiness}）。`) : t('Draft unavailable.', '草稿不可用。'),
     });
   }
 
   async function handleRunLiveModelTest() {
     if (!draft) {
-      setFeedback({ tone: 'error', message: 'Draft not initialized.' });
+      setFeedback({ tone: 'error', message: t('Draft not initialized.', '草稿未初始化。') });
       return;
     }
 
@@ -564,7 +632,7 @@ export function AgentDesignPage() {
       setLiveModelResult(result);
       setFeedback({
         tone: 'success',
-        message: `DeepSeek live test completed in ${result.latencyMs}ms (${result.model}).`,
+        message: t(`DeepSeek live test completed in ${result.latencyMs}ms (${result.model}).`, `DeepSeek 实时测试完成：${result.latencyMs}ms（${result.model}）。`),
       });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
@@ -577,7 +645,9 @@ export function AgentDesignPage() {
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <WorkspaceHeader
         title="Agent Studio / Design"
+        titleZh="智能体工作台 / 设计"
         description="Edit prompts and dependencies, then run local test preview before server-side validation."
+        descriptionZh="编辑提示词与依赖，并在服务端验证前执行本地测试预览。"
       />
       <DomainStageTabs basePath={BASE_PATH} activeStage="design" />
       {feedback && <FeedbackBanner feedback={feedback} />}
@@ -586,31 +656,35 @@ export function AgentDesignPage() {
         <CardContent className="space-y-3 p-4">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div className="lg:col-span-2">
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Agent Item</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">
+                {t('Agent Item', '智能体条目')}
+              </label>
               <Select
                 value={selectedItemId || ''}
                 onChange={(value) => setSelectedItemId(value)}
-                options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: 'No item' }]}
+                options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: t('No item', '无条目') }]}
               />
             </div>
             <div className="lg:col-span-2">
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Revision</label>
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">
+                {t('Revision', '修订')}
+              </label>
               <Select
                 value={selectedVersion || ''}
                 onChange={(value) => setSelectedVersion(value)}
-                options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: 'No revision' }]}
+                options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: t('No revision', '无修订') }]}
               />
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1" onClick={() => void loadEntries(selectedItemId || undefined)} disabled={isLoadingEntries}>
               {isLoadingEntries ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
             {isLoadingRevisions && (
               <div className="flex items-center gap-1 text-xs text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading revisions...
+                {t('loading revisions...', '正在加载修订...')}
               </div>
             )}
           </div>
@@ -619,24 +693,24 @@ export function AgentDesignPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-white">Create and Save</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Create and Save', '创建与保存')}</h2>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-5">
-            <input className={INPUT_CLASS} value={newItemId} onChange={(event) => setNewItemId(event.target.value)} placeholder="new item id" />
-            <input className={INPUT_CLASS} value={newEntryVersion} onChange={(event) => setNewEntryVersion(event.target.value)} placeholder="entry version" />
-            <input className={INPUT_CLASS} value={newRevisionVersion} onChange={(event) => setNewRevisionVersion(event.target.value)} placeholder="revision version" />
-            <Select value={publishChannel} onChange={(value) => setPublishChannel(value as CatalogChannel)} options={CHANNEL_OPTIONS} />
+            <input className={INPUT_CLASS} value={newItemId} onChange={(event) => setNewItemId(event.target.value)} placeholder={t('new item id', '新条目 ID')} />
+            <input className={INPUT_CLASS} value={newEntryVersion} onChange={(event) => setNewEntryVersion(event.target.value)} placeholder={t('entry version', '条目版本')} />
+            <input className={INPUT_CLASS} value={newRevisionVersion} onChange={(event) => setNewRevisionVersion(event.target.value)} placeholder={t('revision version', '修订版本')} />
+            <Select value={publishChannel} onChange={(value) => setPublishChannel(value as CatalogChannel)} options={channelOptions} />
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void handleCreateEntry()} disabled={isCreatingEntry} className="gap-2">
                 {isCreatingEntry ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Create
+                {t('Create', '创建')}
               </Button>
               <Button variant="outline" onClick={() => void handleCreateRevision()} disabled={isCreatingRevision || !selectedItemId} className="gap-2">
                 {isCreatingRevision ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Revision
+                {t('Revision', '修订')}
               </Button>
               <Button variant="outline" onClick={() => void handleSaveDraft()} disabled={isSavingDraft || selectedRevision?.status !== 'draft'} className="gap-2">
                 {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Save
+                {t('Save', '保存')}
               </Button>
             </div>
           </div>
@@ -646,23 +720,23 @@ export function AgentDesignPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold text-white">Draft Builder</h2>
-            {!draft && <div className="text-xs text-zinc-500">Draft not initialized.</div>}
+            <h2 className="text-sm font-semibold text-white">{t('Draft Builder', '草稿构建器')}</h2>
+            {!draft && <div className="text-xs text-zinc-500">{t('Draft not initialized.', '草稿未初始化。')}</div>}
             {draft && (
               <>
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                   <input className={INPUT_CLASS} value={draft.id} onChange={(event) => updateDraft({ id: event.target.value })} placeholder="id" />
-                  <input className={INPUT_CLASS} value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} placeholder="name" />
+                  <input className={INPUT_CLASS} value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} placeholder={t('name', '名称')} />
                   <input className={INPUT_CLASS} value={draft.minAppVersion} onChange={(event) => updateDraft({ minAppVersion: event.target.value })} placeholder="minAppVersion" />
                 </div>
-                <textarea className={TEXTAREA_CLASS} value={draft.description} onChange={(event) => updateDraft({ description: event.target.value })} placeholder="description" />
+                <textarea className={TEXTAREA_CLASS} value={draft.description} onChange={(event) => updateDraft({ description: event.target.value })} placeholder={t('description', '描述')} />
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                   <textarea className="min-h-[120px] w-full rounded-lg border border-white/10 bg-zinc-900 p-3 text-xs text-white focus:border-emerald-500 focus:outline-none" value={draft.rolePromptEn} onChange={(event) => updateDraft({ rolePromptEn: event.target.value })} placeholder="rolePrompt.en" />
                   <textarea className="min-h-[120px] w-full rounded-lg border border-white/10 bg-zinc-900 p-3 text-xs text-white focus:border-emerald-500 focus:outline-none" value={draft.rolePromptZh} onChange={(event) => updateDraft({ rolePromptZh: event.target.value })} placeholder="rolePrompt.zh" />
                 </div>
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                   <input className={`xl:col-span-2 ${INPUT_CLASS}`} value={draft.skillsText} onChange={(event) => updateDraft({ skillsText: event.target.value })} placeholder="skills (csv)" />
-                  <Select value={draft.contextDependencyMode} onChange={(value) => updateDraft({ contextDependencyMode: value as AgentDependencyMode })} options={DEPENDENCY_MODE_OPTIONS} />
+                  <Select value={draft.contextDependencyMode} onChange={(value) => updateDraft({ contextDependencyMode: value as AgentDependencyMode })} options={dependencyModeOptions} />
                 </div>
                 {draft.contextDependencyMode === 'list' && (
                   <input className={INPUT_CLASS} value={draft.contextDependenciesText} onChange={(event) => updateDraft({ contextDependenciesText: event.target.value })} placeholder="contextDependencies (csv)" />
@@ -675,37 +749,42 @@ export function AgentDesignPage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-white">Validation and Preview</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Validation and Preview', '验证与预览')}</h2>
               <Button onClick={handleRunPreview} className="gap-2">
                 <PackageCheck className="h-4 w-4" />
-                Test Preview
+                {t('Test Preview', '测试预览')}
               </Button>
             </div>
             <div className={`rounded-lg border px-3 py-2 text-xs ${localIssues.length === 0 ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-red-500/20 bg-red-500/10 text-red-300'}`}>
-              {localIssues.length === 0 ? 'Local validation passed.' : `${localIssues.length} local issues.`}
+              {localIssues.length === 0 ? t('Local validation passed.', '本地验证通过。') : t(`${localIssues.length} local issues.`, `本地问题 ${localIssues.length} 项。`)}
             </div>
             {localIssues.length > 0 && (
               <ul className="list-disc space-y-1 pl-5 text-xs text-zinc-300">
                 {localIssues.map((issue) => (
-                  <li key={issue}>{issue}</li>
+                  <li key={issue}>{localizeAgentIssue(issue, t)}</li>
                 ))}
               </ul>
             )}
             {testPreview && (
               <div className="rounded-lg border border-white/10 bg-zinc-900/40 p-3 text-xs text-zinc-300">
                 <div className={testPreview.readiness === 'ready' ? 'text-emerald-300' : 'text-amber-300'}>
-                  preview status: {testPreview.readiness}
+                  {t('preview status', '预览状态')}: {testPreview.readiness}
                 </div>
-                <div>skills: {testPreview.skills.join(', ') || '-'}</div>
+                <div>{t('skills', '技能')}: {testPreview.skills.join(', ') || '-'}</div>
                 <div>
-                  context: {testPreview.dependencyMode}
+                  {t('context', '上下文')}:{' '}
+                  {testPreview.dependencyMode === 'all'
+                    ? t('all', '全部')
+                    : testPreview.dependencyMode === 'none'
+                      ? t('none', '无')
+                      : t('list', '列表')}
                   {testPreview.dependencyMode === 'list' ? ` (${testPreview.dependencyList.join(', ') || '-'})` : ''}
                 </div>
-                <div>generatedAt: {formatTime(testPreview.generatedAt)}</div>
+                <div>{t('generatedAt', '生成时间')}: {formatTime(testPreview.generatedAt)}</div>
                 {testPreview.warnings.length > 0 && (
                   <ul className="mt-1 list-disc space-y-1 pl-5 text-amber-300">
                     {testPreview.warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
+                      <li key={warning}>{localizeAgentIssue(warning, t)}</li>
                     ))}
                   </ul>
                 )}
@@ -714,41 +793,41 @@ export function AgentDesignPage() {
 
             <div className="border-t border-white/10 pt-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">DeepSeek Live Test</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">{t('DeepSeek Live Test', 'DeepSeek 实时测试')}</h3>
                 <Button
                   onClick={() => void handleRunLiveModelTest()}
                   disabled={isRunningLiveModelTest}
                   className="gap-2"
                 >
                   {isRunningLiveModelTest ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
-                  Run Live Test
+                  {t('Run Live Test', '运行实时测试')}
                 </Button>
               </div>
               <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">locale</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('locale', '语言区域')}</label>
                   <Select value={liveLocale} onChange={(value) => setLiveLocale(value as 'en' | 'zh')} options={LOCALE_OPTIONS} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">model</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('model', '模型')}</label>
                   <input className={INPUT_CLASS} value={liveModelName} onChange={(event) => setLiveModelName(event.target.value)} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">temperature</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('temperature', '温度')}</label>
                   <input className={INPUT_CLASS} value={liveTemperature} onChange={(event) => setLiveTemperature(event.target.value)} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">maxTokens</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('maxTokens', '最大 Tokens')}</label>
                   <input className={INPUT_CLASS} value={liveMaxTokens} onChange={(event) => setLiveMaxTokens(event.target.value)} />
                 </div>
               </div>
               <div className="mt-3 space-y-2">
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">test input</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('test input', '测试输入')}</label>
                   <textarea className={TEXTAREA_CLASS} value={liveInputText} onChange={(event) => setLiveInputText(event.target.value)} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">context json</label>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('context json', '上下文 JSON')}</label>
                   <textarea
                     className="min-h-[120px] w-full rounded-lg border border-white/10 bg-zinc-900 p-3 font-mono text-xs text-zinc-200 focus:outline-none"
                     value={liveContextText}
@@ -760,10 +839,10 @@ export function AgentDesignPage() {
               {liveModelResult && (
                 <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-zinc-200">
                   <div className="font-semibold text-emerald-300">
-                    provider={liveModelResult.provider}, model={liveModelResult.model}, latency={liveModelResult.latencyMs}ms
+                    {t('provider', '提供方')}={liveModelResult.provider}, {t('model', '模型')}={liveModelResult.model}, {t('latency', '延迟')}={liveModelResult.latencyMs}ms
                   </div>
                   <div className="mt-2 text-zinc-400">
-                    usage: {JSON.stringify(liveModelResult.usage)}
+                    {t('usage', '用量')}: {JSON.stringify(liveModelResult.usage)}
                   </div>
                   <div className="mt-2 whitespace-pre-wrap rounded border border-white/10 bg-black/20 p-2">
                     {liveModelResult.output.content}
@@ -777,7 +856,7 @@ export function AgentDesignPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="p-4">
-          <h2 className="mb-2 text-sm font-semibold text-white">Manifest Preview</h2>
+          <h2 className="mb-2 text-sm font-semibold text-white">{t('Manifest Preview', '清单预览')}</h2>
           <textarea readOnly className="min-h-[240px] w-full rounded-lg border border-white/10 bg-zinc-900 p-3 font-mono text-xs text-zinc-200 focus:outline-none" value={manifestPreview} spellCheck={false} />
         </CardContent>
       </Card>
@@ -786,6 +865,7 @@ export function AgentDesignPage() {
 }
 
 export function AgentManagePage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -857,14 +937,14 @@ export function AgentManagePage() {
 
   async function handleDiff() {
     if (!selectedItemId || !diffFromVersion || !diffToVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and diff versions.' });
+      setFeedback({ tone: 'error', message: t('Select item and diff versions.', '请选择条目与对比版本。') });
       return;
     }
     setIsDiffing(true);
     try {
       const result = await getCatalogRevisionDiff('agent', selectedItemId, diffFromVersion, diffToVersion);
       setDiffResult(result);
-      setFeedback({ tone: 'info', message: `Loaded diff ${diffFromVersion} -> ${diffToVersion}.` });
+      setFeedback({ tone: 'info', message: t(`Loaded diff ${diffFromVersion} -> ${diffToVersion}.`, `已加载差异 ${diffFromVersion} -> ${diffToVersion}。`) });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
     } finally {
@@ -888,25 +968,30 @@ export function AgentManagePage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
-      <WorkspaceHeader title="Agent Studio / Manage" description="Compare revisions and inspect release/change quality." />
+      <WorkspaceHeader
+        title="Agent Studio / Manage"
+        titleZh="智能体工作台 / 管理"
+        description="Compare revisions and inspect release/change quality."
+        descriptionZh="对比修订并检查发布与变更质量。"
+      />
       <DomainStageTabs basePath={BASE_PATH} activeStage="manage" />
       {feedback && <FeedbackBanner feedback={feedback} />}
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <Select value={selectedItemId || ''} onChange={(value) => setSelectedItemId(value)} options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: 'No item' }]} />
-            <Select value={selectedVersion || ''} onChange={(value) => setSelectedVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: 'No revision' }]} />
+            <Select value={selectedItemId || ''} onChange={(value) => setSelectedItemId(value)} options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: t('No item', '无条目') }]} />
+            <Select value={selectedVersion || ''} onChange={(value) => setSelectedVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: t('No revision', '无修订') }]} />
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1" onClick={() => void loadEntries(selectedItemId || undefined)} disabled={isLoadingEntries}>
               {isLoadingEntries ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
             {isLoadingRevisions && (
               <div className="flex items-center gap-1 text-xs text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading revisions...
+                {t('loading revisions...', '正在加载修订...')}
               </div>
             )}
           </div>
@@ -917,23 +1002,23 @@ export function AgentManagePage() {
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-white">Diff</h2>
+              <h2 className="text-sm font-semibold text-white">{t('Diff', '差异')}</h2>
               <Button variant="outline" size="sm" onClick={() => void handleDiff()} disabled={isDiffing} className="gap-1">
                 {isDiffing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitCompare className="h-3.5 w-3.5" />}
-                Run
+                {t('Run', '运行')}
               </Button>
             </div>
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <Select value={diffFromVersion || ''} onChange={(value) => setDiffFromVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: 'No revision' }]} />
-              <Select value={diffToVersion || ''} onChange={(value) => setDiffToVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: 'No revision' }]} />
+              <Select value={diffFromVersion || ''} onChange={(value) => setDiffFromVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: t('No revision', '无修订') }]} />
+              <Select value={diffToVersion || ''} onChange={(value) => setDiffToVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: t('No revision', '无修订') }]} />
             </div>
-            {!diffResult && <div className="text-xs text-zinc-500">Run diff to inspect manifest changes.</div>}
+            {!diffResult && <div className="text-xs text-zinc-500">{t('Run diff to inspect manifest changes.', '运行差异对比以检查清单变更。')}</div>}
             {diffResult && (
               <div className="rounded-lg border border-white/10 bg-zinc-900/40 p-3 text-xs text-zinc-300">
-                <div>totalChanges: {diffResult.diff.summary.totalChanges}</div>
-                <div>added: {diffResult.diff.summary.addedCount}</div>
-                <div>removed: {diffResult.diff.summary.removedCount}</div>
-                <div>changed: {diffResult.diff.summary.changedCount}</div>
+                <div>{t('totalChanges', '总变更数')}: {diffResult.diff.summary.totalChanges}</div>
+                <div>{t('added', '新增')}: {diffResult.diff.summary.addedCount}</div>
+                <div>{t('removed', '移除')}: {diffResult.diff.summary.removedCount}</div>
+                <div>{t('changed', '变更')}: {diffResult.diff.summary.changedCount}</div>
               </div>
             )}
           </CardContent>
@@ -941,7 +1026,7 @@ export function AgentManagePage() {
 
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold text-white">Manifest Inspector</h2>
+            <h2 className="text-sm font-semibold text-white">{t('Manifest Inspector', '清单检查')}</h2>
             <textarea
               readOnly
               value={selectedRevision ? JSON.stringify(selectedRevision.manifest || {}, null, 2) : ''}
@@ -949,7 +1034,7 @@ export function AgentManagePage() {
               className="min-h-[220px] w-full rounded-lg border border-white/10 bg-zinc-900 p-3 font-mono text-xs text-zinc-200 focus:outline-none"
             />
             <div className={`rounded-lg border px-3 py-2 text-xs ${qualityIssues.length === 0 ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-red-500/20 bg-red-500/10 text-red-300'}`}>
-              {qualityIssues.length === 0 ? 'Quality checks passed.' : `${qualityIssues.length} quality issues.`}
+              {qualityIssues.length === 0 ? t('Quality checks passed.', '质量检查通过。') : t(`${qualityIssues.length} quality issues.`, `质量问题 ${qualityIssues.length} 项。`)}
             </div>
           </CardContent>
         </Card>
@@ -957,8 +1042,8 @@ export function AgentManagePage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-2 p-4">
-          <h2 className="text-sm font-semibold text-white">Release History</h2>
-          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">No release records.</div>}
+          <h2 className="text-sm font-semibold text-white">{t('Release History', '发布历史')}</h2>
+          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">{t('No release records.', '暂无发布记录。')}</div>}
           {releaseHistory.slice(0, 20).map((record) => (
             <div key={record.id} className="rounded-lg border border-white/10 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-300">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -979,6 +1064,7 @@ export function AgentManagePage() {
 }
 
 export function AgentPublishPage() {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [revisions, setRevisions] = useState<CatalogRevision[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -1007,6 +1093,32 @@ export function AgentPublishPage() {
   const publishGatePassed = useMemo(
     () => !!validationRun && validationRun.status === 'succeeded' && !hasValidationFailure(validationRun),
     [validationRun],
+  );
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
+  );
+  const validationTypeOptions = useMemo(
+    () =>
+      VALIDATION_TYPE_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'catalog_validate'
+            ? t('catalog_validate', '目录验证')
+            : item.value === 'pre_publish'
+              ? t('pre_publish', '发布前验证')
+              : t('post_publish', '发布后验证'),
+      })),
+    [t],
   );
 
   async function loadEntries(preferredItemId?: string) {
@@ -1064,7 +1176,7 @@ export function AgentPublishPage() {
 
   async function handleRunValidation() {
     if (!selectedItemId || !selectedVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and revision before validation.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision before validation.', '验证前请先选择条目和修订。') });
       return;
     }
     setIsRunningValidation(true);
@@ -1077,7 +1189,7 @@ export function AgentPublishPage() {
       });
       setValidationRun(created);
       setValidationLookupRunId(created.id);
-      setFeedback({ tone: 'info', message: `Validation started: ${created.id} (${created.status}).` });
+      setFeedback({ tone: 'info', message: t(`Validation started: ${created.id} (${created.status}).`, `验证已启动：${created.id}（${created.status}）。`) });
     } catch (error) {
       setFeedback({ tone: 'error', message: describeError(error) });
     } finally {
@@ -1088,7 +1200,7 @@ export function AgentPublishPage() {
   async function handleFetchValidationRun() {
     const runId = asText(validationLookupRunId);
     if (!runId) {
-      setFeedback({ tone: 'error', message: 'Provide runId first.' });
+      setFeedback({ tone: 'error', message: t('Provide runId first.', '请先填写 runId。') });
       return;
     }
     setIsFetchingValidation(true);
@@ -1108,11 +1220,11 @@ export function AgentPublishPage() {
 
   async function handlePublish() {
     if (!selectedItemId || !selectedVersion) {
-      setFeedback({ tone: 'error', message: 'Select item and revision before publish.' });
+      setFeedback({ tone: 'error', message: t('Select item and revision before publish.', '发布前请先选择条目和修订。') });
       return;
     }
     if (!publishGatePassed) {
-      setFeedback({ tone: 'error', message: 'Publish gate blocked: validation not passed.' });
+      setFeedback({ tone: 'error', message: t('Publish gate blocked: validation not passed.', '发布门禁阻塞：验证未通过。') });
       return;
     }
     setIsPublishing(true);
@@ -1124,7 +1236,7 @@ export function AgentPublishPage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Published ${selectedItemId}@${selectedVersion} to ${publishChannel}.`,
+        message: t(`Published ${selectedItemId}@${selectedVersion} to ${publishChannel}.`, `已发布 ${selectedItemId}@${selectedVersion} 到 ${publishChannel}。`),
       });
       await loadRevisions(selectedItemId, selectedVersion);
       await loadHistory();
@@ -1137,7 +1249,7 @@ export function AgentPublishPage() {
 
   async function handleRollback() {
     if (!selectedItemId || !rollbackVersion) {
-      setFeedback({ tone: 'error', message: 'Select rollback target version.' });
+      setFeedback({ tone: 'error', message: t('Select rollback target version.', '请选择回滚目标版本。') });
       return;
     }
     setIsRollbacking(true);
@@ -1147,7 +1259,7 @@ export function AgentPublishPage() {
         channel: publishChannel,
         validationRunId: validationRun?.id || undefined,
       });
-      setFeedback({ tone: 'success', message: `Rollback submitted: ${selectedItemId} -> ${rollbackVersion}.` });
+      setFeedback({ tone: 'success', message: t(`Rollback submitted: ${selectedItemId} -> ${rollbackVersion}.`, `回滚已提交：${selectedItemId} -> ${rollbackVersion}。`) });
       await loadRevisions(selectedItemId, rollbackVersion);
       await loadHistory();
     } catch (error) {
@@ -1179,7 +1291,12 @@ export function AgentPublishPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
-      <WorkspaceHeader title="Agent Studio / Publish" description="Run validation gate, publish, and rollback safely." />
+      <WorkspaceHeader
+        title="Agent Studio / Publish"
+        titleZh="智能体工作台 / 发布"
+        description="Run validation gate, publish, and rollback safely."
+        descriptionZh="执行验证门禁并安全发布、回滚。"
+      />
       <DomainStageTabs basePath={BASE_PATH} activeStage="publish" />
       {feedback && <FeedbackBanner feedback={feedback} />}
 
@@ -1187,32 +1304,32 @@ export function AgentPublishPage() {
         <CardContent className="space-y-3 p-4">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div className="lg:col-span-2">
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Agent Item</label>
-              <Select value={selectedItemId || ''} onChange={(value) => setSelectedItemId(value)} options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: 'No item' }]} />
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Agent Item', '智能体条目')}</label>
+              <Select value={selectedItemId || ''} onChange={(value) => setSelectedItemId(value)} options={toEntryOptions(entries).length > 0 ? toEntryOptions(entries) : [{ value: '', label: t('No item', '无条目') }]} />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Revision</label>
-              <Select value={selectedVersion || ''} onChange={(value) => setSelectedVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: 'No revision' }]} />
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Revision', '修订')}</label>
+              <Select value={selectedVersion || ''} onChange={(value) => setSelectedVersion(value)} options={toRevisionOptions(revisions).length > 0 ? toRevisionOptions(revisions) : [{ value: '', label: t('No revision', '无修订') }]} />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">Channel</label>
-              <Select value={publishChannel} onChange={(value) => setPublishChannel(value as CatalogChannel)} options={CHANNEL_OPTIONS} />
+              <label className="mb-1 block text-[11px] uppercase tracking-wider text-zinc-500">{t('Channel', '通道')}</label>
+              <Select value={publishChannel} onChange={(value) => setPublishChannel(value as CatalogChannel)} options={channelOptions} />
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1" onClick={() => void loadEntries(selectedItemId || undefined)} disabled={isLoadingEntries}>
               {isLoadingEntries ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
             {isLoadingRevisions && (
               <div className="flex items-center gap-1 text-xs text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading revisions...
+                {t('loading revisions...', '正在加载修订...')}
               </div>
             )}
             {selectedRevision && (
               <div className="rounded-lg border border-white/10 bg-zinc-900/40 px-2 py-1 text-xs text-zinc-400">
-                status={selectedRevision.status}, publishedAt={formatTime(selectedRevision.publishedAt)}
+                {t('status', '状态')}={selectedRevision.status}, {t('publishedAt', '发布时间')}={formatTime(selectedRevision.publishedAt)}
               </div>
             )}
           </div>
@@ -1221,28 +1338,28 @@ export function AgentPublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-white">Validation Gate</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Validation Gate', '验证门禁')}</h2>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
-            <Select value={validationType} onChange={(value) => setValidationType(value as ValidationRunType)} options={VALIDATION_TYPE_OPTIONS} />
-            <input className={`xl:col-span-2 ${INPUT_CLASS}`} value={validationLookupRunId} onChange={(event) => setValidationLookupRunId(event.target.value)} placeholder="validation run id" />
+            <Select value={validationType} onChange={(value) => setValidationType(value as ValidationRunType)} options={validationTypeOptions} />
+            <input className={`xl:col-span-2 ${INPUT_CLASS}`} value={validationLookupRunId} onChange={(event) => setValidationLookupRunId(event.target.value)} placeholder={t('validation run id', '验证任务 ID')} />
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => void handleRunValidation()} disabled={isRunningValidation || !selectedItemId || !selectedVersion} className="gap-2">
                 {isRunningValidation ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                Run
+                {t('Run', '运行')}
               </Button>
               <Button variant="outline" onClick={() => void handleFetchValidationRun()} disabled={isFetchingValidation} className="gap-2">
                 {isFetchingValidation ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Fetch
+                {t('Fetch', '查询')}
               </Button>
             </div>
           </div>
           <div className={`rounded-lg border px-3 py-2 text-xs ${publishGatePassed ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/20 bg-amber-500/10 text-amber-300'}`}>
-            Publish Gate: {publishGatePassed ? 'Passed' : 'Blocked'}
+            {t('Publish Gate', '发布门禁')}: {publishGatePassed ? t('Passed', '通过') : t('Blocked', '阻塞')}
           </div>
           {validationRun && (
             <div className="space-y-1 rounded-lg border border-white/10 bg-zinc-900/40 p-3 text-xs text-zinc-300">
               <div>runId={validationRun.id}, status={validationRun.status}</div>
-              {validationChecks.length === 0 && <div className="text-zinc-500">No checks returned.</div>}
+              {validationChecks.length === 0 && <div className="text-zinc-500">{t('No checks returned.', '未返回检查项。')}</div>}
               {validationChecks.map((check, index) => (
                 <div key={`${check.name}-${index}`}>
                   [{check.status}] {check.name}: {check.message}
@@ -1255,18 +1372,18 @@ export function AgentPublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-white">Publish and Rollback</h2>
+          <h2 className="text-sm font-semibold text-white">{t('Publish and Rollback', '发布与回滚')}</h2>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
             <div className="xl:col-span-2">
-              <Select value={rollbackVersion || ''} onChange={(value) => setRollbackVersion(value)} options={rollbackOptions.length > 0 ? rollbackOptions : [{ value: '', label: 'No published revision' }]} />
+              <Select value={rollbackVersion || ''} onChange={(value) => setRollbackVersion(value)} options={rollbackOptions.length > 0 ? rollbackOptions : [{ value: '', label: t('No published revision', '无已发布修订') }]} />
             </div>
             <Button onClick={() => void handlePublish()} disabled={!publishGatePassed || isPublishing || !selectedItemId || !selectedVersion} className="gap-2">
               {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Publish
+              {t('Publish', '发布')}
             </Button>
             <Button variant="outline" onClick={() => void handleRollback()} disabled={isRollbacking || !selectedItemId || !rollbackVersion} className="gap-2">
               {isRollbacking ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
-              Rollback
+              {t('Rollback', '回滚')}
             </Button>
           </div>
         </CardContent>
@@ -1274,8 +1391,8 @@ export function AgentPublishPage() {
 
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-2 p-4">
-          <h2 className="text-sm font-semibold text-white">Release History</h2>
-          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">No release records.</div>}
+          <h2 className="text-sm font-semibold text-white">{t('Release History', '发布历史')}</h2>
+          {releaseHistory.length === 0 && <div className="text-xs text-zinc-500">{t('No release records.', '暂无发布记录。')}</div>}
           {releaseHistory.slice(0, 20).map((record) => (
             <div key={record.id} className="rounded-lg border border-white/10 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-300">
               <div className="flex flex-wrap items-center justify-between gap-2">

@@ -1,4 +1,5 @@
 export type AdminStudioAuthMode = 'api_key' | 'account';
+export type AdminStudioLanguage = 'en' | 'zh';
 
 export interface AdminStudioAuthUser {
   id: string;
@@ -13,6 +14,7 @@ export interface AdminStudioAuthUser {
 export interface AdminStudioSettings {
   matchDataServerUrl: string;
   matchDataApiKey: string;
+  language: AdminStudioLanguage;
   authMode: AdminStudioAuthMode;
   accountIdentifier: string;
   accessToken: string;
@@ -24,10 +26,18 @@ export interface AdminStudioSettings {
 
 const SETTINGS_KEY = 'matchflow_admin_studio_settings';
 export const ADMIN_STUDIO_SETTINGS_UPDATED_EVENT = 'admin-studio-settings-updated';
+const BROWSER_DEFAULT_LANGUAGE: AdminStudioLanguage =
+  typeof navigator !== 'undefined' && String(navigator.language || '').toLowerCase().startsWith('zh')
+    ? 'zh'
+    : 'en';
 
 const DEFAULT_SETTINGS: AdminStudioSettings = {
   matchDataServerUrl: String(import.meta.env.VITE_MATCH_DATA_SERVER_URL || '').trim(),
   matchDataApiKey: String(import.meta.env.VITE_MATCH_DATA_API_KEY || '').trim(),
+  language:
+    String(import.meta.env.VITE_ADMIN_STUDIO_LANGUAGE || '').trim() === 'zh'
+      ? 'zh'
+      : BROWSER_DEFAULT_LANGUAGE,
   authMode:
     String(import.meta.env.VITE_ADMIN_STUDIO_AUTH_MODE || '').trim() === 'account'
       ? 'account'
@@ -42,6 +52,10 @@ const DEFAULT_SETTINGS: AdminStudioSettings = {
 
 function normalizeAuthMode(value: unknown): AdminStudioAuthMode {
   return value === 'account' ? 'account' : 'api_key';
+}
+
+function normalizeLanguage(value: unknown): AdminStudioLanguage {
+  return value === 'zh' ? 'zh' : 'en';
 }
 
 function sanitizeAuthUser(value: unknown): AdminStudioAuthUser | null {
@@ -76,6 +90,7 @@ function sanitizeSettings(input: Partial<AdminStudioSettings>): AdminStudioSetti
     ...input,
     matchDataServerUrl: String(input.matchDataServerUrl || DEFAULT_SETTINGS.matchDataServerUrl).trim(),
     matchDataApiKey: String(input.matchDataApiKey || '').trim(),
+    language: normalizeLanguage(input.language),
     authMode: normalizeAuthMode(input.authMode),
     accountIdentifier: String(input.accountIdentifier || '').trim(),
     accessToken: String(input.accessToken || '').trim(),

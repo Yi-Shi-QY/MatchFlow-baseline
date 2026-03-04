@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { GuestOnly, RequireAuth } from '@/src/components/auth/RouteGuards';
 import AppShell from '@/src/components/layout/AppShell';
+import { I18nProvider, useI18n } from '@/src/i18n';
 import { isAuthenticated } from '@/src/lib/adminSession';
 import '@/src/index.css';
 
@@ -111,9 +112,10 @@ const DomainPackPublishPage = lazy(() =>
 );
 
 function RouteLoadingFallback() {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-300">
-      <div className="text-sm">Loading workspace...</div>
+      <div className="text-sm">{t('Loading workspace...', '正在加载工作区...')}</div>
     </div>
   );
 }
@@ -199,6 +201,8 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <I18nProvider>
+      <App />
+    </I18nProvider>
   </React.StrictMode>,
 );

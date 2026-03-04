@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useI18n } from '@/src/i18n';
 
 export type DomainStage = 'design' | 'manage' | 'publish';
 
@@ -11,6 +12,13 @@ interface DomainStageTabsProps {
 const STAGES: DomainStage[] = ['design', 'manage', 'publish'];
 
 export default function DomainStageTabs({ basePath, activeStage }: DomainStageTabsProps) {
+  const { t } = useI18n();
+  const labelMap: Record<DomainStage, string> = {
+    design: t('design', '设计'),
+    manage: t('manage', '管理'),
+    publish: t('publish', '发布'),
+  };
+
   return (
     <div className="flex flex-wrap gap-2">
       {STAGES.map((stage) => (
@@ -23,7 +31,7 @@ export default function DomainStageTabs({ basePath, activeStage }: DomainStageTa
               : 'border-white/10 bg-zinc-900 text-zinc-400 hover:border-white/20 hover:text-zinc-200'
           }`}
         >
-          {stage}
+          {labelMap[stage]}
         </NavLink>
       ))}
     </div>

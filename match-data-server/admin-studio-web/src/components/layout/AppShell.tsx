@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Button } from '@/src/components/ui/Button';
+import { useI18n } from '@/src/i18n';
 import { getAuthLabel } from '@/src/lib/adminSession';
 import { logoutAccount } from '@/src/services/adminStudio';
 import {
@@ -24,25 +25,27 @@ import {
 
 interface NavItem {
   to: string;
-  label: string;
+  labelEn: string;
+  labelZh: string;
   icon: React.ComponentType<{ className?: string }>;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/app/datasources', label: 'Data Sources', icon: Database },
-  { to: '/app/planning-templates', label: 'Planning Templates', icon: LayoutTemplate },
-  { to: '/app/animation-templates', label: 'Animation Templates', icon: Sparkles },
-  { to: '/app/agents', label: 'Agents', icon: Bot },
-  { to: '/app/skills', label: 'Skills', icon: Wand2 },
-  { to: '/app/domain-packs', label: 'Domain Packs', icon: PackageCheck },
-  { to: '/app/validation-center', label: 'Validation Center', icon: CheckCircle2 },
-  { to: '/app/release-center', label: 'Release Center', icon: History },
-  { to: '/app/identity', label: 'Identity Center', icon: ShieldCheck },
-  { to: '/app/settings', label: 'Settings', icon: Settings },
+  { to: '/app/datasources', labelEn: 'Data Sources', labelZh: '数据源', icon: Database },
+  { to: '/app/planning-templates', labelEn: 'Planning Templates', labelZh: '规划模板', icon: LayoutTemplate },
+  { to: '/app/animation-templates', labelEn: 'Animation Templates', labelZh: '动画模板', icon: Sparkles },
+  { to: '/app/agents', labelEn: 'Agents', labelZh: '智能体', icon: Bot },
+  { to: '/app/skills', labelEn: 'Skills', labelZh: '技能', icon: Wand2 },
+  { to: '/app/domain-packs', labelEn: 'Domain Packs', labelZh: '领域包', icon: PackageCheck },
+  { to: '/app/validation-center', labelEn: 'Validation Center', labelZh: '验证中心', icon: CheckCircle2 },
+  { to: '/app/release-center', labelEn: 'Release Center', labelZh: '发布中心', icon: History },
+  { to: '/app/identity', labelEn: 'Identity Center', labelZh: '身份中心', icon: ShieldCheck },
+  { to: '/app/settings', labelEn: 'Settings', labelZh: '设置', icon: Settings },
 ];
 
 export default function AppShell() {
   const navigate = useNavigate();
+  const { language, setLanguage, t } = useI18n();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [authLabel, setAuthLabel] = useState(() => getAuthLabel());
 
@@ -87,9 +90,33 @@ export default function AppShell() {
           <div className="mb-4">
             <div className="flex items-center gap-2 text-sm font-bold text-white">
               <PackageCheck className="h-4 w-4 text-emerald-400" />
-              Admin Studio
+              {t('Admin Studio', '管理工作台')}
             </div>
             <p className="mt-1 text-xs text-zinc-500">{subtitle}</p>
+            <div className="mt-2 flex items-center gap-1 rounded-lg border border-white/10 bg-zinc-900/70 p-1">
+              <button
+                type="button"
+                onClick={() => setLanguage('en')}
+                className={`flex-1 rounded px-2 py-1 text-[11px] transition ${
+                  language === 'en'
+                    ? 'bg-emerald-500/20 text-emerald-200'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage('zh')}
+                className={`flex-1 rounded px-2 py-1 text-[11px] transition ${
+                  language === 'zh'
+                    ? 'bg-emerald-500/20 text-emerald-200'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                中文
+              </button>
+            </div>
           </div>
           <nav className="space-y-1">
             {NAV_ITEMS.map((item) => {
@@ -105,7 +132,7 @@ export default function AppShell() {
                   }`}
                 >
                   <Icon className="h-4 w-4" />
-                  {item.label}
+                  {language === 'zh' ? item.labelZh : item.labelEn}
                 </NavLink>
               );
             })}
@@ -119,7 +146,7 @@ export default function AppShell() {
               disabled={isLoggingOut}
             >
               <LogOut className="h-4 w-4" />
-              {isLoggingOut ? 'Signing out...' : 'Sign out'}
+              {isLoggingOut ? t('Signing out...', '正在退出...') : t('Sign out', '退出登录')}
             </Button>
           </div>
         </aside>

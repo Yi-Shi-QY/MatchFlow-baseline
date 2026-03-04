@@ -1,3 +1,7 @@
+require('dotenv').config({
+  path: process.env.DOTENV_CONFIG_PATH || '.env',
+});
+
 const { buildStartupValidationReport } = require('../src/config');
 const db = require('../db');
 

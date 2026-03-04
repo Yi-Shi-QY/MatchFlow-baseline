@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
+import { useI18n } from '@/src/i18n';
 import {
   type AdminCatalogDomain,
   AdminStudioApiError,
@@ -36,20 +37,10 @@ const DOMAIN_OPTIONS: Array<{ value: AdminCatalogDomain; label: string }> = [
   { value: 'domain_pack', label: 'domain_pack' },
 ];
 
-const DOMAIN_FILTER_OPTIONS: Array<{ value: HistoryDomainFilter; label: string }> = [
-  { value: 'all', label: 'all domains' },
-  ...DOMAIN_OPTIONS,
-];
-
 const CHANNEL_OPTIONS: Array<{ value: CatalogChannel; label: string }> = [
   { value: 'internal', label: 'internal' },
   { value: 'beta', label: 'beta' },
   { value: 'stable', label: 'stable' },
-];
-
-const CHANNEL_FILTER_OPTIONS: Array<{ value: HistoryChannelFilter; label: string }> = [
-  { value: 'all', label: 'all channels' },
-  ...CHANNEL_OPTIONS,
 ];
 
 const DOMAIN_WORKSPACE_PATH: Record<AdminCatalogDomain, string> = {
@@ -107,6 +98,7 @@ function statusBadgeClass(status: string) {
 }
 
 export default function ReleaseCenterPage() {
+  const { t } = useI18n();
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
 
   const [historyDomainFilter, setHistoryDomainFilter] = useState<HistoryDomainFilter>('all');
@@ -129,26 +121,54 @@ export default function ReleaseCenterPage() {
   const [isLoadingRevisions, setIsLoadingRevisions] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
+  const domainOptions = useMemo(
+    () => DOMAIN_OPTIONS.map((item) => ({ ...item, label: item.value })),
+    [],
+  );
+  const domainFilterOptions = useMemo(
+    () => [
+      { value: 'all' as HistoryDomainFilter, label: t('all domains', '全部领域') },
+      ...domainOptions,
+    ],
+    [domainOptions, t],
+  );
+  const channelOptions = useMemo(
+    () =>
+      CHANNEL_OPTIONS.map((item) => ({
+        ...item,
+        label:
+          item.value === 'internal'
+            ? t('internal', '内部')
+            : item.value === 'beta'
+              ? t('beta', '测试')
+              : t('stable', '稳定'),
+      })),
+    [t],
+  );
+  const channelFilterOptions = useMemo(
+    () => [{ value: 'all' as HistoryChannelFilter, label: t('all channels', '全部通道') }, ...channelOptions],
+    [channelOptions, t],
+  );
 
   const entryOptions = useMemo(() => {
     if (entries.length === 0) {
-      return [{ value: '', label: 'no items' }];
+      return [{ value: '', label: t('no items', '无条目') }];
     }
     return entries.map((entry) => ({
       value: entry.itemId,
       label: `${entry.itemId} (${entry.latestVersion})`,
     }));
-  }, [entries]);
+  }, [entries, t]);
 
   const revisionOptions = useMemo(() => {
     if (revisions.length === 0) {
-      return [{ value: '', label: 'no revisions' }];
+      return [{ value: '', label: t('no revisions', '无修订') }];
     }
     return revisions.map((revision) => ({
       value: revision.version,
       label: `${revision.version} [${revision.status}]`,
     }));
-  }, [revisions]);
+  }, [revisions, t]);
 
   const filteredHistory = useMemo(() => {
     const query = historyItemSearch.trim().toLowerCase();
@@ -237,11 +257,11 @@ export default function ReleaseCenterPage() {
 
   async function handlePublish() {
     if (!actionItemId) {
-      setFeedback({ tone: 'error', message: 'Select itemId before publish.' });
+      setFeedback({ tone: 'error', message: t('Select itemId before publish.', '发布前请先选择 itemId。') });
       return;
     }
     if (!publishVersion) {
-      setFeedback({ tone: 'error', message: 'Select publish version.' });
+      setFeedback({ tone: 'error', message: t('Select publish version.', '请选择发布版本。') });
       return;
     }
     setIsPublishing(true);
@@ -254,7 +274,10 @@ export default function ReleaseCenterPage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Published ${actionDomain}:${actionItemId}@${publishVersion} to ${actionChannel}.`,
+        message: t(
+          `Published ${actionDomain}:${actionItemId}@${publishVersion} to ${actionChannel}.`,
+          `已发布 ${actionDomain}:${actionItemId}@${publishVersion} 到 ${actionChannel}。`,
+        ),
       });
       await loadHistory();
       await loadRevisions(actionDomain, actionItemId);
@@ -270,11 +293,11 @@ export default function ReleaseCenterPage() {
 
   async function handleRollback() {
     if (!actionItemId) {
-      setFeedback({ tone: 'error', message: 'Select itemId before rollback.' });
+      setFeedback({ tone: 'error', message: t('Select itemId before rollback.', '回滚前请先选择 itemId。') });
       return;
     }
     if (!rollbackTargetVersion) {
-      setFeedback({ tone: 'error', message: 'Select rollback target version.' });
+      setFeedback({ tone: 'error', message: t('Select rollback target version.', '请选择回滚目标版本。') });
       return;
     }
     setIsRollingBack(true);
@@ -287,7 +310,7 @@ export default function ReleaseCenterPage() {
       });
       setFeedback({
         tone: 'success',
-        message: `Rollback completed to ${rollbackTargetVersion}.`,
+        message: t(`Rollback completed to ${rollbackTargetVersion}.`, `回滚完成，目标版本 ${rollbackTargetVersion}。`),
       });
       await loadHistory();
       await loadRevisions(actionDomain, actionItemId);
@@ -350,9 +373,12 @@ export default function ReleaseCenterPage() {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 p-4">
       <div>
-        <h1 className="text-base font-bold text-white">Release Center</h1>
+        <h1 className="text-base font-bold text-white">{t('Release Center', '发布中心')}</h1>
         <p className="text-xs text-zinc-500">
-          Manage publish/rollback actions and inspect release history across all domains.
+          {t(
+            'Manage publish/rollback actions and inspect release history across all domains.',
+            '管理发布/回滚动作，并查看所有领域的发布历史。',
+          )}
         </p>
       </div>
 
@@ -374,18 +400,18 @@ export default function ReleaseCenterPage() {
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-white">Release Action</h2>
+            <h2 className="text-sm font-semibold text-white">{t('Release Action', '发布动作')}</h2>
             <Link className="text-xs text-emerald-300 underline" to={DOMAIN_WORKSPACE_PATH[actionDomain]}>
-              Open {actionDomain} workspace
+              {t('Open', '打开')} {actionDomain} {t('workspace', '工作区')}
             </Link>
           </div>
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-4">
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-500">domain</div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-500">{t('domain', '领域')}</div>
               <Select
                 value={actionDomain}
                 onChange={(value) => setActionDomain(value as AdminCatalogDomain)}
-                options={DOMAIN_OPTIONS}
+                options={domainOptions}
                 testId="release-center-action-domain-select"
               />
             </div>
@@ -399,16 +425,18 @@ export default function ReleaseCenterPage() {
               />
             </div>
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-500">channel</div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-500">{t('channel', '通道')}</div>
               <Select
                 value={actionChannel}
                 onChange={(value) => setActionChannel(value as CatalogChannel)}
-                options={CHANNEL_OPTIONS}
+                options={channelOptions}
                 testId="release-center-action-channel-select"
               />
             </div>
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-500">publish version</div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                {t('publish version', '发布版本')}
+              </div>
               <Select
                 value={publishVersion}
                 onChange={setPublishVersion}
@@ -419,7 +447,9 @@ export default function ReleaseCenterPage() {
           </div>
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-500">rollback target version</div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                {t('rollback target version', '回滚目标版本')}
+              </div>
               <Select
                 value={rollbackTargetVersion}
                 onChange={setRollbackTargetVersion}
@@ -428,35 +458,39 @@ export default function ReleaseCenterPage() {
               />
             </div>
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-500">validationRunId (optional)</div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                {t('validationRunId (optional)', 'validationRunId（可选）')}
+              </div>
               <input
                 type="text"
                 value={actionValidationRunId}
                 onChange={(event) => setActionValidationRunId(event.target.value)}
-                placeholder="validation run id"
+                placeholder={t('validation run id', '验证任务 id')}
                 data-testid="release-center-validation-run-id-input"
                 className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
               />
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-[11px] uppercase tracking-wider text-zinc-500">notes (optional)</div>
+            <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+              {t('notes (optional)', '备注（可选）')}
+            </div>
             <textarea
               value={actionNotes}
               onChange={(event) => setActionNotes(event.target.value)}
-              placeholder="release notes"
+              placeholder={t('release notes', '发布备注')}
               data-testid="release-center-notes-input"
               className="min-h-[72px] w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
             />
           </div>
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
-            <span>entries: {entries.length}</span>
+            <span>{t('entries', '条目')}: {entries.length}</span>
             <span>|</span>
-            <span>revisions: {revisions.length}</span>
+            <span>{t('revisions', '修订')}: {revisions.length}</span>
             {(isLoadingEntries || isLoadingRevisions) && (
               <span className="inline-flex items-center gap-1 text-blue-300">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                loading catalog
+                {t('loading catalog', '正在加载目录')}
               </span>
             )}
           </div>
@@ -468,7 +502,7 @@ export default function ReleaseCenterPage() {
               data-testid="release-center-publish"
             >
               {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Publish
+              {t('Publish', '发布')}
             </Button>
             <Button
               variant="outline"
@@ -478,7 +512,7 @@ export default function ReleaseCenterPage() {
               data-testid="release-center-rollback"
             >
               {isRollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-              Rollback
+              {t('Rollback', '回滚')}
             </Button>
           </div>
         </CardContent>
@@ -487,7 +521,7 @@ export default function ReleaseCenterPage() {
       <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-white">History Filters</h2>
+            <h2 className="text-sm font-semibold text-white">{t('History Filters', '历史筛选')}</h2>
             <Button
               variant="outline"
               size="sm"
@@ -497,42 +531,44 @@ export default function ReleaseCenterPage() {
               data-testid="release-center-history-refresh"
             >
               <RefreshCw className="h-4 w-4" />
-              Refresh
+              {t('Refresh', '刷新')}
             </Button>
           </div>
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-4">
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-500">domain</div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-500">{t('domain', '领域')}</div>
               <Select
                 value={historyDomainFilter}
                 onChange={(value) => setHistoryDomainFilter(value as HistoryDomainFilter)}
-                options={DOMAIN_FILTER_OPTIONS}
+                options={domainFilterOptions}
                 testId="release-center-history-domain-select"
               />
             </div>
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-500">channel</div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-500">{t('channel', '通道')}</div>
               <Select
                 value={historyChannelFilter}
                 onChange={(value) => setHistoryChannelFilter(value as HistoryChannelFilter)}
-                options={CHANNEL_FILTER_OPTIONS}
+                options={channelFilterOptions}
                 testId="release-center-history-channel-select"
               />
             </div>
             <div className="space-y-1 lg:col-span-2">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-500">itemId search</div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                {t('itemId search', 'itemId 搜索')}
+              </div>
               <input
                 type="text"
                 value={historyItemSearch}
                 onChange={(event) => setHistoryItemSearch(event.target.value)}
-                placeholder="search by itemId"
+                placeholder={t('search by itemId', '按 itemId 搜索')}
                 data-testid="release-center-history-item-search"
                 className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
               />
             </div>
           </div>
           <div className="text-[11px] text-zinc-500">
-            {isLoadingHistory ? 'loading history...' : `records: ${filteredHistory.length}`}
+            {isLoadingHistory ? t('loading history...', '正在加载历史...') : `${t('records', '记录')}: ${filteredHistory.length}`}
           </div>
         </CardContent>
       </Card>
@@ -540,7 +576,7 @@ export default function ReleaseCenterPage() {
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_1fr]">
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-2 p-4">
-            <h2 className="text-sm font-semibold text-white">Release Timeline</h2>
+            <h2 className="text-sm font-semibold text-white">{t('Release Timeline', '发布时间线')}</h2>
             <div className="max-h-[620px] space-y-2 overflow-auto" data-testid="release-center-history-list">
               {filteredHistory.map((record, index) => (
                 <button
@@ -578,7 +614,7 @@ export default function ReleaseCenterPage() {
               ))}
               {filteredHistory.length === 0 && (
                 <div className="rounded-lg border border-dashed border-white/15 bg-zinc-900/50 px-3 py-3 text-xs text-zinc-500">
-                  No release records in current filter.
+                  {t('No release records in current filter.', '当前筛选条件下没有发布记录。')}
                 </div>
               )}
             </div>
@@ -587,10 +623,10 @@ export default function ReleaseCenterPage() {
 
         <Card className="border-zinc-800 bg-zinc-950">
           <CardContent className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold text-white">Record Details</h2>
+            <h2 className="text-sm font-semibold text-white">{t('Record Details', '记录详情')}</h2>
             {!selectedRecord && (
               <div className="rounded-lg border border-dashed border-white/15 bg-zinc-900/50 px-3 py-3 text-xs text-zinc-500">
-                Select a release record from timeline.
+                {t('Select a release record from timeline.', '请从时间线中选择一条发布记录。')}
               </div>
             )}
             {selectedRecord && (
@@ -633,7 +669,7 @@ export default function ReleaseCenterPage() {
                   className="w-full"
                   onClick={() => useRecordForAction(selectedRecord)}
                 >
-                  Use This Record For Action Form
+                  {t('Use This Record For Action Form', '将此记录用于动作表单')}
                 </Button>
               </div>
             )}

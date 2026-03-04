@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
+import { useI18n } from '@/src/i18n';
 import { isAuthenticated } from '@/src/lib/adminSession';
 import { AdminStudioApiError, loginWithAccount } from '@/src/services/adminStudio';
 import { getSettings, saveSettings, type AdminStudioAuthMode } from '@/src/services/settings';
@@ -27,6 +28,7 @@ function summarizeError(error: unknown) {
 }
 
 export default function LoginPage() {
+  const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const settings = getSettings();
@@ -53,14 +55,17 @@ export default function LoginPage() {
   async function handleLogin() {
     const serverUrl = serverUrlInput.trim();
     if (!serverUrl) {
-      setFeedback({ tone: 'error', message: 'Server URL is required.' });
+      setFeedback({ tone: 'error', message: t('Server URL is required.', '必须填写服务端地址。') });
       return;
     }
 
     if (authModeInput === 'api_key') {
       const apiKey = apiKeyInput.trim();
       if (!apiKey) {
-        setFeedback({ tone: 'error', message: 'API key is required in api key mode.' });
+        setFeedback({
+          tone: 'error',
+          message: t('API key is required in api key mode.', 'API Key 模式下必须填写 API Key。'),
+        });
         return;
       }
       saveSettings({
@@ -74,7 +79,7 @@ export default function LoginPage() {
         refreshTokenExpiresAt: '',
         authUser: null,
       });
-      setFeedback({ tone: 'success', message: 'Connected with API key.' });
+      setFeedback({ tone: 'success', message: t('Connected with API key.', '已使用 API Key 连接。') });
       navigate(nextPath, { replace: true });
       return;
     }
@@ -82,7 +87,10 @@ export default function LoginPage() {
     const identifier = accountIdentifierInput.trim();
     const password = accountPasswordInput;
     if (!identifier || !password) {
-      setFeedback({ tone: 'error', message: 'Account identifier and password are required.' });
+      setFeedback({
+        tone: 'error',
+        message: t('Account identifier and password are required.', '必须填写账号与密码。'),
+      });
       return;
     }
 
@@ -100,7 +108,10 @@ export default function LoginPage() {
       setAccountPasswordInput('');
       setFeedback({
         tone: 'success',
-        message: `Signed in as ${result.user?.username || result.user?.email || result.user?.id || identifier}.`,
+        message: t(
+          `Signed in as ${result.user?.username || result.user?.email || result.user?.id || identifier}.`,
+          `已登录：${result.user?.username || result.user?.email || result.user?.id || identifier}。`,
+        ),
       });
       navigate(nextPath, { replace: true });
     } catch (error) {
@@ -115,10 +126,39 @@ export default function LoginPage() {
       <Card className="w-full max-w-xl border-zinc-800 bg-zinc-950">
         <CardContent className="space-y-4 p-5">
           <div>
-            <h1 className="text-lg font-semibold text-white">Admin Studio Sign In</h1>
+            <h1 className="text-lg font-semibold text-white">
+              {t('Admin Studio Sign In', '管理工作台登录')}
+            </h1>
             <p className="text-xs text-zinc-500">
-              Login first, then enter workspace pages for design, management, and release.
+              {t(
+                'Login first, then enter workspace pages for design, management, and release.',
+                '请先登录，再进入设计、管理、发布工作区。',
+              )}
             </p>
+            <div className="mt-2 inline-flex items-center gap-1 rounded-lg border border-white/10 bg-zinc-900/70 p-1">
+              <button
+                type="button"
+                onClick={() => setLanguage('en')}
+                className={`rounded px-2 py-1 text-[11px] transition ${
+                  language === 'en'
+                    ? 'bg-emerald-500/20 text-emerald-200'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage('zh')}
+                className={`rounded px-2 py-1 text-[11px] transition ${
+                  language === 'zh'
+                    ? 'bg-emerald-500/20 text-emerald-200'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                中文
+              </button>
+            </div>
           </div>
 
           {feedback && (
@@ -137,7 +177,9 @@ export default function LoginPage() {
           )}
 
           <div className="space-y-1">
-            <label className="text-[11px] uppercase tracking-wider text-zinc-500">Server URL</label>
+            <label className="text-[11px] uppercase tracking-wider text-zinc-500">
+              {t('Server URL', '服务端地址')}
+            </label>
             <input
               type="text"
               value={serverUrlInput}
@@ -149,23 +191,33 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[11px] uppercase tracking-wider text-zinc-500">Auth Mode</label>
+            <label className="text-[11px] uppercase tracking-wider text-zinc-500">
+              {t('Auth Mode', '认证模式')}
+            </label>
             <Select
               value={authModeInput}
               onChange={(value) => setAuthModeInput(value as AdminStudioAuthMode)}
-              options={AUTH_MODE_OPTIONS}
+              options={AUTH_MODE_OPTIONS.map((item) => ({
+                ...item,
+                label:
+                  item.value === 'account'
+                    ? t('account token', '账号令牌')
+                    : t('api key', 'API Key'),
+              }))}
               testId="login-auth-mode"
             />
           </div>
 
           {authModeInput === 'api_key' ? (
             <div className="space-y-1">
-              <label className="text-[11px] uppercase tracking-wider text-zinc-500">API Key</label>
+              <label className="text-[11px] uppercase tracking-wider text-zinc-500">
+                {t('API Key', 'API Key')}
+              </label>
               <input
                 type="password"
                 value={apiKeyInput}
                 onChange={(event) => setApiKeyInput(event.target.value)}
-                placeholder="API key"
+                placeholder={t('API key', 'API Key')}
                 data-testid="login-api-key"
                 className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
               />
@@ -173,23 +225,27 @@ export default function LoginPage() {
           ) : (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div className="space-y-1">
-                <label className="text-[11px] uppercase tracking-wider text-zinc-500">Account</label>
+                <label className="text-[11px] uppercase tracking-wider text-zinc-500">
+                  {t('Account', '账号')}
+                </label>
                 <input
                   type="text"
                   value={accountIdentifierInput}
                   onChange={(event) => setAccountIdentifierInput(event.target.value)}
-                  placeholder="username/email"
+                  placeholder={t('username/email', '用户名/邮箱')}
                   data-testid="login-account-identifier"
                   className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] uppercase tracking-wider text-zinc-500">Password</label>
+                <label className="text-[11px] uppercase tracking-wider text-zinc-500">
+                  {t('Password', '密码')}
+                </label>
                 <input
                   type="password"
                   value={accountPasswordInput}
                   onChange={(event) => setAccountPasswordInput(event.target.value)}
-                  placeholder="password"
+                  placeholder={t('password', '密码')}
                   data-testid="login-account-password"
                   className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                 />
@@ -204,7 +260,7 @@ export default function LoginPage() {
             data-testid="login-submit"
           >
             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Enter Admin Studio
+            {t('Enter Admin Studio', '进入管理工作台')}
           </Button>
         </CardContent>
       </Card>

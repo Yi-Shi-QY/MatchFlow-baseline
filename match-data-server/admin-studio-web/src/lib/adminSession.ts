@@ -24,8 +24,9 @@ export function isAuthenticated(settings: AdminStudioSettings = getSettings()) {
 }
 
 export function getAuthLabel(settings: AdminStudioSettings = getSettings()) {
+  const isZh = settings.language === 'zh';
   if (!isAuthenticated(settings)) {
-    return 'Not authenticated';
+    return isZh ? '未认证' : 'Not authenticated';
   }
   if (settings.authMode === 'account') {
     const user = settings.authUser;
@@ -34,8 +35,8 @@ export function getAuthLabel(settings: AdminStudioSettings = getSettings()) {
       || user?.email
       || user?.id
       || settings.accountIdentifier
-      || 'account';
-    return `Account: ${userText}`;
+      || (isZh ? '账号' : 'account');
+    return isZh ? `账号：${userText}` : `Account: ${userText}`;
   }
-  return 'API Key session';
+  return isZh ? 'API Key 会话' : 'API Key session';
 }

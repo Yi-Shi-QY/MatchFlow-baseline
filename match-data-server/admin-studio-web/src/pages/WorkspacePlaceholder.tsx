@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { Card, CardContent } from '@/src/components/ui/Card';
+import { useI18n } from '@/src/i18n';
 
 interface WorkspacePlaceholderProps {
   title: string;
@@ -15,6 +16,13 @@ export default function WorkspacePlaceholder({
   domainSectionBasePath,
   activeDomainSection = 'design',
 }: WorkspacePlaceholderProps) {
+  const { t } = useI18n();
+  const sectionLabel = (section: 'design' | 'manage' | 'publish') => {
+    if (section === 'design') return t('design', '设计');
+    if (section === 'manage') return t('manage', '管理');
+    return t('publish', '发布');
+  };
+
   return (
     <div className="mx-auto w-full max-w-5xl p-4">
       <Card className="border-zinc-800 bg-zinc-950">
@@ -33,16 +41,23 @@ export default function WorkspacePlaceholder({
                       : 'border-white/10 bg-zinc-900 text-zinc-400 hover:border-white/20 hover:text-zinc-200'
                   }`}
                 >
-                  {section}
+                  {sectionLabel(section)}
                 </NavLink>
               ))}
             </div>
           )}
           <p className="text-xs text-zinc-500">
-            This area is being migrated into dedicated design/manage/publish pages.
+            {t(
+              'This area is being migrated into dedicated design/manage/publish pages.',
+              '该区域正在迁移为独立的设计/管理/发布页面。',
+            )}
           </p>
           <div className="text-xs text-emerald-300">
-            Continue with domain workspaces from <Link className="underline" to="/app/dashboard">Dashboard</Link>.
+            {t('Continue with domain workspaces from ', '可从')}
+            <Link className="underline" to="/app/dashboard">
+              {t('Dashboard', '总览面板')}
+            </Link>
+            {t('.', '继续进入各领域工作区。')}
           </div>
         </CardContent>
       </Card>
