@@ -416,6 +416,37 @@ function verifyDomain(domainId, context) {
         `[ui] ${presenterFile} must export DOMAIN_UI_PRESENTER_ENTRIES for auto registration`,
       );
     }
+    if (domainId !== "football") {
+      const forbiddenHomeKeys = [
+        "home.popular_matches",
+        "home.live_upcoming",
+        "home.refresh_matches",
+        "home.click_to_analyze",
+        "home.no_match_data",
+        "home.search_placeholder",
+        "home.live",
+        "home.finished",
+        "home.upcoming",
+      ];
+      forbiddenHomeKeys.forEach((key) => {
+        if (presenterContent.includes(`"${key}"`) || presenterContent.includes(`'${key}'`)) {
+          errors.push(
+            `[ui] ${presenterFile} uses legacy sports copy key "${key}". Non-football domains must use "${domainId}.home.*" and "${domainId}.status.*" keys.`,
+          );
+        }
+      });
+
+      if (!presenterContent.includes(`${domainId}.home.`)) {
+        errors.push(
+          `[ui] ${presenterFile} must define domain-specific home copy keys with prefix "${domainId}.home."`,
+        );
+      }
+      if (!presenterContent.includes(`${domainId}.status.`)) {
+        errors.push(
+          `[ui] ${presenterFile} must define domain-specific status copy keys with prefix "${domainId}.status."`,
+        );
+      }
+    }
   }
 
   const domainAgentFile = `src/agents/domains/${domainId}/index.ts`;

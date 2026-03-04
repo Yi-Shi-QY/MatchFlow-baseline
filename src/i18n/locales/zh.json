@@ -1,4 +1,4 @@
-﻿{
+{
   "app": {
     "title": "MatchFlow",
     "subtitle": "AI 驱动的足球分析"
@@ -146,13 +146,13 @@
     "runtime_stage_completed": "已完成",
     "runtime_stage_failed": "失败",
     "runtime_stage_cancelled": "已取消",
-    "planner_progress_label": "\u5f53\u524d\u8fdb\u5ea6\uff1a",
-    "planner_3d_loading": "\u6b63\u5728\u52a0\u8f7d 3D \u89c4\u5212\u56fe...",
-    "planner_fallback_init": "3D \u89c4\u5212\u4e0d\u53ef\u7528\uff0c\u5df2\u5207\u6362\u4e3a 2D \u56de\u9000\u89c6\u56fe\u3002",
-    "planner_fallback_runtime": "3D \u89c4\u5212\u6e32\u67d3\u5931\u8d25\uff0c\u5df2\u5207\u6362\u4e3a 2D \u56de\u9000\u89c6\u56fe\u3002",
-    "planner_fallback_performance": "\u8bbe\u5907\u6027\u80fd\u8f83\u4f4e\uff0c\u5df2\u81ea\u52a8\u5207\u6362\u4e3a 2D \u56de\u9000\u89c6\u56fe\u3002",
-    "planner_render_failed": "\u89c4\u5212\u89c6\u56fe\u6682\u4e0d\u53ef\u7528\u3002",
-    "planner_fallback_aria": "\u5206\u6790\u89c4\u5212\u56de\u9000\u89c6\u56fe"
+    "planner_progress_label": "当前进度：",
+    "planner_3d_loading": "正在加载 3D 规划图...",
+    "planner_fallback_init": "3D 规划不可用，已切换为 2D 回退视图。",
+    "planner_fallback_runtime": "3D 规划渲染失败，已切换为 2D 回退视图。",
+    "planner_fallback_performance": "设备性能较低，已自动切换为 2D 回退视图。",
+    "planner_render_failed": "规划视图暂不可用。",
+    "planner_fallback_aria": "分析规划回退视图"
   },
   "settings": {
     "title": "设置",
@@ -307,10 +307,158 @@
     "import_save": "导入并保存到历史",
     "import_analyze": "导入数据并开始分析"
   },
+  "stocks": {
+    "home": {
+      "section_title": "市场标的池",
+      "section_hint": "交易中与待交易",
+      "refresh_action": "刷新标的",
+      "open_action": "查看分析",
+      "no_data": "暂无标的数据",
+      "search_placeholder": "搜索代码、基准或行业..."
+    },
+    "status": {
+      "live": "交易中",
+      "finished": "已收盘",
+      "upcoming": "待交易"
+    },
+    "sources": {
+      "asset_profile": {
+        "label": "标的画像",
+        "description": "标的身份、基准、行业与当前市场阶段"
+      },
+      "price_action": {
+        "label": "价格行为",
+        "description": "趋势、动量、波动率与关键价位"
+      },
+      "valuation_health": {
+        "label": "估值健康度",
+        "description": "估值倍数、增长质量与预期修正强度"
+      },
+      "risk_events": {
+        "label": "风险事件",
+        "description": "风险叙事、催化因素与下行触发项"
+      }
+    },
+    "sections": {
+      "asset_profile": "标的画像",
+      "price_action": "价格行为",
+      "valuation_health": "估值健康度",
+      "risk_events": "风险事件"
+    },
+    "fields": {
+      "symbol": "代码",
+      "asset_name": "标的名称",
+      "benchmark": "基准",
+      "sector": "行业",
+      "timeframe": "观察周期",
+      "market_phase": "市场阶段",
+      "trend_score": "趋势分数",
+      "relative_strength": "相对强弱",
+      "momentum_14d": "14日动量",
+      "volatility_30d": "30日波动率",
+      "support": "支撑位",
+      "resistance": "阻力位",
+      "pe_ratio": "市盈率",
+      "revenue_growth_pct": "营收增速 (%)",
+      "revision_score": "预期修正分",
+      "free_cash_flow_margin_pct": "自由现金流利润率 (%)",
+      "risk_narrative": "风险叙事",
+      "catalysts": "催化因素",
+      "downside_triggers": "下行触发项"
+    },
+    "placeholders": {
+      "symbol": "例如 AAPL",
+      "asset_name": "例如 Apple Inc.",
+      "benchmark": "例如 NASDAQ 100",
+      "sector": "例如 美国股票",
+      "timeframe": "例如 1-3个月",
+      "market_phase": "例如 盘中重定价",
+      "risk_narrative": "概述当前主要风险叙事...",
+      "catalysts": "财报指引更新, 政策信号变化",
+      "downside_triggers": "需求不及预期, 利润率收缩"
+    }
+  },
   "domains": {
     "football": {
       "name": "足球分析"
+    },
+    "stocks": {
+      "name": "股票分析"
+    },
+    "fengshui": {
+      "name": "风水分析"
+    }
+  },
+  "fengshui": {
+    "home": {
+      "section_title": "风水案例池",
+      "section_hint": "在研判与待评估",
+      "refresh_action": "刷新案例",
+      "open_action": "查看研判",
+      "no_data": "暂无可分析案例",
+      "search_placeholder": "搜索主体、朝向或用途..."
+    },
+    "status": {
+      "live": "研判中",
+      "finished": "已归档",
+      "upcoming": "待评估"
+    },
+    "sources": {
+      "site_profile": {
+        "label": "场域画像",
+        "description": "主体、参照系、朝向与物业基础信息"
+      },
+      "qi_flow": {
+        "label": "气场流动",
+        "description": "气场强度、明堂质量、煞压点与流通情况"
+      },
+      "temporal_cycle": {
+        "label": "时运周期",
+        "description": "年/月影响、顺势窗口与谨慎窗口"
+      },
+      "occupant_intent": {
+        "label": "目标与约束",
+        "description": "需求叙事、优先级与执行限制条件"
+      }
+    },
+    "sections": {
+      "site_profile": "场域画像",
+      "qi_flow": "气场流动",
+      "temporal_cycle": "时运周期",
+      "occupant_intent": "目标与约束"
+    },
+    "fields": {
+      "subject_name": "主体名称",
+      "reference_frame": "参照系",
+      "property_type": "物业类型",
+      "facing_direction": "朝向",
+      "construction_period": "建造运期",
+      "qi_flow_score": "气场分数",
+      "bright_hall_score": "明堂分数",
+      "sha_pressure": "煞压分数",
+      "circulation_score": "流通分数",
+      "entry_stability": "入户稳定度",
+      "cycle_stage": "周期阶段",
+      "yearly_influence": "年度影响",
+      "monthly_influence": "月度影响",
+      "favorable_window": "顺势窗口",
+      "caution_window": "谨慎窗口",
+      "intent_summary": "目标摘要",
+      "priorities": "优先级",
+      "constraints": "约束条件"
+    },
+    "placeholders": {
+      "subject_name": "例如：江景住宅 A",
+      "reference_frame": "例如：南岭轴线",
+      "property_type": "例如：住宅",
+      "facing_direction": "例如：东南",
+      "construction_period": "例如：九运",
+      "cycle_stage": "例如：过渡阶段",
+      "favorable_window": "例如：旺气时间段",
+      "caution_window": "例如：冲煞时间段",
+      "intent_summary": "概述核心目标与期待结果...",
+      "priorities": "健康, 财运, 和谐",
+      "constraints": "预算, 工期, 结构限制"
     }
   }
 }
-

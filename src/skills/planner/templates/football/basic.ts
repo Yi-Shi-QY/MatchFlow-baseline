@@ -15,6 +15,7 @@ export const basicTemplate: PlanTemplate = {
       animationType: 'none',
       agentType: 'overview',
       contextMode: 'independent',
+      sourceIds: ['fundamental'],
     },
     {
       title: isZh ? '赛前预测' : 'Match Prediction',
@@ -22,6 +23,7 @@ export const basicTemplate: PlanTemplate = {
       animationType: 'none',
       agentType: 'prediction',
       contextMode: 'all',
+      sourceIds: ['fundamental', 'market', 'custom'],
     },
   ],
 };

@@ -45,6 +45,7 @@ import {
 } from '@/src/services/analysisSummary';
 import { findBuiltinDomainLocalTestCaseById } from '@/src/services/domains/builtinModules';
 import {
+  getDomainUiTheme,
   getDomainUiPresenter,
   type ResultPresenterContext,
 } from '@/src/services/domains/ui/presenter';
@@ -192,6 +193,7 @@ export default function MatchDetail() {
   const [includeAnimations, setIncludeAnimations] = useState(true);
   const [selectedSources, setSelectedSources] = useState<Partial<SourceSelection>>({});
   const domainUiPresenter = getDomainUiPresenter(activeDomain);
+  const domainUiTheme = getDomainUiTheme(activeDomain);
   const resultPresenter = domainUiPresenter.result;
   const resultPresenterContext = React.useMemo<ResultPresenterContext>(
     () => ({
@@ -841,6 +843,18 @@ export default function MatchDetail() {
       }
 
       dataToAnalyze = mergeServerPlanningIntoMatchData(dataToAnalyze, serverConfig);
+
+      const currentSourceContext =
+        dataToAnalyze?.sourceContext && typeof dataToAnalyze.sourceContext === 'object'
+          ? dataToAnalyze.sourceContext
+          : {};
+      dataToAnalyze = {
+        ...dataToAnalyze,
+        sourceContext: {
+          ...currentSourceContext,
+          domainId: activeDomain.id,
+        },
+      };
     } catch (error) {
       console.warn('Failed to load server planning config; continue with local source context.', error);
     }
@@ -1011,7 +1025,8 @@ export default function MatchDetail() {
     presenterSubjectSnapshot,
   );
   const summaryCards = getAnalysisConclusionCards(analysis);
-  const summaryBarPalette = ['#10b981', '#71717a', '#3b82f6', '#f59e0b', '#ef4444'];
+  const summaryTheme = domainUiTheme.result.summary;
+  const summaryBarPalette = summaryTheme.barPalette;
   const summaryIsZh = i18n.language.startsWith('zh');
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col pb-[calc(5rem+env(safe-area-inset-bottom))]">
@@ -1370,15 +1385,15 @@ export default function MatchDetail() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.5 }}
             >
-              <Card className="flex flex-col border-emerald-500/30 bg-zinc-950 overflow-hidden relative shadow-lg shadow-emerald-500/10">
-                <CardHeader className="border-b border-white/5 py-3 px-4 flex flex-row items-center justify-between bg-emerald-500/10">
-                  <CardTitle className="flex items-center gap-2 text-emerald-400 text-sm">
+              <Card className={summaryTheme.cardClassName}>
+                <CardHeader className={summaryTheme.headerClassName}>
+                  <CardTitle className={summaryTheme.titleClassName}>
                     <BrainCircuit className="w-4 h-4" /> 
-                    {t('match.final_summary')}
+                    {t(summaryTheme.titleKey)}
                   </CardTitle>
                 </CardHeader>
                 
-                <CardContent className="p-0 flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-black relative overflow-hidden">
+                <CardContent className={summaryTheme.contentClassName}>
                   <div className="p-6 w-full flex flex-col items-center">
                     {summaryHero.kind === 'pair' && (
                       <div className="flex items-center gap-6 mb-6">
@@ -1423,11 +1438,11 @@ export default function MatchDetail() {
                             {(summaryHero.entity.name || '?').slice(0, 1).toUpperCase()}
                           </div>
                         )}
-                        <div className="text-sm font-semibold text-zinc-100 text-center line-clamp-2 max-w-[260px]">
+                        <div className={summaryTheme.heroNameClassName}>
                           {summaryHero.entity.name}
                         </div>
                         {summaryHero.caption ? (
-                          <div className="text-[10px] font-mono text-zinc-500 text-center">
+                          <div className={summaryTheme.heroCaptionClassName}>
                             {summaryHero.caption}
                           </div>
                         ) : null}
@@ -1458,11 +1473,11 @@ export default function MatchDetail() {
                       <div className="w-full max-w-[320px] space-y-3">
                         {summaryDistribution.map((entry, index) => (
                           <div key={entry.id} className="space-y-1">
-                            <div className="flex justify-between text-[10px] font-mono text-zinc-400">
+                            <div className={summaryTheme.distributionLabelClassName}>
                               <span className="truncate max-w-[180px]">{entry.label}</span>
                               <span>{entry.value}%</span>
                             </div>
-                            <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                            <div className={summaryTheme.distributionTrackClassName}>
                               <motion.div
                                 initial={{ width: 0 }}
                                 animate={{ width: `${entry.value}%` }}
@@ -1484,7 +1499,7 @@ export default function MatchDetail() {
                         {summaryCards.map((card, index) => (
                           <div
                             key={`${card.label}_${index}`}
-                            className="rounded-lg border border-white/10 bg-black/40 p-2.5 space-y-1"
+                            className={summaryTheme.conclusionCardClassName}
                           >
                             <div className="text-[10px] uppercase tracking-wider text-zinc-500">
                               {card.label}
@@ -1493,7 +1508,7 @@ export default function MatchDetail() {
                               {formatConclusionCardValue(card)}
                             </div>
                             {(typeof card.confidence === 'number' || card.trend) && (
-                              <div className="text-[10px] text-zinc-400">
+                              <div className={summaryTheme.conclusionMetaClassName}>
                                 {typeof card.confidence === 'number'
                                   ? `${summaryIsZh ? '置信度' : 'Confidence'} ${card.confidence}%`
                                   : ''}
@@ -1510,7 +1525,7 @@ export default function MatchDetail() {
                     )}
 
                     {analysis.prediction && (
-                      <div className="mt-6 p-4 rounded-xl bg-black/50 border border-white/5 w-full">
+                      <div className={summaryTheme.quoteCardClassName}>
                         <p className="text-xs text-zinc-300 leading-relaxed italic text-center">
                           "{analysis.prediction}"
                         </p>
@@ -1522,7 +1537,7 @@ export default function MatchDetail() {
                         {analysis.keyFactors.slice(0, 6).map((factor, index) => (
                           <span
                             key={`${factor}_${index}`}
-                            className="text-[10px] px-2 py-1 rounded-full bg-zinc-800 text-zinc-300 border border-white/10"
+                            className={summaryTheme.keyFactorClassName}
                           >
                             {factor}
                           </span>

@@ -14,6 +14,16 @@ interface AnalysisConfigPayload {
   sourceContext?: SourceContextPayload;
 }
 
+function normalizeDomainId(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  const normalized = input.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function isRecordObject(input: unknown): input is Record<string, any> {
+  return !!input && typeof input === 'object' && !Array.isArray(input);
+}
+
 function getRequestHeaders(apiKey: string): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
@@ -97,12 +107,41 @@ export function mergeServerPlanningIntoMatchData(matchData: any, config: Analysi
     config.sourceContext && typeof config.sourceContext === 'object'
       ? config.sourceContext
       : {};
+  const localDomainId = normalizeDomainId(localSourceContext.domainId);
+  const serverDomainId = normalizeDomainId(serverSourceContext.domainId);
+  const resolvedDomainId = localDomainId || serverDomainId;
+  const hasDomainMismatch = !!localDomainId && !!serverDomainId && localDomainId !== serverDomainId;
+
+  if (hasDomainMismatch) {
+    console.warn(
+      '[analysis-config] Ignore server sourceContext override due domain mismatch',
+      { localDomainId, serverDomainId },
+    );
+  }
+
+  const localPlanning = isRecordObject(localSourceContext.planning)
+    ? localSourceContext.planning
+    : undefined;
+  const serverPlanning = isRecordObject(serverSourceContext.planning)
+    ? serverSourceContext.planning
+    : undefined;
+
+  const mergedPlanning =
+    hasDomainMismatch
+      ? localPlanning
+      : serverPlanning
+        ? {
+            ...(localPlanning || {}),
+            ...serverPlanning,
+          }
+        : localPlanning;
 
   return {
     ...matchData,
     sourceContext: {
       ...localSourceContext,
-      ...serverSourceContext,
+      ...(hasDomainMismatch ? {} : serverSourceContext),
+      domainId: resolvedDomainId || undefined,
       selectedSources:
         localSourceContext.selectedSources ||
         serverSourceContext.selectedSources ||
@@ -115,7 +154,7 @@ export function mergeServerPlanningIntoMatchData(matchData: any, config: Analysi
         ...(serverSourceContext.capabilities || {}),
         ...(localSourceContext.capabilities || {}),
       },
-      planning: serverSourceContext.planning,
+      planning: mergedPlanning,
     },
   };
 }

@@ -1,15 +1,19 @@
 import type { HubEndpointHint } from "../extensions/types";
 import type { AppSettings } from "../settings";
 import { DEFAULT_DOMAIN_ID } from "../domains/builtinModules";
+import { getAnalysisDomainById } from "../domains/registry";
 import {
   getPlanningStrategyByDomainId,
   getPlanningStrategyForAnalysis,
 } from "../domains/planning/registry";
 import type { DomainPlanningStrategy } from "../domains/planning/types";
 import type { PlanningRouteDecision } from "../domains/planning/types";
+import { listAnimationTypesForDomain } from "../remotion/templateParams";
 
 export type TemplateType = string;
 export type { PlanningRouteDecision };
+
+const RESERVED_UTILITY_AGENT_IDS = new Set(["tag", "summary", "animation"]);
 
 function parsePlanningRequirements(planningContext: any) {
   const requiredAgentIds = Array.isArray(planningContext?.requiredAgents)
@@ -61,13 +65,94 @@ function normalizePlannerAgentId(agentId: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function extractScopedPrefix(value: string): string | null {
+  const index = value.indexOf("_");
+  if (index <= 0) return null;
+  const prefix = value.slice(0, index).trim();
+  return prefix.length > 0 ? prefix : null;
+}
+
+function isPlannerAgentCompatibleWithDomain(agentId: string, domainId: string): boolean {
+  if (agentId === "planner_template" || agentId === "planner_autonomous") {
+    return true;
+  }
+
+  if (!agentId.includes("_planner_")) {
+    return true;
+  }
+
+  const prefix = extractScopedPrefix(agentId);
+  if (!prefix) return true;
+  const strategy = getPlanningStrategyByDomainId(prefix);
+  if (!strategy) return true;
+  return prefix === domainId;
+}
+
+function isTemplateCompatibleWithDomain(templateId: string, domainId: string): boolean {
+  const prefix = extractScopedPrefix(templateId);
+  if (!prefix) return true;
+  const strategy = getPlanningStrategyByDomainId(prefix);
+  if (!strategy) return true;
+  return prefix === domainId;
+}
+
+function isPlannerAgentId(agentId: string): boolean {
+  if (agentId === "planner_template" || agentId === "planner_autonomous") return true;
+  return agentId.includes("_planner_");
+}
+
+function resolveDomainAllowedAgentTypes(domainId: string): string[] {
+  const domain = getAnalysisDomainById(domainId);
+  if (!domain?.resources?.agents || !Array.isArray(domain.resources.agents)) {
+    return [];
+  }
+
+  const allowed = domain.resources.agents.filter((agentId) => {
+    if (typeof agentId !== "string" || agentId.trim().length === 0) return false;
+    if (RESERVED_UTILITY_AGENT_IDS.has(agentId)) return false;
+    return !isPlannerAgentId(agentId);
+  });
+
+  return Array.from(new Set(allowed));
+}
+
+function resolveAllowedAnimationTypes(matchData: any, domainId: string): string[] {
+  const planningContext = matchData?.sourceContext?.planning || {};
+  const explicit = normalizeSourceIdList(
+    planningContext?.allowedAnimationTypes || planningContext?.animationTypes,
+  );
+  if (explicit.length > 0) {
+    return Array.from(new Set([...explicit, "none"]));
+  }
+
+  const domain = getAnalysisDomainById(domainId);
+  const animationTemplateIds = Array.isArray(domain?.resources?.animations)
+    ? domain?.resources?.animations
+    : [];
+
+  const derived = listAnimationTypesForDomain({
+    domainId,
+    animationTemplateIds,
+    includeNone: true,
+  });
+  if (derived.length > 0) return derived;
+  return ["none"];
+}
+
 function resolvePlannerAgentIdForMode(
   requestedPlannerAgentId: string | undefined,
   strategy: DomainPlanningStrategy,
   mode: "template" | "autonomous",
 ): string {
   const requested = normalizePlannerAgentId(requestedPlannerAgentId);
-  if (requested) return requested;
+  if (requested) {
+    if (isPlannerAgentCompatibleWithDomain(requested, strategy.domainId)) {
+      return requested;
+    }
+    console.warn(
+      `[planning] Ignore plannerAgentId "${requested}" because it is incompatible with domain "${strategy.domainId}".`,
+    );
+  }
 
   const strategyPlanner = normalizePlannerAgentId(strategy.getPlannerAgentId?.(mode));
   if (strategyPlanner) return strategyPlanner;
@@ -105,6 +190,13 @@ export function resolvePlanningRoute(
     matchData,
     resolveDomainSettings({ activeDomainId: settings.activeDomainId }),
   );
+  const domainAllowedAgentTypes = resolveDomainAllowedAgentTypes(strategy.domainId);
+  const allowedAnimationTypes = resolveAllowedAnimationTypes(matchData, strategy.domainId);
+  const allowedSourceIds = resolveSelectedSourceIds(matchData);
+  const resolveAllowedAgentTypes = (candidate: string[] | null | undefined): string[] | null => {
+    if (Array.isArray(candidate) && candidate.length > 0) return candidate;
+    return domainAllowedAgentTypes.length > 0 ? domainAllowedAgentTypes : null;
+  };
   const resolvePlannerAgentId = (mode: "template" | "autonomous") =>
     resolvePlannerAgentIdForMode(requestedPlannerAgentId, strategy, mode);
 
@@ -112,7 +204,9 @@ export function resolvePlanningRoute(
     return {
       mode: "autonomous",
       plannerAgentId: resolvePlannerAgentId("autonomous"),
-      allowedAgentTypes: null,
+      allowedAgentTypes: resolveAllowedAgentTypes(null),
+      allowedAnimationTypes,
+      allowedSourceIds,
       reason: "settings.enableAutonomousPlanning=true",
       requiredAgentIds,
       requiredSkillIds,
@@ -125,7 +219,9 @@ export function resolvePlanningRoute(
     return {
       mode: "autonomous",
       plannerAgentId: resolvePlannerAgentId("autonomous"),
-      allowedAgentTypes: null,
+      allowedAgentTypes: resolveAllowedAgentTypes(null),
+      allowedAnimationTypes,
+      allowedSourceIds,
       reason: "sourceContext.planning.mode=autonomous",
       requiredAgentIds,
       requiredSkillIds,
@@ -141,13 +237,26 @@ export function resolvePlanningRoute(
         ? planningContext.templateType.trim()
         : null;
 
-  if (forcedTemplateId) {
+  const compatibleForcedTemplateId =
+    forcedTemplateId && isTemplateCompatibleWithDomain(forcedTemplateId, strategy.domainId)
+      ? forcedTemplateId
+      : null;
+
+  if (forcedTemplateId && !compatibleForcedTemplateId) {
+    console.warn(
+      `[planning] Ignore forced template "${forcedTemplateId}" because it is incompatible with domain "${strategy.domainId}".`,
+    );
+  }
+
+  if (compatibleForcedTemplateId) {
     return {
       mode: "template",
       plannerAgentId: resolvePlannerAgentId("template"),
-      templateType: forcedTemplateId,
-      allowedAgentTypes: null,
-      reason: `sourceContext.planning.template=${forcedTemplateId}`,
+      templateType: compatibleForcedTemplateId,
+      allowedAgentTypes: resolveAllowedAgentTypes(null),
+      allowedAnimationTypes,
+      allowedSourceIds,
+      reason: `sourceContext.planning.template=${compatibleForcedTemplateId}`,
       requiredAgentIds,
       requiredSkillIds,
       hub,
@@ -157,6 +266,9 @@ export function resolvePlanningRoute(
   return {
     ...domainRoute,
     plannerAgentId: domainRoute.plannerAgentId || resolvePlannerAgentId(domainRoute.mode),
+    allowedAgentTypes: resolveAllowedAgentTypes(domainRoute.allowedAgentTypes),
+    allowedAnimationTypes,
+    allowedSourceIds,
     requiredAgentIds,
     requiredSkillIds,
     hub,
@@ -172,10 +284,49 @@ export function buildFallbackPlan(
   return strategy.buildFallbackPlan(language);
 }
 
+function normalizeSourceIdList(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const normalized = input
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
+  return Array.from(new Set(normalized));
+}
+
+function resolveSelectedSourceIds(matchData: any): string[] {
+  const sourceContext = matchData?.sourceContext;
+  if (!sourceContext || typeof sourceContext !== "object") return [];
+
+  const byIds = normalizeSourceIdList(sourceContext.selectedSourceIds);
+  if (byIds.length > 0) return byIds;
+
+  const selectedSources =
+    sourceContext.selectedSources && typeof sourceContext.selectedSources === "object"
+      ? sourceContext.selectedSources
+      : null;
+  if (!selectedSources) return [];
+
+  return Object.entries(selectedSources)
+    .filter(
+      ([key, value]) =>
+        typeof key === "string" && key.trim().length > 0 && value === true,
+    )
+    .map(([key]) => key.trim());
+}
+
+function normalizeSegmentSourceIds(segment: any, matchData: any): string[] {
+  const fromSourceIds = normalizeSourceIdList(segment?.sourceIds);
+  const fromDataSourceIds = normalizeSourceIdList(segment?.dataSourceIds);
+  const explicit = fromSourceIds.length > 0 ? fromSourceIds : fromDataSourceIds;
+  if (explicit.length > 0) return explicit;
+
+  return resolveSelectedSourceIds(matchData);
+}
+
 export function normalizePlan(
   rawPlan: any[],
   includeAnimations: boolean,
   allowedAgentTypes: string[] | null,
+  allowedAnimationTypes: string[] | null,
   language: "en" | "zh",
   matchData?: any,
   settings?: Pick<AppSettings, "activeDomainId">,
@@ -217,10 +368,24 @@ export function normalizePlan(
     }
   }
 
+  const normalizedAllowedAnimationTypes =
+    Array.isArray(allowedAnimationTypes) && allowedAnimationTypes.length > 0
+      ? new Set(allowedAnimationTypes)
+      : null;
+
   return plan.map((segment) => ({
     ...segment,
     agentType: segment?.agentType || "general",
-    animationType: includeAnimations ? segment?.animationType || "none" : "none",
+    animationType: (() => {
+      if (!includeAnimations) return "none";
+      const candidate =
+        typeof segment?.animationType === "string" && segment.animationType.trim().length > 0
+          ? segment.animationType.trim()
+          : "none";
+      if (!normalizedAllowedAnimationTypes) return candidate;
+      return normalizedAllowedAnimationTypes.has(candidate) ? candidate : "none";
+    })(),
     contextMode: segment?.contextMode || "build_upon",
+    sourceIds: normalizeSegmentSourceIds(segment, matchData),
   }));
 }

@@ -18,6 +18,7 @@ import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
 import { getBuiltinDomainLocalTestCases } from '@/src/services/domains/builtinModules';
 import { getPlannerStageI18nKey } from '@/src/services/planner/stageI18n';
 import {
+  getDomainUiTheme,
   getDomainUiPresenter,
   type HomeCenterDisplay,
   type HomeEntityDisplay,
@@ -26,6 +27,7 @@ import {
   resolveHomeEntityDisplay,
 } from '@/src/services/domains/ui/presenter';
 import { buildSubjectRoute } from '@/src/services/navigation/subjectRoute';
+import { cn } from '@/src/lib/utils';
 
 function toneClassForMetric(tone?: 'neutral' | 'positive' | 'negative') {
   if (tone === 'positive') return 'text-emerald-400';
@@ -44,6 +46,7 @@ export default function Home() {
   const activeDomain = getActiveAnalysisDomain();
   const activeDomainId = activeDomain.id;
   const domainUiPresenter = getDomainUiPresenter(activeDomain);
+  const domainUiTheme = getDomainUiTheme(activeDomain);
   const homePresenter = domainUiPresenter.home;
   const historyPresenter = domainUiPresenter.history;
   const [history, setHistory] = useState<HistoryRecord[]>([]);
@@ -56,7 +59,8 @@ export default function Home() {
   const [pendingDeleteTarget, setPendingDeleteTarget] = useState<PendingDeleteTarget>(null);
   const { activeAnalyses, clearActiveAnalysis } = useAnalysis();
   const prevAnalysesRef = React.useRef<Record<string, boolean>>({});
-  const summaryBarPalette = ['#10b981', '#71717a', '#3b82f6', '#f59e0b', '#ef4444'];
+  const homeHistoryTheme = domainUiTheme.home.history;
+  const summaryBarPalette = homeHistoryTheme.barPalette;
 
   const presenterContext = useMemo<HomePresenterContext>(() => {
     const formatTime = (isoDate: string) => {
@@ -502,7 +506,8 @@ export default function Home() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <History className="w-5 h-5 text-zinc-400" /> {t('home.history_analysis')}
+                <History className={cn('w-5 h-5', homeHistoryTheme.sectionIconClassName)} />{' '}
+                {t(homeHistoryTheme.sectionTitleKey)}
               </h2>
               <div className="flex items-center gap-2">
                 <button
@@ -580,7 +585,10 @@ export default function Home() {
                   return (
                     <Card
                       key={record.id}
-                      className={`snap-center shrink-0 w-48 cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900 hover:border-zinc-700 overflow-hidden ${isActive ? 'ring-1 ring-emerald-500/50' : ''}`}
+                      className={cn(
+                        homeHistoryTheme.cardClassName,
+                        isActive ? homeHistoryTheme.activeCardClassName : '',
+                      )}
                       onClick={() =>
                         navigate(buildSubjectRoute(record.domainId || activeDomainId, record.matchId))
                       }
@@ -588,11 +596,11 @@ export default function Home() {
                       <CardContent className="p-3">
                         {/* Header: League & Time */}
                         <div className="flex items-start justify-between mb-3 gap-2">
-                          <span className="min-w-0 flex-1 text-[9px] text-zinc-500 uppercase tracking-wider font-mono truncate">
+                          <span className={homeHistoryTheme.headerMetaClassName}>
                             {record.match.league}
                           </span>
                           <div className="shrink-0 flex items-center gap-1.5">
-                            <span className="text-[9px] text-zinc-600 font-mono flex items-center gap-1 whitespace-nowrap">
+                            <span className={homeHistoryTheme.timestampClassName}>
                               {isActive && <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />}
                               {new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
@@ -602,7 +610,7 @@ export default function Home() {
                                   handleDeleteRecord(e, record.id, record.matchId, record.domainId)
                                 }
                                 aria-label={t('home.clear')}
-                                className="h-6 w-6 inline-flex items-center justify-center rounded-full border border-white/10 bg-zinc-800/80 text-zinc-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                                className={homeHistoryTheme.deleteButtonClassName}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -614,16 +622,16 @@ export default function Home() {
                         {renderCompactEntityDisplay(entityDisplay)}
 
                         {/* Footer: Status or Probability Bar */}
-                        <div className="mt-2 pt-2 border-t border-white/5">
+                        <div className={homeHistoryTheme.footerClassName}>
                           {isActive ? (
                             <div className="flex items-center justify-center">
-                              <span className="text-[10px] text-emerald-400 font-mono animate-pulse">
+                              <span className={homeHistoryTheme.activeStatusClassName}>
                                 {statusText}
                               </span>
                             </div>
                           ) : outcomeDistribution.length > 0 ? (
                             <div className="flex flex-col gap-1">
-                              <div className="flex w-full h-1.5 rounded-full overflow-hidden">
+                              <div className={homeHistoryTheme.distributionTrackClassName}>
                                 {outcomeDistribution.map((entry, index) => (
                                   <div
                                     key={entry.id}
@@ -634,7 +642,7 @@ export default function Home() {
                                   />
                                 ))}
                               </div>
-                              <div className="flex justify-between text-[8px] text-zinc-500 font-mono px-1">
+                              <div className={homeHistoryTheme.distributionLabelClassName}>
                                 {outcomeDistribution.slice(0, 3).map((entry) => (
                                   <span key={`label_${entry.id}`} className="truncate max-w-[56px]">
                                     {entry.label} {entry.value}%
@@ -644,7 +652,7 @@ export default function Home() {
                             </div>
                           ) : (
                             <div className="flex items-center justify-center">
-                              <span className="text-[10px] text-zinc-500 font-mono">
+                              <span className={homeHistoryTheme.completedStatusClassName}>
                                 {t('home.completed')}
                               </span>
                             </div>

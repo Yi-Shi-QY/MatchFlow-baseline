@@ -74,6 +74,7 @@ export interface TemplateSegmentManifest {
   animationType?: string;
   agentType: string;
   contextMode?: string;
+  sourceIds?: string[];
 }
 
 export interface TemplateExtensionManifest extends BaseExtensionManifest {

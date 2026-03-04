@@ -3,7 +3,7 @@ import type { BuiltinDomainModule, BuiltinDomainModuleFactory } from "./modules/
 import { cloneMatch } from "./modules/shared/cloneMatch";
 import type { DomainPlanningStrategy } from "./planning/types";
 import type { AnalysisDomain } from "./types";
-import { assertBuiltinDomainUiPresenter } from "./ui/presenter";
+import { assertBuiltinDomainUiPresenter, assertBuiltinDomainUiTheme } from "./ui/presenter";
 
 const LOCAL_DOMAIN_CASE_MINIMUM = 3;
 const DOMAIN_ANALYSIS_AGENT_MINIMUM = 3;
@@ -144,6 +144,7 @@ function validateBuiltinModules() {
     }
 
     assertBuiltinDomainUiPresenter(domainId);
+    assertBuiltinDomainUiTheme(domainId);
     validateDomainResourceContracts(moduleItem);
 
     const sourceIds = moduleItem.domain.dataSources

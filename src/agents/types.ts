@@ -11,8 +11,33 @@ export interface AgentContext {
   planningMode?: 'template' | 'autonomous';
   planningReason?: string;
   allowedAgentTypes?: string[] | null;
+  allowedAnimationTypes?: string[] | null;
+  allowedSourceIds?: string[];
   requiredAgentIds?: string[];
   domainId?: string;
+  planningAgentCatalog?: PlanningAgentCapability[];
+  planningAnimationCatalog?: PlanningAnimationCapability[];
+  planningSourceCatalog?: PlanningSourceCapability[];
+}
+
+export interface PlanningAgentCapability {
+  id: string;
+  name?: string;
+  description?: string;
+  contextDependencies?: string[] | "all" | "none";
+}
+
+export interface PlanningAnimationCapability {
+  type: string;
+  templateId?: string;
+  note?: string;
+}
+
+export interface PlanningSourceCapability {
+  id: string;
+  labelKey?: string;
+  descriptionKey?: string;
+  selected?: boolean;
 }
 
 export interface AgentConfig {

@@ -42,6 +42,13 @@ function manifestToTemplate(manifest: TemplateExtensionManifest): PlanTemplate {
         animationType: segment.animationType || "none",
         agentType: segment.agentType || "general",
         contextMode: segment.contextMode || "build_upon",
+        sourceIds: Array.isArray(segment.sourceIds)
+          ? segment.sourceIds
+              .map((sourceId) =>
+                typeof sourceId === "string" ? sourceId.trim() : "",
+              )
+              .filter((sourceId) => sourceId.length > 0)
+          : [],
       })),
   };
 }

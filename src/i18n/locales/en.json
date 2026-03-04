@@ -303,9 +303,158 @@
     "import_save": "Import & Save to History",
     "import_analyze": "Import Data & Start Analysis"
   },
+  "stocks": {
+    "home": {
+      "section_title": "Market Watchlist",
+      "section_hint": "Trading & Scheduled",
+      "refresh_action": "Refresh Assets",
+      "open_action": "Open Analysis",
+      "no_data": "No asset data available",
+      "search_placeholder": "Search symbols, benchmarks, or sectors..."
+    },
+    "status": {
+      "live": "Trading",
+      "finished": "Closed",
+      "upcoming": "Scheduled"
+    },
+    "sources": {
+      "asset_profile": {
+        "label": "Asset Profile",
+        "description": "Identity, benchmark, sector, and current market context"
+      },
+      "price_action": {
+        "label": "Price Action",
+        "description": "Trend, momentum, volatility, and key price levels"
+      },
+      "valuation_health": {
+        "label": "Valuation Health",
+        "description": "Valuation multiple, growth quality, and revision strength"
+      },
+      "risk_events": {
+        "label": "Risk Events",
+        "description": "Narrative risks, catalysts, and downside triggers"
+      }
+    },
+    "sections": {
+      "asset_profile": "Asset Profile",
+      "price_action": "Price Action",
+      "valuation_health": "Valuation Health",
+      "risk_events": "Risk Events"
+    },
+    "fields": {
+      "symbol": "Symbol",
+      "asset_name": "Asset Name",
+      "benchmark": "Benchmark",
+      "sector": "Sector",
+      "timeframe": "Timeframe",
+      "market_phase": "Market Phase",
+      "trend_score": "Trend Score",
+      "relative_strength": "Relative Strength",
+      "momentum_14d": "Momentum 14D",
+      "volatility_30d": "Volatility 30D",
+      "support": "Support",
+      "resistance": "Resistance",
+      "pe_ratio": "P/E Ratio",
+      "revenue_growth_pct": "Revenue Growth (%)",
+      "revision_score": "Revision Score",
+      "free_cash_flow_margin_pct": "FCF Margin (%)",
+      "risk_narrative": "Risk Narrative",
+      "catalysts": "Catalysts",
+      "downside_triggers": "Downside Triggers"
+    },
+    "placeholders": {
+      "symbol": "e.g. AAPL",
+      "asset_name": "e.g. Apple Inc.",
+      "benchmark": "e.g. NASDAQ 100",
+      "sector": "e.g. US Equities",
+      "timeframe": "e.g. 1-3 months",
+      "market_phase": "e.g. In-session repricing",
+      "risk_narrative": "Summarize the main risk narrative...",
+      "catalysts": "Guidance update, policy shift",
+      "downside_triggers": "Demand miss, margin compression"
+    }
+  },
   "domains": {
     "football": {
       "name": "Football Analysis"
+    },
+    "stocks": {
+      "name": "Stocks Analysis"
+    },
+    "fengshui": {
+      "name": "Feng Shui Analysis"
+    }
+  },
+  "fengshui": {
+    "home": {
+      "section_title": "Feng Shui Case Desk",
+      "section_hint": "Active & Pending Assessments",
+      "refresh_action": "Refresh Cases",
+      "open_action": "Open Assessment",
+      "no_data": "No cases available",
+      "search_placeholder": "Search subject, direction, or property type..."
+    },
+    "status": {
+      "live": "Assessing",
+      "finished": "Archived",
+      "upcoming": "Pending"
+    },
+    "sources": {
+      "site_profile": {
+        "label": "Site Profile",
+        "description": "Subject identity, reference frame, orientation, and property baseline"
+      },
+      "qi_flow": {
+        "label": "Qi Flow",
+        "description": "Qi strength, bright hall quality, pressure points, and circulation"
+      },
+      "temporal_cycle": {
+        "label": "Temporal Cycle",
+        "description": "Year/month influence, favorable windows, and caution windows"
+      },
+      "occupant_intent": {
+        "label": "Occupant Intent",
+        "description": "Intent narrative, priorities, and constraints for execution"
+      }
+    },
+    "sections": {
+      "site_profile": "Site Profile",
+      "qi_flow": "Qi Flow",
+      "temporal_cycle": "Temporal Cycle",
+      "occupant_intent": "Occupant Intent"
+    },
+    "fields": {
+      "subject_name": "Subject Name",
+      "reference_frame": "Reference Frame",
+      "property_type": "Property Type",
+      "facing_direction": "Facing Direction",
+      "construction_period": "Construction Period",
+      "qi_flow_score": "Qi Flow Score",
+      "bright_hall_score": "Bright Hall Score",
+      "sha_pressure": "Sha Pressure",
+      "circulation_score": "Circulation Score",
+      "entry_stability": "Entry Stability",
+      "cycle_stage": "Cycle Stage",
+      "yearly_influence": "Yearly Influence",
+      "monthly_influence": "Monthly Influence",
+      "favorable_window": "Favorable Window",
+      "caution_window": "Caution Window",
+      "intent_summary": "Intent Summary",
+      "priorities": "Priorities",
+      "constraints": "Constraints"
+    },
+    "placeholders": {
+      "subject_name": "e.g. Riverview Apartment A",
+      "reference_frame": "e.g. South Ridge Axis",
+      "property_type": "e.g. Residential",
+      "facing_direction": "e.g. South-East",
+      "construction_period": "e.g. Period 9",
+      "cycle_stage": "e.g. Transition Phase",
+      "favorable_window": "e.g. Bright cycle days",
+      "caution_window": "e.g. Conflict cycle days",
+      "intent_summary": "Summarize occupant goals and expected outcomes...",
+      "priorities": "Health, Wealth, Harmony",
+      "constraints": "Budget, Timeline, Structural limits"
     }
   }
 }

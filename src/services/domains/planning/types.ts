@@ -5,6 +5,8 @@ export interface PlanningRouteDecision {
   templateType?: string;
   plannerAgentId?: string;
   allowedAgentTypes: string[] | null;
+  allowedAnimationTypes?: string[] | null;
+  allowedSourceIds?: string[];
   reason: string;
   requiredAgentIds?: string[];
   requiredSkillIds?: string[];

@@ -15,6 +15,7 @@ export const standardTemplate: PlanTemplate = {
       animationType: 'none',
       agentType: 'overview',
       contextMode: 'independent',
+      sourceIds: ['fundamental'],
     },
     {
       title: isZh ? '近期状态' : 'Recent Form',
@@ -22,6 +23,7 @@ export const standardTemplate: PlanTemplate = {
       animationType: 'stats',
       agentType: 'stats',
       contextMode: 'build_upon',
+      sourceIds: ['fundamental'],
     },
     {
       title: isZh ? '战术对决' : 'Tactical Battle',
@@ -29,6 +31,7 @@ export const standardTemplate: PlanTemplate = {
       animationType: 'tactical',
       agentType: 'tactical',
       contextMode: 'build_upon',
+      sourceIds: ['fundamental'],
     },
     {
       title: isZh ? '赛前预测' : 'Match Prediction',
@@ -36,6 +39,7 @@ export const standardTemplate: PlanTemplate = {
       animationType: 'none',
       agentType: 'prediction',
       contextMode: 'all',
+      sourceIds: ['fundamental', 'market', 'custom'],
     },
   ],
 };

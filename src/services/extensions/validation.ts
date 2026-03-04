@@ -404,6 +404,21 @@ export function validateTemplateManifest(input: any): ExtensionValidationResult 
       ) {
         errors.push(`template.segments[${index}].agentType is required`);
       }
+      if (segment?.sourceIds !== undefined) {
+        if (!Array.isArray(segment.sourceIds)) {
+          errors.push(`template.segments[${index}].sourceIds must be string[] when provided`);
+        } else {
+          const hasInvalidSourceId = segment.sourceIds.some(
+            (sourceId: any) =>
+              typeof sourceId !== "string" || sourceId.trim().length === 0,
+          );
+          if (hasInvalidSourceId) {
+            errors.push(
+              `template.segments[${index}].sourceIds must contain non-empty strings`,
+            );
+          }
+        }
+      }
     });
   }
 
@@ -426,6 +441,7 @@ export function sanitizeTemplateManifest(input: any): TemplateExtensionManifest 
         agentType: String(segment?.agentType || "general").trim(),
         contextMode:
           typeof segment?.contextMode === "string" ? segment.contextMode : "build_upon",
+        sourceIds: normalizeStringArray(segment?.sourceIds),
       }))
     : [];
 

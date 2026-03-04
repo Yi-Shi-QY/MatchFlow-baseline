@@ -38,6 +38,40 @@ function extractAnimationPayload(outputText: string): any {
   return extractJson(raw);
 }
 
+function resolveDomainId(matchData: any): string | null {
+  const fromSourceContext =
+    typeof matchData?.sourceContext?.domainId === "string"
+      ? matchData.sourceContext.domainId.trim()
+      : "";
+  if (fromSourceContext) return fromSourceContext;
+
+  const fromConfig =
+    typeof matchData?.analysisConfig?.domainId === "string"
+      ? matchData.analysisConfig.domainId.trim()
+      : "";
+  if (fromConfig) return fromConfig;
+
+  return null;
+}
+
+function resolveAnimationLabels(matchData: any): { primary: string; secondary: string } {
+  const subject =
+    matchData?.siteProfile?.subjectName ||
+    matchData?.assetProfile?.symbol ||
+    matchData?.homeTeam?.name ||
+    "Primary";
+  const reference =
+    matchData?.siteProfile?.referenceFrame ||
+    matchData?.assetProfile?.benchmark ||
+    matchData?.awayTeam?.name ||
+    "Reference";
+
+  return {
+    primary: typeof subject === "string" && subject.trim() ? subject.trim() : "Primary",
+    secondary: typeof reference === "string" && reference.trim() ? reference.trim() : "Reference",
+  };
+}
+
 export async function* streamAnimationAgent(
   matchData: any,
   segmentPlan: any,
@@ -45,18 +79,27 @@ export async function* streamAnimationAgent(
   abortSignal?: AbortSignal,
 ) {
   throwIfAborted(abortSignal);
-  const homeName = matchData?.homeTeam?.name || "Home Team";
-  const awayName = matchData?.awayTeam?.name || "Away Team";
-  const declaration = getTemplateDeclaration(segmentPlan.animationType || "stats");
+  const domainId = resolveDomainId(matchData);
+  const labels = resolveAnimationLabels(matchData);
+  const declaration = getTemplateDeclaration(segmentPlan.animationType || "stats", {
+    domainId,
+  });
   const fallback = buildFallbackAnimationPayload(
     segmentPlan.animationType || "stats",
     segmentPlan.title || "Data Visualization",
-    homeName,
-    awayName,
+    labels.primary,
+    labels.secondary,
+    { domainId },
   );
 
   const animationSchema = `
-  ${buildTemplatePromptSpec(segmentPlan.animationType || "stats", segmentPlan.title || "", homeName, awayName)}
+  ${buildTemplatePromptSpec(
+    segmentPlan.animationType || "stats",
+    segmentPlan.title || "",
+    labels.primary,
+    labels.secondary,
+    { domainId },
+  )}
 
   OUTPUT CONTRACT (STRICT):
   <animation>
@@ -98,9 +141,11 @@ export async function* streamFixAnimationParams(
   abortSignal?: AbortSignal,
 ) {
   throwIfAborted(abortSignal);
-  const homeName = matchData?.homeTeam?.name || "Home Team";
-  const awayName = matchData?.awayTeam?.name || "Away Team";
-  const declaration = getTemplateDeclaration(segmentPlan.animationType || "stats");
+  const domainId = resolveDomainId(matchData);
+  const labels = resolveAnimationLabels(matchData);
+  const declaration = getTemplateDeclaration(segmentPlan.animationType || "stats", {
+    domainId,
+  });
 
   const prompt = `
   You are fixing animation template parameters.
@@ -108,7 +153,13 @@ export async function* streamFixAnimationParams(
   You must return exactly one <animation> JSON block with valid params.
 
   TEMPLATE CONTRACT:
-  ${buildTemplatePromptSpec(segmentPlan.animationType || "stats", segmentPlan.title || "", homeName, awayName)}
+  ${buildTemplatePromptSpec(
+    segmentPlan.animationType || "stats",
+    segmentPlan.title || "",
+    labels.primary,
+    labels.secondary,
+    { domainId },
+  )}
 
   EXPECTED TEMPLATE ID: ${declaration.templateId}
 
@@ -150,6 +201,7 @@ export async function retryAnimationPayloadWithModel(
   abortSignal?: AbortSignal,
 ): Promise<ValidationResult> {
   throwIfAborted(abortSignal);
+  const domainId = resolveDomainId(matchData);
   const expectedType = segmentPlan?.animationType || wrongAnimation?.type || "stats";
   const wrongOutput =
     typeof wrongAnimation === "string"
@@ -172,7 +224,11 @@ export async function retryAnimationPayloadWithModel(
   );
 
   const rawPayload = extractAnimationPayload(candidateText);
-  const validation = validateAndNormalizeAnimationPayload(rawPayload, expectedType);
+  const validation = validateAndNormalizeAnimationPayload(rawPayload, expectedType, {
+    domainId,
+    templateId:
+      typeof wrongAnimation?.templateId === "string" ? wrongAnimation.templateId : undefined,
+  });
 
   if (!validation.payload.title) {
     validation.payload.title =
@@ -196,8 +252,8 @@ export async function generateValidatedAnimationBlock(
   abortSignal?: AbortSignal,
 ): Promise<string> {
   throwIfAborted(abortSignal);
-  const homeName = matchData?.homeTeam?.name || "Home Team";
-  const awayName = matchData?.awayTeam?.name || "Away Team";
+  const domainId = resolveDomainId(matchData);
+  const labels = resolveAnimationLabels(matchData);
   const expectedType = segmentPlan.animationType || "stats";
   const maxFixAttempts = 2;
 
@@ -209,7 +265,9 @@ export async function generateValidatedAnimationBlock(
   for (let attempt = 0; attempt <= maxFixAttempts; attempt++) {
     throwIfAborted(abortSignal);
     const rawPayload = extractAnimationPayload(candidateText);
-    const validation = validateAndNormalizeAnimationPayload(rawPayload, expectedType);
+    const validation = validateAndNormalizeAnimationPayload(rawPayload, expectedType, {
+      domainId,
+    });
 
     if (!validation.payload.title) {
       validation.payload.title = segmentPlan.title || "Data Visualization";
@@ -240,8 +298,9 @@ export async function generateValidatedAnimationBlock(
   const fallback = buildFallbackAnimationPayload(
     expectedType,
     segmentPlan.title || "Data Visualization",
-    homeName,
-    awayName,
+    labels.primary,
+    labels.secondary,
+    { domainId },
   );
   fallback.narration = typeof segmentPlan?.focus === "string" ? segmentPlan.focus : "";
   return buildAnimationBlock(fallback);

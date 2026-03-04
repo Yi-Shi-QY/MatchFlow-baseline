@@ -15,6 +15,7 @@ export const oddsFocusedTemplate: PlanTemplate = {
       animationType: 'none',
       agentType: 'overview',
       contextMode: 'independent',
+      sourceIds: ['fundamental'],
     },
     {
       title: isZh ? '近期状态' : 'Recent Form',
@@ -22,6 +23,7 @@ export const oddsFocusedTemplate: PlanTemplate = {
       animationType: 'stats',
       agentType: 'stats',
       contextMode: 'build_upon',
+      sourceIds: ['fundamental'],
     },
     {
       title: isZh ? '亚盘分析' : 'Asian Handicap',
@@ -29,6 +31,7 @@ export const oddsFocusedTemplate: PlanTemplate = {
       animationType: 'odds',
       agentType: 'odds',
       contextMode: 'independent',
+      sourceIds: ['market'],
     },
     {
       title: isZh ? '欧赔分析' : 'European Odds',
@@ -36,6 +39,7 @@ export const oddsFocusedTemplate: PlanTemplate = {
       animationType: 'odds',
       agentType: 'odds',
       contextMode: 'compare',
+      sourceIds: ['market'],
     },
     {
       title: isZh ? '赛前预测' : 'Match Prediction',
@@ -43,6 +47,7 @@ export const oddsFocusedTemplate: PlanTemplate = {
       animationType: 'none',
       agentType: 'prediction',
       contextMode: 'all',
+      sourceIds: ['fundamental', 'market', 'custom'],
     },
   ],
 };

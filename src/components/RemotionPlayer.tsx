@@ -119,7 +119,9 @@ export function RemotionPlayer({
 
   const resolved = useMemo(() => {
     if (!animation) return { error: 'Missing animation payload' };
-    const validation = validateAndNormalizeAnimationPayload(animation, animation?.type);
+    const validation = validateAndNormalizeAnimationPayload(animation, animation?.type, {
+      templateId: typeof animation?.templateId === 'string' ? animation.templateId : undefined,
+    });
     if (!validation.isValid) {
       return { error: `Animation params invalid: ${validation.errors.join('; ')}` };
     }
@@ -130,7 +132,9 @@ export function RemotionPlayer({
   const validationError = 'error' in resolved ? resolved.error : null;
   const validationErrors = useMemo(() => {
     if (!animation) return ['Missing animation payload'];
-    const result = validateAndNormalizeAnimationPayload(animation, animation?.type);
+    const result = validateAndNormalizeAnimationPayload(animation, animation?.type, {
+      templateId: typeof animation?.templateId === 'string' ? animation.templateId : undefined,
+    });
     return result.errors;
   }, [animation]);
   const canRetry = Boolean(retryContext && onAnimationRepaired && animation);
