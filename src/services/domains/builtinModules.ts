@@ -1,10 +1,5 @@
 import type { Match } from "@/src/data/matches";
-import {
-  createFootballBuiltinModule,
-  footballDomain,
-  type BuiltinDomainModule,
-  // DOMAIN_MODULE_IMPORT_MARKER
-} from "./modules";
+import type { BuiltinDomainModule, BuiltinDomainModuleFactory } from "./modules/types";
 import { cloneMatch } from "./modules/shared/cloneMatch";
 import type { DomainPlanningStrategy } from "./planning/types";
 import type { AnalysisDomain } from "./types";
@@ -13,12 +8,32 @@ import { assertBuiltinDomainUiPresenter } from "./ui/presenter";
 const LOCAL_DOMAIN_CASE_MINIMUM = 3;
 const DOMAIN_ANALYSIS_AGENT_MINIMUM = 3;
 
-const BUILTIN_DOMAIN_MODULES: BuiltinDomainModule[] = [
-  createFootballBuiltinModule(LOCAL_DOMAIN_CASE_MINIMUM),
-  // DOMAIN_MODULE_REGISTRATION_MARKER
-];
+type DomainModuleFactoryModule = {
+  DOMAIN_MODULE_FACTORIES?: BuiltinDomainModuleFactory[];
+};
 
-export const DEFAULT_DOMAIN_ID = footballDomain.id;
+function collectBuiltinDomainModules(caseMinimum: number): BuiltinDomainModule[] {
+  const modules = import.meta.glob("./modules/*/module.ts", { eager: true }) as Record<
+    string,
+    DomainModuleFactoryModule
+  >;
+  const factories = Object.values(modules).flatMap((module) =>
+    Array.isArray(module.DOMAIN_MODULE_FACTORIES) ? module.DOMAIN_MODULE_FACTORIES : [],
+  );
+  return factories.map((factory) => factory(caseMinimum));
+}
+
+const BUILTIN_DOMAIN_MODULES: BuiltinDomainModule[] =
+  collectBuiltinDomainModules(LOCAL_DOMAIN_CASE_MINIMUM);
+
+function resolveDefaultDomainId(modules: BuiltinDomainModule[]): string {
+  const footballModule = modules.find((moduleItem) => moduleItem?.domain?.id === "football");
+  if (footballModule?.domain?.id) return footballModule.domain.id;
+  const first = modules[0]?.domain?.id;
+  return typeof first === "string" && first.trim().length > 0 ? first : "football";
+}
+
+export const DEFAULT_DOMAIN_ID = resolveDefaultDomainId(BUILTIN_DOMAIN_MODULES);
 
 let modulesValidated = false;
 

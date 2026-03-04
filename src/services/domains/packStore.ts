@@ -5,7 +5,8 @@ import {
   validateDomainPackManifest,
 } from "./packValidation";
 
-const DOMAIN_PACK_STORE_KEY = "matchflow_domain_pack_store_v1";
+const DOMAIN_PACK_STORE_KEY = "matchflow_domain_pack_store_v2";
+let domainPackStoreCache: DomainPackStore | null = null;
 
 interface DomainPackStore {
   schemaVersion: 1;
@@ -55,14 +56,20 @@ function normalizeStore(input: any): DomainPackStore {
 }
 
 function readStore(): DomainPackStore {
+  if (domainPackStoreCache) {
+    return domainPackStoreCache;
+  }
   if (typeof localStorage === "undefined") {
-    return cloneEmptyStore();
+    domainPackStoreCache = cloneEmptyStore();
+    return domainPackStoreCache;
   }
   const parsed = safeParse(localStorage.getItem(DOMAIN_PACK_STORE_KEY));
-  return normalizeStore(parsed);
+  domainPackStoreCache = normalizeStore(parsed);
+  return domainPackStoreCache;
 }
 
 function writeStore(store: DomainPackStore) {
+  domainPackStoreCache = store;
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(DOMAIN_PACK_STORE_KEY, JSON.stringify(store));
 }
@@ -115,6 +122,7 @@ export function removeInstalledDomainPackManifest(id: string): boolean {
 }
 
 export function clearInstalledDomainPacks() {
+  domainPackStoreCache = cloneEmptyStore();
   if (typeof localStorage === "undefined") return;
   localStorage.removeItem(DOMAIN_PACK_STORE_KEY);
 }

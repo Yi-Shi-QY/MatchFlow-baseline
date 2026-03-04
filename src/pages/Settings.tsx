@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell, Send, Package, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell, Send, Package, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
@@ -12,6 +12,8 @@ import { Capacitor } from '@capacitor/core';
 import { AGENT_MODEL_CONFIG, ALL_AGENT_IDS } from '@/src/config/agentModelConfig';
 import { syncRecommendedExtensions } from '@/src/services/extensions/recommendedSync';
 import { listAnalysisDomains } from '@/src/services/domains/registry';
+import { clearHistoryByDomain, clearResumeStateByDomain } from '@/src/services/history';
+import { clearSavedSubjectsByDomain } from '@/src/services/savedSubjects';
 
 function formatHostAllowlist(hosts: string[]): string {
   if (!Array.isArray(hosts) || hosts.length === 0) return '';
@@ -45,6 +47,8 @@ export default function Settings() {
   const [settingsMode, setSettingsMode] = useState<'basic' | 'advanced'>('basic');
   const [healthCheckStatus, setHealthCheckStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [healthCheckMessage, setHealthCheckMessage] = useState('');
+  const [storageClearStatus, setStorageClearStatus] = useState<'idle' | 'clearing' | 'success' | 'error'>('idle');
+  const [storageClearMessage, setStorageClearMessage] = useState('');
 
   useEffect(() => {
     const checkPermission = async () => {
@@ -285,6 +289,38 @@ export default function Settings() {
     } catch (e: any) {
       setExtensionSyncStatus('error');
       setExtensionSyncMessage(`${t('settings.extension_sync_failed')}: ${e?.message || t('extensions.unknown_error')}`);
+    }
+  };
+
+  const handleClearCurrentDomainData = async () => {
+    const targetDomainId = settings.activeDomainId || DEFAULT_SETTINGS.activeDomainId;
+    const confirmed = window.confirm(
+      t('settings.confirm_clear_domain_data_desc', {
+        domain: t(`domains.${targetDomainId}.name`, { defaultValue: targetDomainId }),
+      }),
+    );
+    if (!confirmed) return;
+
+    setStorageClearStatus('clearing');
+    setStorageClearMessage(t('settings.clearing_domain_data'));
+
+    try {
+      await Promise.all([
+        clearHistoryByDomain(targetDomainId),
+        clearResumeStateByDomain(targetDomainId),
+        clearSavedSubjectsByDomain(targetDomainId),
+      ]);
+      setStorageClearStatus('success');
+      setStorageClearMessage(
+        t('settings.clear_domain_data_success', {
+          domain: t(`domains.${targetDomainId}.name`, { defaultValue: targetDomainId }),
+        }),
+      );
+    } catch (e: any) {
+      setStorageClearStatus('error');
+      setStorageClearMessage(
+        `${t('settings.clear_domain_data_failed')}: ${e?.message || t('extensions.unknown_error')}`,
+      );
     }
   };
 
@@ -1049,6 +1085,47 @@ export default function Settings() {
                     ? '扩展管理、白名单与自动同步已在“高级模式”中收纳。'
                     : 'Extension management, allowlist, and auto-sync are available in Advanced Mode.'}
                 </div>
+              </div>
+            )}
+
+            {showAdvanced && (
+              <div className="pt-6 border-t border-white/10 space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Database className="w-4 h-4 text-emerald-500" />
+                    {t('settings.storage_maintenance')}
+                  </h3>
+                </div>
+                <p className="text-[10px] text-zinc-500">
+                  {t('settings.clear_domain_data_desc')}
+                </p>
+                <Button
+                  onClick={handleClearCurrentDomainData}
+                  variant="outline"
+                  className="w-full gap-2 border-red-500/30 bg-red-500/5 text-red-300 hover:bg-red-500/10"
+                  disabled={storageClearStatus === 'clearing'}
+                >
+                  {storageClearStatus === 'clearing' ? (
+                    <Activity className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  {t('settings.clear_current_domain_data')}
+                </Button>
+                {storageClearStatus !== 'idle' && (
+                  <div className={`flex items-center gap-2 text-xs p-3 rounded-lg border ${
+                    storageClearStatus === 'success'
+                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                      : storageClearStatus === 'error'
+                        ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                        : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                  }`}>
+                    {storageClearStatus === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                    {storageClearStatus === 'error' && <XCircle className="w-4 h-4 shrink-0" />}
+                    {storageClearStatus === 'clearing' && <Activity className="w-4 h-4 shrink-0 animate-pulse" />}
+                    <span className="break-all">{storageClearMessage}</span>
+                  </div>
+                )}
               </div>
             )}
 

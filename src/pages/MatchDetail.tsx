@@ -8,10 +8,12 @@ import { MatchAnalysis } from '@/src/services/ai';
 import {
   getHistory,
   getResumeState,
+  clearResumeState,
+  isResumeStateRecoverable,
   HistoryRecord,
   SavedResumeState,
 } from '@/src/services/history';
-import { getSavedMatches, SavedMatchRecord } from '@/src/services/savedMatches';
+import { getSavedSubjects, type SavedSubjectRecord } from '@/src/services/savedSubjects';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
 import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate, FileText, ChevronDown, ChevronUp, Video, Download, Loader2 } from 'lucide-react';
@@ -36,7 +38,7 @@ import {
   SourceIconKey,
   SourceSelection
 } from '@/src/services/dataSources';
-import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
+import { getActiveAnalysisDomain, getAnalysisDomainById } from '@/src/services/domains/registry';
 import {
   formatConclusionCardValue,
   getAnalysisConclusionCards,
@@ -55,7 +57,20 @@ interface ExportSegmentOption {
 }
 
 export default function MatchDetail() {
-  const { id } = useParams();
+  const params = useParams();
+  const routeDomainId =
+    typeof params.domainId === 'string' && params.domainId.trim().length > 0
+      ? decodeURIComponent(params.domainId)
+      : '';
+  const routeSubjectId =
+    typeof params.subjectId === 'string' && params.subjectId.trim().length > 0
+      ? decodeURIComponent(params.subjectId)
+      : '';
+  const legacyId =
+    typeof params.id === 'string' && params.id.trim().length > 0
+      ? decodeURIComponent(params.id)
+      : '';
+  const id = routeSubjectId || legacyId;
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const location = useLocation();
@@ -66,6 +81,8 @@ export default function MatchDetail() {
     stopAnalysis: contextStopAnalysis,
     setCollapsedSegments: contextSetCollapsedSegments
   } = useAnalysis();
+  const configuredDomain = getActiveAnalysisDomain();
+  const activeDomain = getAnalysisDomainById(routeDomainId) || configuredDomain;
   
   const isCustom = id === 'custom';
   const customMatch = React.useMemo(() => {
@@ -103,7 +120,7 @@ export default function MatchDetail() {
   }, [importedData]);
   
   const [historyRecord, setHistoryRecord] = useState<HistoryRecord | undefined>(undefined);
-  const [savedMatchRecord, setSavedMatchRecord] = useState<SavedMatchRecord | undefined>(undefined);
+  const [savedMatchRecord, setSavedMatchRecord] = useState<SavedSubjectRecord | undefined>(undefined);
   const [resumeMatch, setResumeMatch] = useState<Match | undefined>(undefined);
   const [isLoadingRecordContext, setIsLoadingRecordContext] = useState(true);
 
@@ -111,21 +128,28 @@ export default function MatchDetail() {
     const loadData = async () => {
       setIsLoadingRecordContext(true);
       try {
-        const history = await getHistory();
-        const record = history.find(h => h.matchId === id);
+        const currentDomainId = activeDomain.id;
+        const history = await getHistory({ domainId: currentDomainId });
+        const record = history.find(
+          (h) => h.subjectId === id || h.matchId === id || h.id === id,
+        );
         setHistoryRecord(record);
 
         if (!record) {
-          const savedMatches = await getSavedMatches();
-          const saved = savedMatches.find(s => s.id === id);
+          const savedMatches = await getSavedSubjects({ domainId: currentDomainId });
+          const saved = savedMatches.find((s) => s.subjectId === id || s.id === id);
           setSavedMatchRecord(saved);
         } else {
           setSavedMatchRecord(undefined);
         }
 
         if (id) {
-          const resumeState = await getResumeState(id);
-          const snapshot = resumeState?.state?.matchSnapshot;
+          const resumeState = await getResumeState(id, {
+            domainId: currentDomainId,
+            subjectId: id,
+            subjectType: 'match',
+          });
+          const snapshot = resumeState?.state?.subjectSnapshot || resumeState?.state?.matchSnapshot;
           if (snapshot && typeof snapshot === 'object') {
             setResumeMatch(snapshot as Match);
           } else {
@@ -139,9 +163,13 @@ export default function MatchDetail() {
       }
     };
     loadData();
-  }, [id]);
+  }, [id, activeDomain.id]);
 
-  const routeActiveAnalysis = id ? activeAnalyses[id] : null;
+  const routeActiveAnalysis = id
+    ? Object.values(activeAnalyses).find(
+        (analysis) => analysis.subjectId === id && analysis.domainId === activeDomain.id,
+      ) || activeAnalyses[id]
+    : null;
   const routeBuiltinCase = React.useMemo(() => {
     if (!id || id === 'custom') return null;
     return findBuiltinDomainLocalTestCaseById(id);
@@ -163,7 +191,6 @@ export default function MatchDetail() {
   const [step, setStep] = useState<'selection' | 'analyzing' | 'result'>('selection');
   const [includeAnimations, setIncludeAnimations] = useState(true);
   const [selectedSources, setSelectedSources] = useState<Partial<SourceSelection>>({});
-  const activeDomain = getActiveAnalysisDomain();
   const domainUiPresenter = getDomainUiPresenter(activeDomain);
   const resultPresenter = domainUiPresenter.result;
   const resultPresenterContext = React.useMemo<ResultPresenterContext>(
@@ -229,6 +256,17 @@ export default function MatchDetail() {
       .trim();
   };
 
+  const resolvePresenterSubjectSnapshot = (draftData: any | null): unknown => {
+    return (
+      draftData ??
+      historyRecord?.subjectSnapshot ??
+      savedMatchRecord?.subjectSnapshot ??
+      savedResumeState?.state?.subjectSnapshot ??
+      importedData ??
+      match
+    );
+  };
+
   const openExportModal = (stream: AgentResult | null, hasSummary: boolean) => {
     const segments = stream?.segments || [];
     const defaults = segments.reduce((acc, seg) => {
@@ -252,15 +290,18 @@ export default function MatchDetail() {
     } catch (e) {
       exportDraftData = null;
     }
+    const presenterSubjectSnapshot = resolvePresenterSubjectSnapshot(exportDraftData);
     const exportMeta = resultPresenter.getExportMeta(
       match,
       exportDraftData,
       resultPresenterContext,
+      presenterSubjectSnapshot,
     );
     const exportHeader = resultPresenter.getHeader(
       match,
       exportDraftData,
       resultPresenterContext,
+      presenterSubjectSnapshot,
     );
 
     const selectedSegments = (stream?.segments || []).filter(
@@ -315,7 +356,11 @@ export default function MatchDetail() {
       const statusLabel = exportMeta.statusLabel;
       const metadataLabel = exportHeader.subtitle || match.league;
       const primaryName = exportMeta.primaryEntityName;
-      const secondaryName = exportMeta.secondaryEntityName;
+      const secondaryName =
+        typeof exportMeta.secondaryEntityName === 'string' &&
+        exportMeta.secondaryEntityName.trim().length > 0
+          ? exportMeta.secondaryEntityName.trim()
+          : primaryName;
 
       writeParagraph(title, { fontSize: 16, bold: true, spacingAfter: 2 });
       writeParagraph(`${metadataLabel} | ${match.date} | ${statusLabel}`, { fontSize: 10 });
@@ -356,6 +401,7 @@ export default function MatchDetail() {
           match,
           exportDraftData,
           resultPresenterContext,
+          presenterSubjectSnapshot,
         );
         if (summaryDistribution.length > 0) {
           writeParagraph(
@@ -450,15 +496,41 @@ export default function MatchDetail() {
     if (historyRecord && !activeAnalysis) {
       setStep('result');
       setSavedResumeState(null);
-    } else if (shouldLoadResume) {
-      // Check for resume state if no completed history exists
-      getResumeState(match.id).then(resumeState => {
-        setSavedResumeState(resumeState || null);
-      });
-    } else {
-      setSavedResumeState(null);
+      return;
     }
-  }, [match, activeAnalysis, historyRecord]);
+
+    if (!shouldLoadResume) {
+      setSavedResumeState(null);
+      return;
+    }
+
+    let cancelled = false;
+    const resumeOptions = {
+      domainId: activeDomain.id,
+      subjectId: match.id,
+      subjectType: 'match' as const,
+    };
+
+    const loadResumeState = async () => {
+      const resumeState = await getResumeState(match.id, resumeOptions);
+      if (cancelled) return;
+
+      if (!isResumeStateRecoverable(resumeState)) {
+        setSavedResumeState(null);
+        if (resumeState) {
+          await clearResumeState(match.id, resumeOptions);
+        }
+        return;
+      }
+
+      setSavedResumeState(resumeState);
+    };
+
+    void loadResumeState();
+    return () => {
+      cancelled = true;
+    };
+  }, [match, activeAnalysis, historyRecord, activeDomain.id]);
 
   const resumeStatusMeta = React.useMemo(() => {
     if (!savedResumeState) return null;
@@ -820,10 +892,16 @@ export default function MatchDetail() {
     error: null as string | null,
     planTotalSegments: 0,
     planCompletedSegments: 0,
+    planSegments: [] as any[],
+    plannerDomainId: activeDomain.id as string,
     runtimeStatus: null as PlannerRuntimeState | null,
   };
 
   if (activeAnalysis) {
+    const sourceContextDomainId =
+      typeof activeAnalysis.dataToAnalyze?.sourceContext?.domainId === 'string'
+        ? activeAnalysis.dataToAnalyze.sourceContext.domainId.trim()
+        : '';
     displayData = {
       analysis: activeAnalysis.analysis,
       analyzedMatch: match,
@@ -834,6 +912,8 @@ export default function MatchDetail() {
       error: activeAnalysis.error,
       planTotalSegments: activeAnalysis.planTotalSegments,
       planCompletedSegments: activeAnalysis.planCompletedSegments,
+      planSegments: Array.isArray(activeAnalysis.plan) ? activeAnalysis.plan : [],
+      plannerDomainId: sourceContextDomainId || activeDomain.id,
       runtimeStatus: activeAnalysis.runtimeStatus,
     };
   } else if (historyRecord) {
@@ -847,6 +927,8 @@ export default function MatchDetail() {
       error: null,
       planTotalSegments: 0,
       planCompletedSegments: 0,
+      planSegments: [],
+      plannerDomainId: activeDomain.id,
       runtimeStatus: null,
     };
   }
@@ -861,6 +943,8 @@ export default function MatchDetail() {
     error,
     planTotalSegments,
     planCompletedSegments,
+    planSegments,
+    plannerDomainId,
     runtimeStatus,
   } = displayData;
 
@@ -906,13 +990,25 @@ export default function MatchDetail() {
     editablePreviewData = null;
   }
 
-  const summaryHeader = resultPresenter.getHeader(match, editablePreviewData, resultPresenterContext);
-  const summaryHero = resultPresenter.getSummaryHero(match, editablePreviewData, resultPresenterContext);
+  const presenterSubjectSnapshot = resolvePresenterSubjectSnapshot(editablePreviewData);
+  const summaryHeader = resultPresenter.getHeader(
+    match,
+    editablePreviewData,
+    resultPresenterContext,
+    presenterSubjectSnapshot,
+  );
+  const summaryHero = resultPresenter.getSummaryHero(
+    match,
+    editablePreviewData,
+    resultPresenterContext,
+    presenterSubjectSnapshot,
+  );
   const summaryDistribution = resultPresenter.getSummaryDistribution(
     analysis,
     match,
     editablePreviewData,
     resultPresenterContext,
+    presenterSubjectSnapshot,
   );
   const summaryCards = getAnalysisConclusionCards(analysis);
   const summaryBarPalette = ['#10b981', '#71717a', '#3b82f6', '#f59e0b', '#ef4444'];
@@ -1140,6 +1236,8 @@ export default function MatchDetail() {
           
           {isAnalyzing && (
             <AnalysisPlannerRuntimeBridge
+              domainId={plannerDomainId}
+              planSegments={planSegments}
               runtimeStatus={runtimeStatus}
               planTotalSegments={planTotalSegments}
               planCompletedSegments={planCompletedSegments}
@@ -1309,6 +1407,30 @@ export default function MatchDetail() {
                             {(summaryHero.secondary.name || '?').slice(0, 1).toUpperCase()}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {summaryHero.kind === 'single' && (
+                      <div className="mb-6 flex flex-col items-center gap-2">
+                        {summaryHero.entity.logo ? (
+                          <img
+                            src={summaryHero.entity.logo}
+                            alt={summaryHero.entity.name}
+                            className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xl font-bold text-zinc-300">
+                            {(summaryHero.entity.name || '?').slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="text-sm font-semibold text-zinc-100 text-center line-clamp-2 max-w-[260px]">
+                          {summaryHero.entity.name}
+                        </div>
+                        {summaryHero.caption ? (
+                          <div className="text-[10px] font-mono text-zinc-500 text-center">
+                            {summaryHero.caption}
+                          </div>
+                        ) : null}
                       </div>
                     )}
 

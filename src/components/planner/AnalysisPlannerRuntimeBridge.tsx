@@ -1,20 +1,26 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import {
   buildPlannerRuntimeState,
   createPlannerRunId,
   type PlannerRuntimeState,
 } from "@/src/services/planner/runtime";
-import { AnalysisPlannerFallback2D } from "./AnalysisPlannerFallback2D";
-import { ThreeAnalysisPlanner } from "./ThreeAnalysisPlanner";
+import { getPlannerStageI18nKey } from "@/src/services/planner/stageI18n";
 import {
-  buildDefaultPlannerGraph,
-  getMacroStageLabel,
+  buildPlannerGraphForDomain,
+  mapPlannerRuntimeForDomain,
+} from "@/src/services/planner/adapters/registry";
+import { AnalysisPlannerFallback2D } from "./AnalysisPlannerFallback2D";
+import { ThreeAnalysisPlanner, type PlannerUnavailableReason } from "./ThreeAnalysisPlanner";
+import {
   getMacroStageVisualState,
   MACRO_STAGE_SEQUENCE,
   type PlannerLanguage,
 } from "./model";
 
 interface AnalysisPlannerRuntimeBridgeProps {
+  domainId?: string | null;
+  planSegments?: unknown[];
   runtimeStatus: PlannerRuntimeState | null;
   planTotalSegments: number;
   planCompletedSegments: number;
@@ -24,7 +30,46 @@ interface AnalysisPlannerRuntimeBridgeProps {
   compact?: boolean;
 }
 
+interface PlannerRenderBoundaryProps {
+  children: React.ReactNode;
+  fallback: React.ReactNode;
+  resetKey?: string;
+  onError?: (error: Error, info: React.ErrorInfo) => void;
+}
+
+interface PlannerRenderBoundaryState {
+  hasError: boolean;
+}
+
 type PlannerVisualState = "pending" | "running" | "completed" | "failed" | "cancelled";
+
+class PlannerRenderBoundary extends React.Component<
+  PlannerRenderBoundaryProps,
+  PlannerRenderBoundaryState
+> {
+  state: PlannerRenderBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError(): PlannerRenderBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    this.props.onError?.(error, info);
+  }
+
+  componentDidUpdate(prevProps: PlannerRenderBoundaryProps): void {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false });
+    }
+  }
+
+  render(): React.ReactNode {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
 
 function stepBlockClass(state: PlannerVisualState): string {
   if (state === "running") return "border-cyan-200/90 bg-gradient-to-b from-cyan-300 to-emerald-500 shadow-[0_0_16px_rgba(45,212,191,0.55)]";
@@ -52,7 +97,14 @@ function supportsWebGl(): boolean {
   }
 }
 
+function buildFallbackSegments(totalSegments: number): unknown[] {
+  const safeTotal = Math.max(0, Math.floor(totalSegments));
+  return Array.from({ length: safeTotal }, () => ({}));
+}
+
 export function AnalysisPlannerRuntimeBridge({
+  domainId,
+  planSegments = [],
   runtimeStatus,
   planTotalSegments,
   planCompletedSegments,
@@ -61,10 +113,27 @@ export function AnalysisPlannerRuntimeBridge({
   className,
   compact = false,
 }: AnalysisPlannerRuntimeBridgeProps) {
+  const { t } = useTranslation();
   const [forceFallback2D, setForceFallback2D] = React.useState(false);
+  const [fallbackReason, setFallbackReason] = React.useState<PlannerUnavailableReason | "render" | null>(null);
+
   const webGlAvailable = React.useMemo(() => supportsWebGl(), []);
-  const handleThreeUnavailable = React.useCallback(() => {
+  const handleThreeUnavailable = React.useCallback((reason?: PlannerUnavailableReason) => {
     setForceFallback2D(true);
+    setFallbackReason(reason || "runtime");
+  }, []);
+
+  const handleThreeRenderError = React.useCallback(
+    (error: Error) => {
+      console.error("Three planner render boundary fallback", error);
+      setForceFallback2D(true);
+      setFallbackReason("render");
+    },
+    [],
+  );
+
+  const handleFallbackRenderError = React.useCallback((error: Error) => {
+    console.error("Planner 2D fallback render failed", error);
   }, []);
 
   const totalSegments = React.useMemo(() => {
@@ -85,6 +154,7 @@ export function AnalysisPlannerRuntimeBridge({
           typeof runtimeStatus.runId === "string" && runtimeStatus.runId.trim().length > 0
             ? runtimeStatus.runId
             : createPlannerRunId("analysis_bridge"),
+        source: runtimeStatus.source || "bridge",
         segmentIndex:
           typeof runtimeStatus.segmentIndex === "number"
             ? runtimeStatus.segmentIndex
@@ -99,66 +169,74 @@ export function AnalysisPlannerRuntimeBridge({
       runId: createPlannerRunId("analysis_bridge"),
       segmentIndex: planCompletedSegments,
       totalSegments,
-      stageLabel: inferredStage === "planning" ? "Planning" : undefined,
+      source: "bridge",
     });
-  }, [runtimeStatus, totalSegments, planCompletedSegments, language]);
+  }, [runtimeStatus, totalSegments, planCompletedSegments]);
+
+  const adaptedRuntime = React.useMemo(() => {
+    return mapPlannerRuntimeForDomain(domainId, normalizedRuntime);
+  }, [domainId, normalizedRuntime]);
+
+  const effectivePlanSegments = React.useMemo(() => {
+    if (Array.isArray(planSegments) && planSegments.length > 0) {
+      return planSegments;
+    }
+    return buildFallbackSegments(totalSegments);
+  }, [planSegments, totalSegments]);
 
   const graph = React.useMemo(() => {
-    return buildDefaultPlannerGraph(totalSegments, language);
-  }, [totalSegments, language]);
+    return buildPlannerGraphForDomain(domainId, effectivePlanSegments, language);
+  }, [domainId, effectivePlanSegments, language]);
+
   const progressPercent = React.useMemo(
-    () => Math.max(0, Math.min(100, Math.round(normalizedRuntime.progressPercent))),
-    [normalizedRuntime.progressPercent],
+    () => Math.max(0, Math.min(100, Math.round(adaptedRuntime.progressPercent))),
+    [adaptedRuntime.progressPercent],
   );
   const segmentDetailTitle = React.useMemo(
     () =>
-      typeof normalizedRuntime.activeSegmentTitle === "string"
-        ? normalizedRuntime.activeSegmentTitle.trim()
+      typeof adaptedRuntime.activeSegmentTitle === "string"
+        ? adaptedRuntime.activeSegmentTitle.trim()
         : "",
-    [normalizedRuntime.activeSegmentTitle],
+    [adaptedRuntime.activeSegmentTitle],
   );
   const canUseSegmentDetail = React.useMemo(
     () =>
       segmentDetailTitle.length > 0 &&
-      (normalizedRuntime.stage === "segment_running" ||
-        normalizedRuntime.stage === "animation_generating" ||
-        normalizedRuntime.stage === "tag_generating"),
-    [segmentDetailTitle, normalizedRuntime.stage],
+      (adaptedRuntime.stage === "segment_running" ||
+        adaptedRuntime.stage === "animation_generating" ||
+        adaptedRuntime.stage === "tag_generating"),
+    [segmentDetailTitle, adaptedRuntime.stage],
   );
+
   const currentStepLabel = React.useMemo(() => {
     if (canUseSegmentDetail) {
       return segmentDetailTitle;
     }
-    if (typeof normalizedRuntime.stageLabel === "string" && normalizedRuntime.stageLabel.trim().length > 0) {
-      return normalizedRuntime.stageLabel.trim();
+    if (typeof adaptedRuntime.stageLabel === "string" && adaptedRuntime.stageLabel.trim().length > 0) {
+      return adaptedRuntime.stageLabel.trim();
     }
-    return getMacroStageLabel(normalizedRuntime.stage, language);
-  }, [
-    canUseSegmentDetail,
-    language,
-    segmentDetailTitle,
-    normalizedRuntime.stage,
-    normalizedRuntime.stageLabel,
-  ]);
-  const progressWord = language === "zh" ? "当前进度：" : "Progress:";
+    return t(getPlannerStageI18nKey(adaptedRuntime.stage));
+  }, [canUseSegmentDetail, segmentDetailTitle, adaptedRuntime.stage, adaptedRuntime.stageLabel, t]);
+
+  const progressWord = t("match.planner_progress_label");
   const progressBarClass = React.useMemo(() => {
-    if (normalizedRuntime.stage === "failed") {
+    if (adaptedRuntime.stage === "failed") {
       return "bg-gradient-to-r from-red-500 to-orange-400";
     }
-    if (normalizedRuntime.stage === "cancelled") {
+    if (adaptedRuntime.stage === "cancelled") {
       return "bg-gradient-to-r from-amber-500 to-yellow-400";
     }
     return "bg-gradient-to-r from-emerald-500 to-cyan-400";
-  }, [normalizedRuntime.stage]);
+  }, [adaptedRuntime.stage]);
   const progressPercentTextClass = React.useMemo(() => {
-    if (normalizedRuntime.stage === "failed") {
+    if (adaptedRuntime.stage === "failed") {
       return "text-red-300";
     }
-    if (normalizedRuntime.stage === "cancelled") {
+    if (adaptedRuntime.stage === "cancelled") {
       return "text-amber-300";
     }
     return "text-zinc-200";
-  }, [normalizedRuntime.stage]);
+  }, [adaptedRuntime.stage]);
 
   const stageFlow = React.useMemo(() => {
     return MACRO_STAGE_SEQUENCE.map((stage) => ({
@@ -166,30 +244,61 @@ export function AnalysisPlannerRuntimeBridge({
       label:
         stage === "segment_running" && canUseSegmentDetail
           ? segmentDetailTitle
-          : getMacroStageLabel(stage, language),
-      state: getMacroStageVisualState(stage, normalizedRuntime),
+          : t(getPlannerStageI18nKey(stage)),
+      state: getMacroStageVisualState(stage, adaptedRuntime),
     }));
-  }, [language, normalizedRuntime, canUseSegmentDetail, segmentDetailTitle]);
+  }, [adaptedRuntime, canUseSegmentDetail, segmentDetailTitle, t]);
+
+  const fallbackHint = React.useMemo(() => {
+    if (!forceFallback2D) return "";
+    if (fallbackReason === "performance") return t("match.planner_fallback_performance");
+    if (fallbackReason === "init") return t("match.planner_fallback_init");
+    if (fallbackReason === "runtime" || fallbackReason === "render") {
+      return t("match.planner_fallback_runtime");
+    }
+    return "";
+  }, [forceFallback2D, fallbackReason, t]);
 
   const shouldUseThree = webGlAvailable && !forceFallback2D;
-
-  const plannerBody = shouldUseThree ? (
-    <ThreeAnalysisPlanner
-      className="h-full w-full"
-      graph={graph}
-      mode="square"
-      runtimeState={normalizedRuntime}
-      language={language}
-      onUnavailable={handleThreeUnavailable}
-    />
-  ) : (
+  const fallback2dNode = (
     <AnalysisPlannerFallback2D
       className="h-full w-full"
       graph={graph}
       mode="square"
-      runtimeState={normalizedRuntime}
+      runtimeState={adaptedRuntime}
       language={language}
     />
+  );
+
+  const fallbackErrorNode = (
+    <div className="h-full w-full flex items-center justify-center px-2 text-center text-[10px] text-red-300">
+      {t("match.planner_render_failed")}
+    </div>
+  );
+
+  const plannerBody = shouldUseThree ? (
+    <PlannerRenderBoundary
+      fallback={fallback2dNode}
+      resetKey={`three:${adaptedRuntime.runId}:${adaptedRuntime.stage}:${language}:${graph.nodes.length}:${graph.edges.length}:${Number(forceFallback2D)}`}
+      onError={(error) => handleThreeRenderError(error)}
+    >
+      <ThreeAnalysisPlanner
+        className="h-full w-full"
+        graph={graph}
+        mode="square"
+        runtimeState={adaptedRuntime}
+        language={language}
+        onUnavailable={handleThreeUnavailable}
+      />
+    </PlannerRenderBoundary>
+  ) : (
+    <PlannerRenderBoundary
+      fallback={fallbackErrorNode}
+      resetKey={`fallback2d:${adaptedRuntime.runId}:${adaptedRuntime.stage}:${language}:${graph.nodes.length}:${graph.edges.length}`}
+      onError={(error) => handleFallbackRenderError(error)}
+    >
+      {fallback2dNode}
+    </PlannerRenderBoundary>
   );
 
   return (
@@ -265,6 +374,11 @@ export function AnalysisPlannerRuntimeBridge({
             <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 shrink-0 rounded-lg border border-white/10 bg-zinc-900/40 overflow-hidden">
               {plannerBody}
             </div>
+          </div>
+        )}
+        {fallbackHint && (
+          <div className="mt-2 text-[10px] leading-tight text-amber-200/90">
+            {fallbackHint}
           </div>
         )}
       </div>

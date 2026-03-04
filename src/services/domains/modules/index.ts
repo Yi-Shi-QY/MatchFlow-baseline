@@ -1,3 +1,3 @@
 export * from "./football";
-// DOMAIN_MODULE_EXPORT_MARKER
+// Compatibility barrel only. Runtime module registration is handled by auto-discovery.
 export * from "./types";

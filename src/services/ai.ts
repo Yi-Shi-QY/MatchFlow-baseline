@@ -405,6 +405,7 @@ export interface AnalysisResumeState {
   fullAnalysisText: string;
   segmentResults?: SegmentResult[];
   runtimeStatus?: PlannerRuntimeState;
+  subjectSnapshot?: unknown;
   matchSnapshot?: Match;
 }
 
@@ -424,6 +425,16 @@ export async function* streamAgentThoughts(
   let completedSegmentIndices = resumeState?.completedSegmentIndices || [];
   let fullAnalysisText = resumeState?.fullAnalysisText || "";
   let segmentResults: SegmentResult[] = resumeState?.segmentResults || [];
+  let runtimeEventSeq =
+    typeof resumeState?.runtimeStatus?.eventSeq === "number"
+      ? Math.max(0, Math.floor(resumeState.runtimeStatus.eventSeq))
+      : 0;
+  let currentRuntimeStage: PlannerRuntimeState["stage"] | null =
+    resumeState?.runtimeStatus?.stage || null;
+  let currentStageStartedAt =
+    typeof resumeState?.runtimeStatus?.stageStartedAt === "number"
+      ? Math.max(0, Math.floor(resumeState.runtimeStatus.stageStartedAt))
+      : Date.now();
 
   const emitRuntime = (input: {
     stage: PlannerRuntimeState["stage"];
@@ -436,9 +447,20 @@ export async function* streamAgentThoughts(
     errorMessage?: string;
   }) => {
     if (!onRuntimeUpdate) return;
+    const timestamp = Date.now();
+    if (currentRuntimeStage !== input.stage) {
+      currentRuntimeStage = input.stage;
+      currentStageStartedAt = timestamp;
+    }
+    runtimeEventSeq += 1;
     onRuntimeUpdate(
       buildPlannerRuntimeState({
         runId,
+        source: "pipeline",
+        timestamp,
+        eventSeq: runtimeEventSeq,
+        stageStartedAt: currentStageStartedAt,
+        stageDurationMs: Math.max(0, timestamp - currentStageStartedAt),
         stage: input.stage,
         segmentIndex: input.segmentIndex ?? completedSegmentIndices.length,
         totalSegments: input.totalSegments ?? plan.length,

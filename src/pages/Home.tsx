@@ -5,7 +5,11 @@ import { MOCK_MATCHES, Match } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, Loader2, RefreshCw } from 'lucide-react';
 import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord, clearResumeState } from '@/src/services/history';
-import { getSavedMatches, deleteSavedMatch, SavedMatchRecord } from '@/src/services/savedMatches';
+import {
+  getSavedSubjects,
+  deleteSavedSubject,
+  type SavedSubjectRecord,
+} from '@/src/services/savedSubjects';
 import { fetchMatches } from '@/src/services/matchData';
 import { Button } from '@/src/components/ui/Button';
 import { motion, AnimatePresence } from 'motion/react';
@@ -16,9 +20,12 @@ import { getPlannerStageI18nKey } from '@/src/services/planner/stageI18n';
 import {
   getDomainUiPresenter,
   type HomeCenterDisplay,
+  type HomeEntityDisplay,
   type HistoryPresenterContext,
   type HomePresenterContext,
+  resolveHomeEntityDisplay,
 } from '@/src/services/domains/ui/presenter';
+import { buildSubjectRoute } from '@/src/services/navigation/subjectRoute';
 
 function toneClassForMetric(tone?: 'neutral' | 'positive' | 'negative') {
   if (tone === 'positive') return 'text-emerald-400';
@@ -27,8 +34,8 @@ function toneClassForMetric(tone?: 'neutral' | 'positive' | 'negative') {
 }
 
 type PendingDeleteTarget =
-  | { kind: 'history'; id: string; matchId: string }
-  | { kind: 'saved'; id: string }
+  | { kind: 'history'; id: string; matchId: string; domainId: string }
+  | { kind: 'saved'; id: string; domainId: string }
   | null;
 
 export default function Home() {
@@ -40,7 +47,7 @@ export default function Home() {
   const homePresenter = domainUiPresenter.home;
   const historyPresenter = domainUiPresenter.history;
   const [history, setHistory] = useState<HistoryRecord[]>([]);
-  const [savedMatches, setSavedMatches] = useState<SavedMatchRecord[]>([]);
+  const [savedMatches, setSavedMatches] = useState<SavedSubjectRecord[]>([]);
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,10 +105,10 @@ export default function Home() {
 
   useEffect(() => {
     const loadData = async () => {
-      const historyData = await getHistory();
+      const historyData = await getHistory({ domainId: activeDomainId });
       setHistory(historyData);
 
-      const savedData = await getSavedMatches();
+      const savedData = await getSavedSubjects({ domainId: activeDomainId });
       setSavedMatches(savedData);
 
       await loadMatches();
@@ -124,9 +131,9 @@ export default function Home() {
     prevAnalysesRef.current = currentAnalyzing;
 
     if (newlyCompleted) {
-      getHistory().then(setHistory);
+      getHistory({ domainId: activeDomainId }).then(setHistory);
     }
-  }, [activeAnalyses]);
+  }, [activeAnalyses, activeDomainId]);
 
   const handleClearHistory = async () => {
     clearHistory();
@@ -143,30 +150,47 @@ export default function Home() {
     setShowClearConfirm(false);
   };
 
-  const handleDeleteRecord = (e: React.MouseEvent, id: string, matchId: string) => {
+  const handleDeleteRecord = (
+    e: React.MouseEvent,
+    id: string,
+    matchId: string,
+    domainId: string,
+  ) => {
     e.stopPropagation();
-    setPendingDeleteTarget({ kind: 'history', id, matchId });
+    setPendingDeleteTarget({ kind: 'history', id, matchId, domainId });
   };
 
-  const handleDeleteSavedMatch = (e: React.MouseEvent, id: string) => {
+  const handleDeleteSavedMatch = (e: React.MouseEvent, id: string, domainId: string) => {
     e.stopPropagation();
-    setPendingDeleteTarget({ kind: 'saved', id });
+    setPendingDeleteTarget({ kind: 'saved', id, domainId });
   };
 
   const handleConfirmDeleteItem = async () => {
     if (!pendingDeleteTarget) return;
     if (pendingDeleteTarget.kind === 'history') {
-      deleteHistoryRecord(pendingDeleteTarget.id);
+      deleteHistoryRecord(pendingDeleteTarget.id, {
+        domainId: pendingDeleteTarget.domainId,
+        subjectId: pendingDeleteTarget.matchId,
+        subjectType: 'match',
+      });
       clearActiveAnalysis(pendingDeleteTarget.matchId);
-      await clearResumeState(pendingDeleteTarget.matchId);
-      const data = await getHistory();
+      await clearResumeState(pendingDeleteTarget.matchId, {
+        domainId: pendingDeleteTarget.domainId,
+        subjectId: pendingDeleteTarget.matchId,
+        subjectType: 'match',
+      });
+      const data = await getHistory({ domainId: activeDomainId });
       setHistory(data);
       setPendingDeleteTarget(null);
       return;
     }
 
-    await deleteSavedMatch(pendingDeleteTarget.id);
-    const data = await getSavedMatches();
+    await deleteSavedSubject(pendingDeleteTarget.id, {
+      domainId: pendingDeleteTarget.domainId,
+      subjectId: pendingDeleteTarget.id,
+      subjectType: 'match',
+    });
+    const data = await getSavedSubjects({ domainId: activeDomainId });
     setSavedMatches(data);
     setPendingDeleteTarget(null);
   };
@@ -176,9 +200,12 @@ export default function Home() {
     const activeRecords = Object.values(activeAnalyses)
       .filter(active => active.isAnalyzing)
       .map(active => ({
-        id: `active_${active.matchId}`,
+        id: `active_${active.domainId}::${active.matchId}`,
         matchId: active.matchId,
+        domainId: active.domainId,
+        subjectId: active.subjectId,
         match: active.match,
+        subjectSnapshot: active.match,
         timestamp: Date.now(), // Keep active ones at the top
         isActive: true,
         analysis: active.analysis,
@@ -188,8 +215,15 @@ export default function Home() {
         planCompletedSegments: active.planCompletedSegments,
       }));
 
-    // Filter out history records that are currently active
-    const filteredHistory = history.filter(h => !activeAnalyses[h.matchId] || !activeAnalyses[h.matchId].isAnalyzing);
+    // Filter out history records that are currently active in the same domain.
+    const activeKeySet = new Set(
+      Object.values(activeAnalyses)
+        .filter((analysis) => analysis.isAnalyzing)
+        .map((analysis) => `${analysis.domainId}::${analysis.matchId}`),
+    );
+    const filteredHistory = history.filter(
+      (record) => !activeKeySet.has(`${record.domainId}::${record.matchId}`),
+    );
 
     return [...activeRecords, ...filteredHistory];
   }, [history, activeAnalyses]);
@@ -199,7 +233,7 @@ export default function Home() {
       const searchLower = searchQuery.trim().toLowerCase();
       if (!searchLower) return true;
       const searchableTokens = homePresenter
-        .getSearchTokens(record.match)
+        .getSearchTokens(record.match, record.subjectSnapshot)
         .filter(token => typeof token === 'string' && token.trim().length > 0)
         .map(token => token.toLowerCase());
       return searchableTokens.some(token => token.includes(searchLower));
@@ -243,6 +277,145 @@ export default function Home() {
     );
   };
 
+  const renderEntityAvatar = (
+    entity: { name: string; logo?: string },
+    size: 'compact' | 'feed',
+  ) => {
+    const avatarClassName =
+      size === 'feed' ? 'w-10 h-10 text-sm' : 'w-8 h-8 text-xs';
+    if (entity.logo) {
+      return (
+        <img
+          src={entity.logo}
+          alt={entity.name}
+          className={`${avatarClassName} object-contain drop-shadow-md rounded-full bg-white/5`}
+        />
+      );
+    }
+    return (
+      <div
+        className={`${avatarClassName} rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center font-bold text-zinc-300`}
+      >
+        {(entity.name || '?').slice(0, 1).toUpperCase()}
+      </div>
+    );
+  };
+
+  const renderCompactEntityDisplay = (display: HomeEntityDisplay) => {
+    if (display.kind === 'pair') {
+      return (
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-col items-center gap-1.5 w-12">
+            {renderEntityAvatar(display.primary, 'compact')}
+            <span className="text-[9px] font-medium text-center line-clamp-1 w-full text-zinc-300">
+              {display.primary.name}
+            </span>
+          </div>
+
+          <div className="text-[10px] font-bold font-mono text-zinc-600">
+            {display.connector}
+          </div>
+
+          <div className="flex flex-col items-center gap-1.5 w-12">
+            {renderEntityAvatar(display.secondary, 'compact')}
+            <span className="text-[9px] font-medium text-center line-clamp-1 w-full text-zinc-300">
+              {display.secondary.name}
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    if (display.kind === 'single') {
+      return (
+        <div className="mb-3 flex flex-col items-center gap-1.5 min-h-[68px] justify-center">
+          {renderEntityAvatar(display.entity, 'compact')}
+          <span className="text-[10px] font-medium text-center line-clamp-2 text-zinc-200">
+            {display.entity.name}
+          </span>
+          {display.caption ? (
+            <span className="text-[9px] font-mono text-zinc-500 line-clamp-1">
+              {display.caption}
+            </span>
+          ) : null}
+        </div>
+      );
+    }
+
+    return (
+      <div className="mb-3 min-h-[68px] flex flex-wrap items-center justify-center gap-1.5">
+        {display.entities.slice(0, 4).map((entity, index) => (
+          <div
+            key={`${entity.id}_${index}`}
+            className="px-2 py-1 rounded-full bg-zinc-800/70 border border-white/10 text-[9px] text-zinc-300 max-w-[120px] truncate"
+          >
+            {entity.name}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderFeedEntityDisplay = (
+    display: HomeEntityDisplay,
+    centerDisplay: HomeCenterDisplay,
+  ) => {
+    if (display.kind === 'pair') {
+      return (
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col items-center gap-2 w-20">
+            {renderEntityAvatar(display.primary, 'feed')}
+            <span className="text-xs font-medium text-center line-clamp-1">
+              {display.primary.name}
+            </span>
+          </div>
+
+          <div className="flex flex-col items-center justify-center flex-1">
+            {renderCenterDisplay(centerDisplay)}
+          </div>
+
+          <div className="flex flex-col items-center gap-2 w-20">
+            {renderEntityAvatar(display.secondary, 'feed')}
+            <span className="text-xs font-medium text-center line-clamp-1">
+              {display.secondary.name}
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    if (display.kind === 'single') {
+      return (
+        <div className="flex flex-col items-center justify-center gap-2.5 py-1">
+          {renderEntityAvatar(display.entity, 'feed')}
+          <span className="text-xs font-medium text-center line-clamp-2 max-w-[220px]">
+            {display.entity.name}
+          </span>
+          {display.caption ? (
+            <span className="text-[10px] font-mono text-zinc-500">{display.caption}</span>
+          ) : null}
+          <div className="pt-0.5">{renderCenterDisplay(centerDisplay)}</div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full flex flex-col items-center justify-center gap-2.5 py-1">
+        <div className="w-full flex flex-wrap items-center justify-center gap-1.5">
+          {display.entities.slice(0, 6).map((entity, index) => (
+            <span
+              key={`${entity.id}_${index}`}
+              className="text-[10px] px-2 py-1 rounded-full bg-zinc-800/80 border border-white/10 text-zinc-300"
+            >
+              {entity.name}
+            </span>
+          ))}
+        </div>
+        <div>{renderCenterDisplay(centerDisplay)}</div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans pb-[calc(5rem+env(safe-area-inset-bottom))]">
       {/* Mobile App Header */}
@@ -278,12 +451,17 @@ export default function Home() {
 
             <div className="flex overflow-x-auto gap-3 pb-4 snap-x snap-mandatory hide-scrollbar px-1">
               {savedMatches.map((record) => {
-                const pair = homePresenter.getDisplayPair(record.match, presenterContext);
+                const entityDisplay = resolveHomeEntityDisplay(
+                  homePresenter,
+                  record.match,
+                  presenterContext,
+                  record.subjectSnapshot,
+                );
                 return (
                   <Card
                     key={record.id}
                     className="snap-center shrink-0 w-48 cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900 hover:border-zinc-700 overflow-hidden"
-                    onClick={() => navigate(`/match/${record.id}`)}
+                    onClick={() => navigate(buildSubjectRoute(record.domainId, record.subjectId))}
                   >
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between mb-3 gap-2">
@@ -295,7 +473,7 @@ export default function Home() {
                             {new Date(record.timestamp).toLocaleDateString()}
                           </span>
                           <button
-                            onClick={(e) => handleDeleteSavedMatch(e, record.id)}
+                            onClick={(e) => handleDeleteSavedMatch(e, record.id, record.domainId)}
                             aria-label={t('home.clear')}
                             className="h-6 w-6 inline-flex items-center justify-center rounded-full border border-white/10 bg-zinc-800/80 text-zinc-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
                           >
@@ -304,23 +482,7 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex flex-col items-center gap-1.5 w-12">
-                          <img src={pair.primaryLogo} alt={pair.primaryName} className="w-8 h-8 object-contain drop-shadow-sm" />
-                          <span className="text-[9px] font-medium text-center line-clamp-1 w-full text-zinc-300">
-                            {pair.primaryName}
-                          </span>
-                        </div>
-
-                        <div className="text-[10px] font-bold font-mono text-zinc-600">{pair.connector}</div>
-
-                        <div className="flex flex-col items-center gap-1.5 w-12">
-                          <img src={pair.secondaryLogo} alt={pair.secondaryName} className="w-8 h-8 object-contain drop-shadow-sm" />
-                          <span className="text-[9px] font-medium text-center line-clamp-1 w-full text-zinc-300">
-                            {pair.secondaryName}
-                          </span>
-                        </div>
-                      </div>
+                      {renderCompactEntityDisplay(entityDisplay)}
 
                       <div className="mt-2 pt-2 border-t border-white/5 flex justify-center">
                         <span className="text-[10px] text-emerald-500 font-mono">
@@ -374,7 +536,12 @@ export default function Home() {
             {filteredAndSortedHistory.length > 0 ? (
               <div className="flex overflow-x-auto gap-3 pb-4 snap-x snap-mandatory hide-scrollbar px-1">
                 {filteredAndSortedHistory.map((record: any) => {
-                  const pair = homePresenter.getDisplayPair(record.match, presenterContext);
+                  const entityDisplay = resolveHomeEntityDisplay(
+                    homePresenter,
+                    record.match,
+                    presenterContext,
+                    record.subjectSnapshot,
+                  );
                   const outcomeDistribution = historyPresenter.getOutcomeDistribution(
                     record.analysis,
                     record.match,
@@ -414,7 +581,9 @@ export default function Home() {
                     <Card
                       key={record.id}
                       className={`snap-center shrink-0 w-48 cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900 hover:border-zinc-700 overflow-hidden ${isActive ? 'ring-1 ring-emerald-500/50' : ''}`}
-                      onClick={() => navigate(`/match/${record.matchId}`)}
+                      onClick={() =>
+                        navigate(buildSubjectRoute(record.domainId || activeDomainId, record.matchId))
+                      }
                     >
                       <CardContent className="p-3">
                         {/* Header: League & Time */}
@@ -429,7 +598,9 @@ export default function Home() {
                             </span>
                             {!isActive && (
                               <button
-                                onClick={(e) => handleDeleteRecord(e, record.id, record.matchId)}
+                                onClick={(e) =>
+                                  handleDeleteRecord(e, record.id, record.matchId, record.domainId)
+                                }
                                 aria-label={t('home.clear')}
                                 className="h-6 w-6 inline-flex items-center justify-center rounded-full border border-white/10 bg-zinc-800/80 text-zinc-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
                               >
@@ -439,24 +610,8 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Display Pair */}
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex flex-col items-center gap-1.5 w-12">
-                            <img src={pair.primaryLogo} alt={pair.primaryName} className="w-8 h-8 object-contain drop-shadow-sm" />
-                            <span className="text-[9px] font-medium text-center line-clamp-1 w-full text-zinc-300">
-                              {pair.primaryName}
-                            </span>
-                          </div>
-
-                          <div className="text-[10px] font-bold font-mono text-zinc-600">{pair.connector}</div>
-
-                          <div className="flex flex-col items-center gap-1.5 w-12">
-                            <img src={pair.secondaryLogo} alt={pair.secondaryName} className="w-8 h-8 object-contain drop-shadow-sm" />
-                            <span className="text-[9px] font-medium text-center line-clamp-1 w-full text-zinc-300">
-                              {pair.secondaryName}
-                            </span>
-                          </div>
-                        </div>
+                        {/* Entity Display */}
+                        {renderCompactEntityDisplay(entityDisplay)}
 
                         {/* Footer: Status or Probability Bar */}
                         <div className="mt-2 pt-2 border-t border-white/5">
@@ -537,13 +692,24 @@ export default function Home() {
               </div>
             ) : liveMatches.length > 0 ? (
               liveMatches.map((match) => {
-                const pair = homePresenter.getDisplayPair(match, presenterContext);
-                const centerDisplay = homePresenter.getCenterDisplay(match, presenterContext);
+                const entityDisplay = resolveHomeEntityDisplay(
+                  homePresenter,
+                  match,
+                  presenterContext,
+                );
+                const centerDisplay = homePresenter.getCenterDisplay(
+                  match,
+                  presenterContext,
+                );
                 return (
                   <Card
                     key={match.id}
                     className="cursor-pointer active:scale-[0.98] transition-all border-zinc-800 bg-zinc-900/80"
-                    onClick={() => navigate(`/match/${match.id}`, { state: { importedData: match } })}
+                    onClick={() =>
+                      navigate(buildSubjectRoute(activeDomainId, match.id), {
+                        state: { importedData: match },
+                      })
+                    }
                   >
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between mb-4">
@@ -553,21 +719,7 @@ export default function Home() {
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-col items-center gap-2 w-20">
-                          <img src={pair.primaryLogo} alt={pair.primaryName} className="w-10 h-10 object-contain drop-shadow-md" />
-                          <span className="text-xs font-medium text-center line-clamp-1">{pair.primaryName}</span>
-                        </div>
-
-                        <div className="flex flex-col items-center justify-center flex-1">
-                          {renderCenterDisplay(centerDisplay)}
-                        </div>
-
-                        <div className="flex flex-col items-center gap-2 w-20">
-                          <img src={pair.secondaryLogo} alt={pair.secondaryName} className="w-10 h-10 object-contain drop-shadow-md" />
-                          <span className="text-xs font-medium text-center line-clamp-1">{pair.secondaryName}</span>
-                        </div>
-                      </div>
+                      {renderFeedEntityDisplay(entityDisplay, centerDisplay)}
 
                       <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-zinc-500">
                         <span className="text-[10px] font-mono">

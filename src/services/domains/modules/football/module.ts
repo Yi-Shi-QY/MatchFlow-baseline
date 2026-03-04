@@ -11,3 +11,4 @@ export function createFootballBuiltinModule(caseMinimum: number): BuiltinDomainM
   };
 }
 
+export const DOMAIN_MODULE_FACTORIES = [createFootballBuiltinModule];

@@ -8,3 +8,4 @@ export interface BuiltinDomainModule {
   localTestCases: Match[];
 }
 
+export type BuiltinDomainModuleFactory = (caseMinimum: number) => BuiltinDomainModule;

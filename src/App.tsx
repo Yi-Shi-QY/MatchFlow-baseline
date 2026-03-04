@@ -16,6 +16,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { getSettings } from './services/settings';
+import { buildLegacyMatchRoute, buildSubjectRoute } from './services/navigation/subjectRoute';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -83,10 +84,15 @@ function AppRoutes() {
       'localNotificationActionPerformed',
       (event: any) => {
         const matchId = event?.notification?.extra?.matchId;
+        const domainId = event?.notification?.extra?.domainId;
         const route = event?.notification?.extra?.route;
 
         if (typeof matchId === 'string' && matchId.trim().length > 0) {
-          navigate(`/match/${matchId}`);
+          if (typeof domainId === 'string' && domainId.trim().length > 0) {
+            navigate(buildSubjectRoute(domainId, matchId));
+            return;
+          }
+          navigate(buildLegacyMatchRoute(matchId));
           return;
         }
         if (typeof route === 'string' && route.startsWith('/')) {
@@ -107,6 +113,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/match/:id" element={<MatchDetail />} />
+      <Route path="/subject/:domainId/:subjectId" element={<MatchDetail />} />
       <Route path="/share" element={<Share />} />
       <Route path="/scan" element={<Scan />} />
       <Route path="/settings" element={<Settings />} />

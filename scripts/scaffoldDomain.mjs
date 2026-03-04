@@ -3,19 +3,6 @@ import path from "node:path";
 
 const ROOT = process.cwd();
 
-const MARKERS = {
-  moduleExport: "DOMAIN_MODULE_EXPORT_MARKER",
-  moduleImport: "DOMAIN_MODULE_IMPORT_MARKER",
-  moduleRegistration: "DOMAIN_MODULE_REGISTRATION_MARKER",
-  agentImport: "DOMAIN_AGENT_IMPORT_MARKER",
-  agentRegistration: "DOMAIN_AGENT_REGISTRATION_MARKER",
-  agentVersion: "DOMAIN_AGENT_VERSION_MARKER",
-  templateImport: "DOMAIN_TEMPLATE_IMPORT_MARKER",
-  templateRegistration: "DOMAIN_TEMPLATE_REGISTRATION_MARKER",
-  uiPresenterExtension: "DOMAIN_UI_PRESENTER_EXTENSIONS_MARKER",
-  uiPresenterRegistration: "DOMAIN_UI_PRESENTER_REGISTRATION_MARKER",
-};
-
 function hasFlag(name) {
   const target = `--${name}`;
   return process.argv.slice(2).some((arg) => arg === target || arg.startsWith(`${target}=`));
@@ -69,10 +56,6 @@ function ensureId(id) {
   }
 }
 
-function read(relPath) {
-  return fs.readFileSync(path.join(ROOT, relPath), "utf8");
-}
-
 function write(relPath, content, dryRun) {
   if (dryRun) {
     console.log(`[dry-run] write ${relPath}`);
@@ -82,19 +65,6 @@ function write(relPath, content, dryRun) {
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, content, "utf8");
   console.log(`write ${relPath}`);
-}
-
-function patch(relPath, marker, snippet, dryRun) {
-  const content = read(relPath);
-  if (!content.includes(marker)) {
-    throw new Error(`Marker "${marker}" not found in ${relPath}`);
-  }
-  if (content.includes(snippet.trim())) {
-    console.log(`skip ${relPath} (already patched)`);
-    return;
-  }
-  const next = content.replace(marker, `${snippet}${marker}`);
-  write(relPath, next, dryRun);
 }
 
 function simpleRoleAgent(id, varName, roleEn, roleZh, deps) {
@@ -154,6 +124,7 @@ function buildFiles(config) {
     name,
     pascal,
     camel,
+    presenterConst,
     templateIds,
     agentIds,
     animationTypes,
@@ -354,6 +325,8 @@ export function ${createModuleFn}(caseMinimum: number): BuiltinDomainModule {
     localTestCases: ${localCasesFn}(caseMinimum),
   };
 }
+
+export const DOMAIN_MODULE_FACTORIES = [${createModuleFn}];
 `;
 
   files[`src/services/domains/modules/${id}/index.ts`] = `export { ${domainVar} } from "./domain";
@@ -438,12 +411,38 @@ export const ${camel}PlannerAutonomousAgent: AgentConfig = {
 };
 `;
 
-  files[`src/agents/domains/${id}/index.ts`] = `export { ${camel}OverviewAgent } from "./overview";
+  files[`src/agents/domains/${id}/index.ts`] = `import type { AgentConfig } from "../../types";
+import { ${camel}OverviewAgent } from "./overview";
+import { ${camel}AnalysisAgent } from "./analysis";
+import { ${camel}PredictionAgent } from "./prediction";
+import { ${camel}GeneralAgent } from "./general";
+import { ${camel}PlannerTemplateAgent } from "./planner_template";
+import { ${camel}PlannerAutonomousAgent } from "./planner_autonomous";
+
+export { ${camel}OverviewAgent } from "./overview";
 export { ${camel}AnalysisAgent } from "./analysis";
 export { ${camel}PredictionAgent } from "./prediction";
 export { ${camel}GeneralAgent } from "./general";
 export { ${camel}PlannerTemplateAgent } from "./planner_template";
 export { ${camel}PlannerAutonomousAgent } from "./planner_autonomous";
+
+export const DOMAIN_AGENT_ENTRIES: Record<string, AgentConfig> = {
+  ${agentIds.overview}: ${camel}OverviewAgent,
+  ${agentIds.analysis}: ${camel}AnalysisAgent,
+  ${agentIds.prediction}: ${camel}PredictionAgent,
+  ${agentIds.general}: ${camel}GeneralAgent,
+  ${agentIds.plannerTemplate}: ${camel}PlannerTemplateAgent,
+  ${agentIds.plannerAutonomous}: ${camel}PlannerAutonomousAgent,
+};
+
+export const DOMAIN_AGENT_VERSION_ENTRIES: Record<string, string> = {
+  ${agentIds.overview}: "1.0.0",
+  ${agentIds.analysis}: "1.0.0",
+  ${agentIds.prediction}: "1.0.0",
+  ${agentIds.general}: "1.0.0",
+  ${agentIds.plannerTemplate}: "1.0.0",
+  ${agentIds.plannerAutonomous}: "1.0.0",
+};
 `;
 
   files[`src/skills/planner/templates/${id}/basic.ts`] = buildTemplateFile(
@@ -589,114 +588,61 @@ export { ${camel}PlannerAutonomousAgent } from "./planner_autonomous";
     [agentIds.overview, agentIds.analysis, agentIds.prediction],
   );
 
-  files[`src/skills/planner/templates/${id}/index.ts`] = `export { ${templateVars.basic} } from "./basic";
+  files[`src/skills/planner/templates/${id}/index.ts`] = `import { PlanTemplate } from "../../types";
+import { ${templateVars.basic} } from "./basic";
+import { ${templateVars.standard} } from "./standard";
+import { ${templateVars.focused} } from "./focused";
+import { ${templateVars.comprehensive} } from "./comprehensive";
+
+export { ${templateVars.basic} } from "./basic";
 export { ${templateVars.standard} } from "./standard";
 export { ${templateVars.focused} } from "./focused";
 export { ${templateVars.comprehensive} } from "./comprehensive";
+
+export const DOMAIN_TEMPLATE_ENTRIES: PlanTemplate[] = [
+  ${templateVars.basic},
+  ${templateVars.standard},
+  ${templateVars.focused},
+  ${templateVars.comprehensive},
+];
 `;
 
-  return { files, createModuleFn, templateVars };
+  files[`src/services/domains/ui/presenters/${id}.ts`] = `import type { DomainUiPresenter } from "../types";
+import { FOOTBALL_DOMAIN_UI_PRESENTER } from "./football";
+
+const baseHomePresenter = FOOTBALL_DOMAIN_UI_PRESENTER.home;
+const baseHistoryPresenter = FOOTBALL_DOMAIN_UI_PRESENTER.history;
+const baseResultPresenter = FOOTBALL_DOMAIN_UI_PRESENTER.result;
+
+export const ${presenterConst}: DomainUiPresenter = {
+  id: "${id}",
+  home: {
+    ...baseHomePresenter,
+    id: "${id}_home",
+  },
+  history: {
+    ...baseHistoryPresenter,
+    id: "${id}_history",
+  },
+  result: {
+    ...baseResultPresenter,
+    id: "${id}_result",
+  },
+};
+
+export const DOMAIN_UI_PRESENTER_ENTRIES: DomainUiPresenter[] = [${presenterConst}];
+`;
+
+  return { files };
 }
 
-function registerDomain(config, templateVars, createModuleFn, dryRun) {
-  const { id, camel, presenterConst, agentIds, templateIds } = config;
-
-  patch("src/services/domains/modules/index.ts", MARKERS.moduleExport, `export * from "./${id}";\n`, dryRun);
-  patch(
-    "src/services/domains/builtinModules.ts",
-    MARKERS.moduleImport,
-    `  ${createModuleFn},\n`,
-    dryRun,
+function printScaffoldSummary(config, dryRun) {
+  const { id, templateIds } = config;
+  const mode = dryRun ? "dry-run" : "apply";
+  console.log(`[${mode}] auto-discovery mode enabled; no shared registry patch needed for "${id}".`);
+  console.log(
+    `generated templates (file-based): ${templateIds.basic}, ${templateIds.standard}, ${templateIds.focused}, ${templateIds.comprehensive}`,
   );
-  patch(
-    "src/services/domains/builtinModules.ts",
-    MARKERS.moduleRegistration,
-    `  ${createModuleFn}(LOCAL_DOMAIN_CASE_MINIMUM),\n`,
-    dryRun,
-  );
-
-  patch(
-    "src/agents/index.ts",
-    MARKERS.agentImport,
-    `import { ${camel}AnalysisAgent, ${camel}GeneralAgent, ${camel}OverviewAgent, ${camel}PlannerAutonomousAgent, ${camel}PlannerTemplateAgent, ${camel}PredictionAgent } from './domains/${id}';\n`,
-    dryRun,
-  );
-  patch(
-    "src/agents/index.ts",
-    MARKERS.agentRegistration,
-    `  ${agentIds.overview}: ${camel}OverviewAgent,\n  ${agentIds.analysis}: ${camel}AnalysisAgent,\n  ${agentIds.prediction}: ${camel}PredictionAgent,\n  ${agentIds.general}: ${camel}GeneralAgent,\n  ${agentIds.plannerTemplate}: ${camel}PlannerTemplateAgent,\n  ${agentIds.plannerAutonomous}: ${camel}PlannerAutonomousAgent,\n`,
-    dryRun,
-  );
-  patch(
-    "src/agents/index.ts",
-    MARKERS.agentVersion,
-    `  ${agentIds.overview}: "1.0.0",\n  ${agentIds.analysis}: "1.0.0",\n  ${agentIds.prediction}: "1.0.0",\n  ${agentIds.general}: "1.0.0",\n  ${agentIds.plannerTemplate}: "1.0.0",\n  ${agentIds.plannerAutonomous}: "1.0.0",\n`,
-    dryRun,
-  );
-
-  patch(
-    "src/skills/planner/index.ts",
-    MARKERS.templateImport,
-    `import { ${templateVars.basic}, ${templateVars.comprehensive}, ${templateVars.focused}, ${templateVars.standard} } from "./templates/${id}";\n`,
-    dryRun,
-  );
-  patch(
-    "src/skills/planner/index.ts",
-    MARKERS.templateRegistration,
-    `  ${templateVars.basic},\n  ${templateVars.standard},\n  ${templateVars.focused},\n  ${templateVars.comprehensive},\n`,
-    dryRun,
-  );
-
-  const uiSnippet = `const ${camel}HomePresenter: DomainHomePresenter = {
-  id: "${id}_home",
-  useRemoteFeed: true,
-  sectionTitleKey: "home.popular_matches",
-  sectionHintKey: "home.live_upcoming",
-  refreshActionKey: "home.refresh_matches",
-  openActionKey: "home.click_to_analyze",
-  noDataKey: "home.no_match_data",
-  searchPlaceholderKey: "home.search_placeholder",
-  getDisplayPair: footballHomePresenter.getDisplayPair,
-  getSearchTokens: footballHomePresenter.getSearchTokens,
-  getStatusLabel: (status, ctx) => resolveFootballStatusLabel(status, ctx.t),
-  getStatusClassName: footballHomePresenter.getStatusClassName,
-  getOutcomeLabels: footballHomePresenter.getOutcomeLabels,
-  getCenterDisplay: footballHomePresenter.getCenterDisplay,
-};
-
-const ${camel}HistoryPresenter: DomainHistoryPresenter = {
-  id: "${id}_history",
-  getOutcomeDistribution: footballHistoryPresenter.getOutcomeDistribution,
-};
-
-const ${camel}ResultPresenter: DomainResultPresenter = {
-  id: "${id}_result",
-  getLoadingContextText: footballResultPresenter.getLoadingContextText,
-  getNotFoundText: footballResultPresenter.getNotFoundText,
-  getHeader: footballResultPresenter.getHeader,
-  getSummaryHero: footballResultPresenter.getSummaryHero,
-  getSummaryDistribution: footballResultPresenter.getSummaryDistribution,
-  getExportMeta: footballResultPresenter.getExportMeta,
-};
-
-const ${presenterConst}: DomainUiPresenter = {
-  id: "${id}",
-  home: ${camel}HomePresenter,
-  history: ${camel}HistoryPresenter,
-  result: ${camel}ResultPresenter,
-};
-
-`;
-
-  patch("src/services/domains/ui/presenter.ts", MARKERS.uiPresenterExtension, uiSnippet, dryRun);
-  patch(
-    "src/services/domains/ui/presenter.ts",
-    MARKERS.uiPresenterRegistration,
-    `  ${id}: ${presenterConst},\n`,
-    dryRun,
-  );
-
-  console.log(`registered templates: ${templateIds.basic}, ${templateIds.standard}, ${templateIds.focused}, ${templateIds.comprehensive}`);
 }
 
 function run() {
@@ -704,7 +650,7 @@ function run() {
     console.log(
       [
         "Usage:",
-        "  npm run domain:scaffold -- --id <domain_id> [--name \"Domain Name\"] [--no-register] [--force] [--dry-run]",
+        "  npm run domain:scaffold -- --id <domain_id> [--name \"Domain Name\"] [--force] [--dry-run]",
         "",
         "Example:",
         "  npm run domain:scaffold -- --id risk_control --name \"Risk Control Analysis\"",
@@ -718,7 +664,6 @@ function run() {
   const name = String(getArg("name") || `${toTitle(id)} Analysis`).trim();
   const dryRun = hasFlag("dry-run");
   const force = hasFlag("force");
-  const register = !hasFlag("no-register");
 
   const pascal = toPascal(id);
   const camel = toCamel(id);
@@ -764,7 +709,7 @@ function run() {
     agentIds,
   };
 
-  const { files, createModuleFn, templateVars } = buildFiles(config);
+  const { files } = buildFiles(config);
   const existing = Object.keys(files).filter((relPath) =>
     fs.existsSync(path.join(ROOT, relPath)),
   );
@@ -778,13 +723,11 @@ function run() {
 
   Object.entries(files).forEach(([relPath, content]) => write(relPath, content, dryRun));
 
-  if (register) {
-    registerDomain(config, templateVars, createModuleFn, dryRun);
-  }
+  printScaffoldSummary(config, dryRun);
 
   console.log("");
   console.log(`Domain scaffold complete: ${id}`);
-  console.log(`register=${register ? "yes" : "no"} dryRun=${dryRun ? "yes" : "no"}`);
+  console.log(`autoDiscovery=yes dryRun=${dryRun ? "yes" : "no"}`);
   console.log("Next: npm run verify:domain-extension && npm run lint && npm run build");
 }
 

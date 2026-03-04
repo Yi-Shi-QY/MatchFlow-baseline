@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import type { PlannerGraph, PlannerRuntimeState, PlannerStage } from "@/src/services/planner/runtime";
 import {
   type PlannerLanguage,
@@ -40,6 +41,7 @@ export function AnalysisPlannerFallback2D({
   className,
   mode = "default",
 }: AnalysisPlannerFallback2DProps) {
+  const { t } = useTranslation();
   const isSquare = mode === "square";
   const macroNodes = graph.nodes
     .filter((node) => node.kind === "stage")
@@ -74,7 +76,7 @@ export function AnalysisPlannerFallback2D({
   return (
     <div
       className={containerClass}
-      aria-label={language === "zh" ? "分析规划回退视图" : "Analysis planner fallback view"}
+      aria-label={t("match.planner_fallback_aria", { lng: language })}
     >
       <div className={`relative ${innerHeightClass} rounded-xl border border-white/10 bg-zinc-950/80 overflow-hidden`}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(34,211,238,0.14),transparent_55%)]" />

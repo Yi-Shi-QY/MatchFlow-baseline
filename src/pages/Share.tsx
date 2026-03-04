@@ -7,8 +7,10 @@ import { Button } from '@/src/components/ui/Button';
 import { ArrowLeft, Activity, Download, BrainCircuit } from 'lucide-react';
 import { motion } from 'motion/react';
 import { saveHistory } from '@/src/services/history';
-import { saveMatch } from '@/src/services/savedMatches';
+import { saveSubject } from '@/src/services/savedSubjects';
 import { decompressFromEncodedURIComponent } from 'lz-string';
+import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
+import { buildSubjectRoute } from '@/src/services/navigation/subjectRoute';
 
 export default function Share() {
   const [searchParams] = useSearchParams();
@@ -99,9 +101,15 @@ export default function Share() {
   }, [searchParams]);
 
   const handleImport = async () => {
+    const activeDomainId = getActiveAnalysisDomain().id;
     if (isLegacy && match && importedData?.fullAnalysis) {
-      await saveHistory(match, importedData.fullAnalysis);
-      navigate(`/match/${match.id}`);
+      await saveHistory(match, importedData.fullAnalysis, undefined, undefined, {
+        domainId: activeDomainId,
+        subjectId: match.id,
+        subjectType: 'match',
+        subjectSnapshot: match,
+      });
+      navigate(buildSubjectRoute(activeDomainId, match.id));
     } else if (importedData) {
       // New format: navigate to match detail with imported data
       // Save it first
@@ -111,8 +119,13 @@ export default function Share() {
         m.id = `custom_${Date.now()}`;
       }
       
-      await saveMatch(m);
-      navigate(`/match/${m.id}`, { state: { importedData: m } });
+      await saveSubject(m, {
+        domainId: activeDomainId,
+        subjectId: m.id,
+        subjectType: 'match',
+        subjectSnapshot: m,
+      });
+      navigate(buildSubjectRoute(activeDomainId, m.id), { state: { importedData: m } });
     }
   };
 

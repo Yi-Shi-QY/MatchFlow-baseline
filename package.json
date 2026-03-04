@@ -17,7 +17,8 @@
     "cap:assets": "npx capacitor-assets generate",
     "verify:tool-calls": "node scripts/verifyToolCalls.mjs",
     "domain:scaffold": "node scripts/scaffoldDomain.mjs",
-    "verify:domain-extension": "node scripts/verifyDomainExtension.mjs"
+    "verify:domain-extension": "node scripts/verifyDomainExtension.mjs",
+    "verify:storage-v3": "tsx scripts/verifyStorageV3.ts"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.20",

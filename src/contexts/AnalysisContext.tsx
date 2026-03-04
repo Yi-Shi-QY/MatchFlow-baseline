@@ -1,8 +1,14 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
 import { Match } from '@/src/data/matches';
 import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState, isAbortError } from '@/src/services/ai';
-import { saveHistory, saveResumeState, clearResumeState, getResumeState } from '@/src/services/history';
-import { deleteSavedMatch } from '@/src/services/savedMatches';
+import {
+  saveHistory,
+  saveResumeState,
+  clearResumeState,
+  getResumeState,
+  isResumeStateRecoverable,
+} from '@/src/services/history';
+import { deleteSavedSubject } from '@/src/services/savedSubjects';
 import { AgentResult, AgentSegment, parseAgentStream } from '@/src/services/agentParser';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
@@ -12,11 +18,15 @@ import {
   createPlannerRunId,
   type PlannerRuntimeState,
 } from '@/src/services/planner/runtime';
+import { buildSubjectRoute } from '@/src/services/navigation/subjectRoute';
 
 export interface ActiveAnalysis {
   matchId: string;
+  domainId: string;
+  subjectId: string;
   match: Match;
   dataToAnalyze: any;
+  plan: any[];
   includeAnimations: boolean;
   thoughts: string;
   parsedStream: AgentResult | null;
@@ -202,7 +212,8 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
             schedule: { at: new Date(Date.now() + 100) },
             extra: {
               matchId: firstMatch.matchId,
-              route: `/match/${firstMatch.matchId}`,
+              domainId: firstMatch.domainId,
+              route: buildSubjectRoute(firstMatch.domainId, firstMatch.subjectId),
             } as any,
           }]
         });
@@ -278,6 +289,9 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
             segmentIndex: target.runtimeStatus?.segmentIndex ?? target.planCompletedSegments,
             totalSegments: target.runtimeStatus?.totalSegments ?? target.planTotalSegments,
             stageLabel: 'Cancelled',
+            source: 'context',
+            eventSeq: (target.runtimeStatus?.eventSeq ?? 0) + 1,
+            stageStartedAt: target.runtimeStatus?.stageStartedAt,
           }),
         }
       };
@@ -290,6 +304,17 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
   const startAnalysis = useCallback(async (match: Match, dataToAnalyze: any, includeAnimations: boolean, isResume: boolean = false) => {
     const matchId = match.id;
+    const analysisDomainId =
+      typeof dataToAnalyze?.sourceContext?.domainId === 'string' &&
+      dataToAnalyze.sourceContext.domainId.trim().length > 0
+        ? dataToAnalyze.sourceContext.domainId.trim()
+        : getSettings().activeDomainId || 'football';
+    const analysisSubjectType = 'match';
+    const resumeOptions = {
+      domainId: analysisDomainId,
+      subjectId: matchId,
+      subjectType: analysisSubjectType,
+    };
     const previousController = analysisAbortControllersRef.current[matchId];
     if (previousController && !previousController.signal.aborted) {
       previousController.abort();
@@ -303,10 +328,11 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     let initialParsedStream: AgentResult | null = null;
     let initialCollapsed: Record<string, boolean> = {};
     let resumeStateData: AnalysisResumeState | undefined = undefined;
+    let shouldResume = isResume;
 
-    if (isResume) {
-      const savedState = await getResumeState(matchId);
-      if (savedState) {
+    if (shouldResume) {
+      const savedState = await getResumeState(matchId, resumeOptions);
+      if (isResumeStateRecoverable(savedState)) {
         resumeStateData = savedState.state;
         
         // Prefer completed segments. Keep draft thoughts only for temporary preview.
@@ -323,9 +349,12 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
             initialCollapsed[seg.id] = true;
           }
         });
+      } else {
+        shouldResume = false;
+        await clearResumeState(matchId, resumeOptions);
       }
     } else {
-      await clearResumeState(matchId);
+      await clearResumeState(matchId, resumeOptions);
     }
 
     const initialResumeState: AnalysisResumeState = {
@@ -341,6 +370,8 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         ? resumeStateData.segmentResults
         : [],
       runtimeStatus: resumeStateData?.runtimeStatus,
+      subjectSnapshot: resumeStateData?.subjectSnapshot ?? resumeStateData?.matchSnapshot,
+      matchSnapshot: resumeStateData?.matchSnapshot,
     };
     const initialPlanTotalSegments = initialResumeState.plan.length;
     const initialPlanCompletedSegments = initialResumeState.completedSegmentIndices.length;
@@ -361,6 +392,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
             typeof initialResumeState.runtimeStatus.totalSegments === 'number'
               ? initialResumeState.runtimeStatus.totalSegments
               : initialPlanTotalSegments,
+          source: initialResumeState.runtimeStatus.source || 'resume',
         })
       : null;
 
@@ -373,12 +405,16 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           segmentIndex: initialPlanCompletedSegments,
           totalSegments: initialPlanTotalSegments,
           stageLabel: 'Booting',
+          source: 'context',
         });
 
     const newAnalysis: ActiveAnalysis = {
       matchId,
+      domainId: analysisDomainId,
+      subjectId: matchId,
       match,
       dataToAnalyze,
+      plan: initialResumeState.plan,
       includeAnimations,
       thoughts: initialThoughts,
       parsedStream: initialParsedStream,
@@ -393,6 +429,25 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
     setActiveAnalyses(prev => ({ ...prev, [matchId]: newAnalysis }));
 
+    const updateIfCurrentRun = (apply: (target: ActiveAnalysis) => ActiveAnalysis) => {
+      setActiveAnalyses(prev => {
+        const target = prev[matchId];
+        if (!target) return prev;
+        const targetRunId = target.runtimeStatus?.runId;
+        if (
+          typeof targetRunId === 'string' &&
+          targetRunId.trim().length > 0 &&
+          targetRunId !== analysisRunId
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [matchId]: apply(target),
+        };
+      });
+    };
+
     let currentThoughts = initialThoughts;
     let latestResumeState: AnalysisResumeState = {
       ...initialResumeState,
@@ -402,9 +457,15 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     let lastSnapshotAt = 0;
     let lastUiRenderAt = 0;
     let dropStaleDraftOnFirstChunk =
-      isResume && (!resumeStateData?.segmentResults || resumeStateData.segmentResults.length === 0);
+      shouldResume && (!resumeStateData?.segmentResults || resumeStateData.segmentResults.length === 0);
+    const baselineCompletedSegments = initialPlanCompletedSegments;
+    let hasProducedNewChunks = false;
+    let hasAdvancedCompletedSegments = false;
 
     const persistResumeSnapshot = (force: boolean = false) => {
+      if (analysisAbortControllersRef.current[matchId] !== abortController) {
+        return;
+      }
       const now = Date.now();
       if (!force && now - lastSnapshotAt < RESUME_SNAPSHOT_INTERVAL_MS) {
         return;
@@ -412,10 +473,14 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       lastSnapshotAt = now;
       const stateToPersist: AnalysisResumeState = {
         ...latestResumeState,
+        subjectSnapshot: match,
         runtimeStatus: latestRuntimeStatus,
         matchSnapshot: match,
       };
-      void saveResumeState(matchId, stateToPersist, currentThoughts);
+      void saveResumeState(matchId, stateToPersist, currentThoughts, {
+        ...resumeOptions,
+        subjectSnapshot: match,
+      });
     };
 
     const commitLivePreview = (
@@ -429,19 +494,13 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       }
       lastUiRenderAt = now;
 
-      setActiveAnalyses(prev => {
-        const target = prev[matchId];
-        if (!target) return prev;
+      updateIfCurrentRun((target) => {
         const nextParsed = stabilizeParsedStream(target.parsedStream, parsedStream);
-
         return {
-          ...prev,
-          [matchId]: {
-            ...target,
-            thoughts: currentThoughts,
-            parsedStream: nextParsed,
-            collapsedSegments
-          }
+          ...target,
+          thoughts: currentThoughts,
+          parsedStream: nextParsed,
+          collapsedSegments,
         };
       });
     };
@@ -459,18 +518,16 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           const planCompletedSegments = Array.isArray(state.completedSegmentIndices)
             ? state.completedSegmentIndices.length
             : 0;
+          if (planCompletedSegments > baselineCompletedSegments) {
+            hasAdvancedCompletedSegments = true;
+          }
 
-          setActiveAnalyses(prev => {
-            if (!prev[matchId]) return prev;
-            return {
-              ...prev,
-              [matchId]: {
-                ...prev[matchId],
-                planTotalSegments,
-                planCompletedSegments,
-              }
-            };
-          });
+          updateIfCurrentRun((target) => ({
+            ...target,
+            plan: Array.isArray(state.plan) ? state.plan : target.plan,
+            planTotalSegments,
+            planCompletedSegments,
+          }));
 
           latestResumeState = {
             ...state,
@@ -486,10 +543,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
             runtimeStatus: runtimeState,
           };
 
-          setActiveAnalyses(prev => {
-            const target = prev[matchId];
-            if (!target) return prev;
-
+          updateIfCurrentRun((target) => {
             const planTotalSegments = runtimeState.totalSegments > 0
               ? Math.max(target.planTotalSegments, runtimeState.totalSegments)
               : target.planTotalSegments;
@@ -497,15 +551,11 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
               ? Math.min(runtimeState.totalSegments, runtimeState.segmentIndex)
               : target.planCompletedSegments;
             const planCompletedSegments = Math.max(target.planCompletedSegments, runtimeCompletedSegments);
-
             return {
-              ...prev,
-              [matchId]: {
-                ...target,
-                runtimeStatus: runtimeState,
-                planTotalSegments,
-                planCompletedSegments,
-              }
+              ...target,
+              runtimeStatus: runtimeState,
+              planTotalSegments,
+              planCompletedSegments,
             };
           });
           persistResumeSnapshot(true);
@@ -523,6 +573,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           dropStaleDraftOnFirstChunk = false;
         }
         currentThoughts += chunk;
+        hasProducedNewChunks = true;
         currentParsedStream = stabilizeParsedStream(
           currentParsedStream,
           parseAgentStream(currentThoughts),
@@ -551,19 +602,13 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         parseAgentStream(currentThoughts),
       );
       
-      setActiveAnalyses(prev => {
-        const target = prev[matchId];
-        if (!target) return prev;
+      updateIfCurrentRun((target) => {
         const nextParsed = stabilizeParsedStream(target.parsedStream, finalParsed);
-
         return {
-          ...prev,
-          [matchId]: {
-            ...target,
-            thoughts: currentThoughts,
-            parsedStream: nextParsed,
-            collapsedSegments: currentCollapsed
-          }
+          ...target,
+          thoughts: currentThoughts,
+          parsedStream: nextParsed,
+          collapsedSegments: currentCollapsed,
         };
       });
 
@@ -582,13 +627,20 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         if (dataToAnalyze.odds) finalMatch.odds = dataToAnalyze.odds;
         if (dataToAnalyze.customInfo) (finalMatch as any).customInfo = dataToAnalyze.customInfo;
         
-        setActiveAnalyses(prev => {
-          const target = prev[matchId];
-          if (!target) return prev;
-          saveHistory(finalMatch, finalAnalysis, finalParsed).catch(console.error);
-          
+        updateIfCurrentRun((target) => {
+          saveHistory(finalMatch, finalAnalysis, finalParsed, undefined, {
+            domainId: analysisDomainId,
+            subjectId: matchId,
+            subjectType: analysisSubjectType,
+            subjectSnapshot: finalMatch,
+          }).catch(console.error);
+
           // Also try to delete from saved matches if it exists (it's now history)
-          deleteSavedMatch(matchId).catch(() => {});
+          deleteSavedSubject(matchId, {
+            domainId: analysisDomainId,
+            subjectId: matchId,
+            subjectType: analysisSubjectType,
+          }).catch(() => {});
 
           const totalSegments = Math.max(
             target.planTotalSegments,
@@ -598,30 +650,29 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           const completedSegments = totalSegments > 0 ? totalSegments : target.planCompletedSegments;
 
           return {
-            ...prev,
-            [matchId]: {
-              ...target,
-              analysis: finalAnalysis,
-              isAnalyzing: false,
-              planTotalSegments: totalSegments,
-              planCompletedSegments: completedSegments,
-              runtimeStatus: buildPlannerRuntimeState({
-                stage: 'completed',
-                runId: target.runtimeStatus?.runId || analysisRunId,
-                segmentIndex: completedSegments,
-                totalSegments,
-                stageLabel: 'Completed',
-                progressPercent: 100,
-              }),
-            }
+            ...target,
+            analysis: finalAnalysis,
+            isAnalyzing: false,
+            planTotalSegments: totalSegments,
+            planCompletedSegments: completedSegments,
+            runtimeStatus: buildPlannerRuntimeState({
+              stage: 'completed',
+              runId: target.runtimeStatus?.runId || analysisRunId,
+              segmentIndex: completedSegments,
+              totalSegments,
+              stageLabel: 'Completed',
+              progressPercent: 100,
+              source: 'context',
+              eventSeq: (target.runtimeStatus?.eventSeq ?? 0) + 1,
+            }),
           };
         });
         
-        await clearResumeState(matchId);
+        await clearResumeState(matchId, {
+          ...resumeOptions,
+        });
       } else {
-        setActiveAnalyses(prev => {
-          const target = prev[matchId];
-          if (!target) return prev;
+        updateIfCurrentRun((target) => {
           const totalSegments = Math.max(
             target.planTotalSegments,
             target.runtimeStatus?.totalSegments ?? 0,
@@ -629,21 +680,20 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           );
           const completedSegments = totalSegments > 0 ? totalSegments : target.planCompletedSegments;
           return {
-            ...prev,
-            [matchId]: {
-              ...target,
-              isAnalyzing: false,
-              planTotalSegments: totalSegments,
-              planCompletedSegments: completedSegments,
-              runtimeStatus: buildPlannerRuntimeState({
-                stage: 'completed',
-                runId: target.runtimeStatus?.runId || analysisRunId,
-                segmentIndex: completedSegments,
-                totalSegments,
-                stageLabel: 'Completed',
-                progressPercent: 100,
-              }),
-            }
+            ...target,
+            isAnalyzing: false,
+            planTotalSegments: totalSegments,
+            planCompletedSegments: completedSegments,
+            runtimeStatus: buildPlannerRuntimeState({
+              stage: 'completed',
+              runId: target.runtimeStatus?.runId || analysisRunId,
+              segmentIndex: completedSegments,
+              totalSegments,
+              stageLabel: 'Completed',
+              progressPercent: 100,
+              source: 'context',
+              eventSeq: (target.runtimeStatus?.eventSeq ?? 0) + 1,
+            }),
           };
         });
       }
@@ -656,6 +706,9 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           segmentIndex: latestRuntimeStatus?.segmentIndex ?? latestResumeState.completedSegmentIndices.length,
           totalSegments: latestRuntimeStatus?.totalSegments ?? latestResumeState.plan.length,
           stageLabel: 'Cancelled',
+          source: 'context',
+          eventSeq: (latestRuntimeStatus?.eventSeq ?? 0) + 1,
+          stageStartedAt: latestRuntimeStatus?.stageStartedAt,
         });
         latestRuntimeStatus = cancelledRuntimeStatus;
         latestResumeState = {
@@ -663,25 +716,42 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           runtimeStatus: cancelledRuntimeStatus,
         };
         persistResumeSnapshot(true);
-        setActiveAnalyses(prev => {
-          const target = prev[matchId];
-          if (!target) return prev;
-          return {
-            ...prev,
-            [matchId]: {
-              ...target,
-              isAnalyzing: false,
-              error: null,
-              runtimeStatus: buildPlannerRuntimeState({
-                stage: 'cancelled',
-                runId: target.runtimeStatus?.runId || analysisRunId,
-                segmentIndex: target.runtimeStatus?.segmentIndex ?? target.planCompletedSegments,
-                totalSegments: target.runtimeStatus?.totalSegments ?? target.planTotalSegments,
-                stageLabel: 'Cancelled',
-              }),
-            }
-          };
-        });
+        updateIfCurrentRun((target) => ({
+          ...target,
+          isAnalyzing: false,
+          error: null,
+          runtimeStatus: buildPlannerRuntimeState({
+            stage: 'cancelled',
+            runId: target.runtimeStatus?.runId || analysisRunId,
+            segmentIndex: target.runtimeStatus?.segmentIndex ?? target.planCompletedSegments,
+            totalSegments: target.runtimeStatus?.totalSegments ?? target.planTotalSegments,
+            stageLabel: 'Cancelled',
+            source: 'context',
+            eventSeq: (target.runtimeStatus?.eventSeq ?? 0) + 1,
+            stageStartedAt: target.runtimeStatus?.stageStartedAt,
+          }),
+        }));
+        return;
+      }
+
+      const shouldFallbackToFreshRun =
+        shouldResume && !hasProducedNewChunks && !hasAdvancedCompletedSegments;
+      if (shouldFallbackToFreshRun) {
+        console.warn('Resume snapshot is incompatible, fallback to fresh analysis run.', error);
+        await clearResumeState(matchId, resumeOptions);
+        updateIfCurrentRun((target) => ({
+          ...target,
+          thoughts: '',
+          parsedStream: null,
+          collapsedSegments: {},
+          plan: [],
+          planTotalSegments: 0,
+          planCompletedSegments: 0,
+          isAnalyzing: false,
+          error: null,
+          runtimeStatus: null,
+        }));
+        void startAnalysis(match, dataToAnalyze, includeAnimations, false);
         return;
       }
 
@@ -693,6 +763,9 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         totalSegments: latestRuntimeStatus?.totalSegments ?? latestResumeState.plan.length,
         stageLabel: 'Failed',
         errorMessage: error.message || "Analysis failed",
+        source: 'context',
+        eventSeq: (latestRuntimeStatus?.eventSeq ?? 0) + 1,
+        stageStartedAt: latestRuntimeStatus?.stageStartedAt,
       });
       latestRuntimeStatus = failedRuntimeStatus;
       latestResumeState = {
@@ -700,27 +773,23 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         runtimeStatus: failedRuntimeStatus,
       };
       persistResumeSnapshot(true);
-      setActiveAnalyses(prev => {
-        const target = prev[matchId];
-        if (!target) return prev;
-        return {
-          ...prev,
-          [matchId]: {
-            ...target,
-            error: error.message || "Analysis failed",
-            isAnalyzing: false,
-            thoughts: target.thoughts + "\n\n[ERROR] Analysis failed. Please try again.",
-            runtimeStatus: buildPlannerRuntimeState({
-              stage: 'failed',
-              runId: target.runtimeStatus?.runId || analysisRunId,
-              segmentIndex: target.runtimeStatus?.segmentIndex ?? target.planCompletedSegments,
-              totalSegments: target.runtimeStatus?.totalSegments ?? target.planTotalSegments,
-              stageLabel: 'Failed',
-              errorMessage: error.message || "Analysis failed",
-            }),
-          }
-        };
-      });
+      updateIfCurrentRun((target) => ({
+        ...target,
+        error: error.message || "Analysis failed",
+        isAnalyzing: false,
+        thoughts: target.thoughts + "\n\n[ERROR] Analysis failed. Please try again.",
+        runtimeStatus: buildPlannerRuntimeState({
+          stage: 'failed',
+          runId: target.runtimeStatus?.runId || analysisRunId,
+          segmentIndex: target.runtimeStatus?.segmentIndex ?? target.planCompletedSegments,
+          totalSegments: target.runtimeStatus?.totalSegments ?? target.planTotalSegments,
+          stageLabel: 'Failed',
+          errorMessage: error.message || "Analysis failed",
+          source: 'context',
+          eventSeq: (target.runtimeStatus?.eventSeq ?? 0) + 1,
+          stageStartedAt: target.runtimeStatus?.stageStartedAt,
+        }),
+      }));
     } finally {
       if (analysisAbortControllersRef.current[matchId] === abortController) {
         delete analysisAbortControllersRef.current[matchId];

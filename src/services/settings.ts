@@ -18,7 +18,23 @@ export interface AppSettings {
   enableAutonomousPlanning: boolean;
 }
 
-const SETTINGS_KEY = 'matchflow_settings';
+const SETTINGS_KEY = 'matchflow_settings_v2';
+let settingsCache: AppSettings | null = null;
+
+function normalizeSettings(input: unknown): AppSettings {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { ...DEFAULT_SETTINGS };
+  }
+  const value = input as Partial<AppSettings>;
+  return {
+    ...DEFAULT_SETTINGS,
+    ...value,
+    skillHttpAllowedHosts: Array.isArray(value.skillHttpAllowedHosts)
+      ? value.skillHttpAllowedHosts.filter((host): host is string => typeof host === 'string')
+      : [],
+    language: value.language === 'zh' ? 'zh' : 'en',
+  };
+}
 
 export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'gemini',
@@ -38,20 +54,29 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export function getSettings(): AppSettings {
+  if (settingsCache) {
+    return { ...settingsCache };
+  }
+
   try {
     const data = localStorage.getItem(SETTINGS_KEY);
     if (data) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+      settingsCache = normalizeSettings(JSON.parse(data));
+      return { ...settingsCache };
     }
   } catch (e) {
     console.error('Failed to load settings', e);
   }
-  return DEFAULT_SETTINGS;
+
+  settingsCache = { ...DEFAULT_SETTINGS };
+  return { ...settingsCache };
 }
 
 export function saveSettings(settings: AppSettings) {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    const normalized = normalizeSettings(settings);
+    settingsCache = normalized;
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalized));
   } catch (e) {
     console.error('Failed to save settings', e);
   }

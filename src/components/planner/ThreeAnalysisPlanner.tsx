@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import type { PlannerGraph, PlannerRuntimeState, PlannerStage } from "@/src/services/planner/runtime";
 import {
   type PlannerLanguage,
@@ -7,12 +8,18 @@ import {
   getSegmentVisualState,
 } from "./model";
 
+const FPS_SAMPLE_WINDOW_MS = 2000;
+const FPS_MIN_THRESHOLD = 22;
+const FPS_LOW_WINDOW_LIMIT = 3;
+
+export type PlannerUnavailableReason = "init" | "runtime" | "performance";
+
 interface ThreeAnalysisPlannerProps {
   graph: PlannerGraph;
   runtimeState: PlannerRuntimeState;
   language: PlannerLanguage;
   className?: string;
-  onUnavailable?: () => void;
+  onUnavailable?: (reason?: PlannerUnavailableReason) => void;
   mode?: "default" | "square";
 }
 
@@ -54,6 +61,7 @@ export function ThreeAnalysisPlanner({
   onUnavailable,
   mode = "default",
 }: ThreeAnalysisPlannerProps) {
+  const { t } = useTranslation();
   const isSquare = mode === "square";
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -77,6 +85,15 @@ export function ThreeAnalysisPlanner({
     let resizeObserver: ResizeObserver | null = null;
     let visibilityHandler: (() => void) | null = null;
     let isPageVisible = document.visibilityState === "visible";
+    let fpsWindowStartedAt = 0;
+    let fpsWindowFrameCount = 0;
+    let lowFpsWindowCount = 0;
+
+    const notifyUnavailable = (reason: PlannerUnavailableReason) => {
+      if (disposed || unavailableNotifiedRef.current) return;
+      unavailableNotifiedRef.current = true;
+      onUnavailableRef.current?.(reason);
+    };
 
     const initialize = async () => {
       try {
@@ -268,8 +285,39 @@ export function ThreeAnalysisPlanner({
           if (disposed) return;
           animationFrame = window.requestAnimationFrame(tick);
           if (!isPageVisible) return;
-          updateScene(now);
-          renderer.render(scene, camera);
+
+          try {
+            updateScene(now);
+            renderer.render(scene, camera);
+          } catch (error) {
+            console.error("Three planner runtime render failed", error);
+            notifyUnavailable("runtime");
+            return;
+          }
+
+          if (fpsWindowStartedAt <= 0) {
+            fpsWindowStartedAt = now;
+            fpsWindowFrameCount = 0;
+          }
+          fpsWindowFrameCount += 1;
+
+          const elapsedMs = now - fpsWindowStartedAt;
+          if (elapsedMs < FPS_SAMPLE_WINDOW_MS) {
+            return;
+          }
+
+          const sampledFps = elapsedMs > 0 ? (fpsWindowFrameCount * 1000) / elapsedMs : 0;
+          if (sampledFps < FPS_MIN_THRESHOLD) {
+            lowFpsWindowCount += 1;
+          } else {
+            lowFpsWindowCount = 0;
+          }
+
+          fpsWindowStartedAt = now;
+          fpsWindowFrameCount = 0;
+          if (lowFpsWindowCount >= FPS_LOW_WINDOW_LIMIT) {
+            notifyUnavailable("performance");
+          }
         };
 
         const resize = () => {
@@ -291,6 +339,11 @@ export function ThreeAnalysisPlanner({
 
         visibilityHandler = () => {
           isPageVisible = document.visibilityState === "visible";
+          if (isPageVisible) {
+            fpsWindowStartedAt = 0;
+            fpsWindowFrameCount = 0;
+            lowFpsWindowCount = 0;
+          }
         };
         document.addEventListener("visibilitychange", visibilityHandler);
 
@@ -329,10 +382,8 @@ export function ThreeAnalysisPlanner({
 
         return cleanup;
       } catch (error) {
-        if (!disposed && !unavailableNotifiedRef.current) {
-          unavailableNotifiedRef.current = true;
-          onUnavailableRef.current?.();
-        }
+        console.error("Three planner init failed", error);
+        notifyUnavailable("init");
         return undefined;
       }
     };
@@ -357,7 +408,7 @@ export function ThreeAnalysisPlanner({
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
         {!isReady && (
           <div className="absolute inset-0 flex items-center justify-center text-xs font-mono text-zinc-400 animate-pulse">
-            {language === "zh" ? "正在加载 3D 规划图..." : "Loading 3D planner..."}
+            {t("match.planner_3d_loading", { lng: language })}
           </div>
         )}
       </div>

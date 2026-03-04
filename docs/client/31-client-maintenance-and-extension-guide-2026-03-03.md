@@ -30,15 +30,16 @@ For a new domain `<domainId>`, all of the following should exist:
 3. `src/services/domains/modules/<domainId>/localCases.ts` with at least 3 case items
 4. `src/services/domains/modules/<domainId>/module.ts`
 5. `src/services/domains/modules/<domainId>/index.ts`
-6. Module export from `src/services/domains/modules/index.ts`
-7. Built-in module registration in `src/services/domains/builtinModules.ts`
+6. `module.ts` exports `DOMAIN_MODULE_FACTORIES`
+7. `src/services/domains/builtinModules.ts` auto-discovery remains valid
 8. Domain agents under `src/agents/domains/<domainId>/`
-9. Agent registration in `src/agents/index.ts`
+9. `src/agents/domains/<domainId>/index.ts` exports `DOMAIN_AGENT_ENTRIES` and `DOMAIN_AGENT_VERSION_ENTRIES`
 10. Planner templates under `src/skills/planner/templates/<domainId>/`
-11. Template registration in `src/skills/planner/index.ts`
-12. Animation template and type mapping if templates use non-`none` animations
-13. Home/MatchDetail smoke flow works with local cases and history/resume
-14. `npm run lint` and `npm run build` pass
+11. `src/skills/planner/templates/<domainId>/index.ts` exports `DOMAIN_TEMPLATE_ENTRIES`
+12. Domain UI presenter under `src/services/domains/ui/presenters/<domainId>.ts` exporting `DOMAIN_UI_PRESENTER_ENTRIES`
+13. Animation template and type mapping if templates use non-`none` animations
+14. Home/MatchDetail smoke flow works with local cases and history/resume
+15. `npm run lint` and `npm run build` pass
 
 ## 4. Step-by-Step Extension Procedure
 
@@ -99,7 +100,7 @@ Design rules:
 
 1. Route should be deterministic for the same input.
 2. Fallback plan must be executable with guaranteed available agents.
-3. If strategy uses template IDs, ensure those template IDs are registered.
+3. If strategy uses template IDs, ensure those template IDs are discoverable via `DOMAIN_TEMPLATE_ENTRIES`.
 
 ## 4.4 Add Local Test Cases (`localCases.ts`)
 
@@ -121,13 +122,15 @@ Recommended coverage matrix:
 2. One case with stats/performance-heavy data.
 3. One case with minimal data plus custom/situational notes.
 
-## 4.5 Register Built-in Module
+## 4.5 Module Auto-discovery Contract
 
-Update:
+Ensure:
 
-1. `src/services/domains/modules/index.ts` to export your new module.
-2. `src/services/domains/builtinModules.ts` to include:
-   - `create<DomainName>BuiltinModule(LOCAL_DOMAIN_CASE_MINIMUM)`
+1. `src/services/domains/modules/<domainId>/module.ts` exports:
+   - `create<DomainName>BuiltinModule(...)`
+   - `DOMAIN_MODULE_FACTORIES`
+2. `src/services/domains/builtinModules.ts` keeps auto-discovery contract:
+   - `import.meta.glob("./modules/*/module.ts")`
 
 Do not bypass the central validator.
 
@@ -149,7 +152,8 @@ Recommended set:
 Then:
 
 1. Export them in `src/agents/domains/<domainId>/index.ts`.
-2. Register IDs in `src/agents/index.ts` (`BUILTIN_AGENTS` and versions map).
+2. Export `DOMAIN_AGENT_ENTRIES` and `DOMAIN_AGENT_VERSION_ENTRIES` in that index file.
+3. `src/agents/index.ts` auto-discovers `src/agents/domains/*/index.ts`.
 
 Rules:
 
@@ -172,7 +176,8 @@ Add templates (example):
 Then:
 
 1. Export from `src/skills/planner/templates/<domainId>/index.ts`.
-2. Register in `src/skills/planner/index.ts`.
+2. Export `DOMAIN_TEMPLATE_ENTRIES` from that index file.
+3. `src/skills/planner/index.ts` auto-discovers `src/skills/planner/templates/*/index.ts`.
 
 Template quality rules:
 
@@ -223,7 +228,7 @@ Minimum runtime checks:
 When editing an existing domain:
 
 1. Prefer changes in its own module folder.
-2. Keep registry changes minimal.
+2. Keep shared contract files stable and minimal.
 3. Do not duplicate shared utility logic across domain files.
 4. Add compatibility alias handling only when required by migration.
 5. Update local cases when a data-shape change could break planning or rendering.
@@ -266,8 +271,8 @@ A domain extension is release-ready only if all checks pass:
 
 If a new domain release is unstable:
 
-1. Remove module from `BUILTIN_DOMAIN_MODULES` in `builtinModules.ts`.
-2. Keep domain code in tree if needed, but make it unreachable from runtime registry.
+1. Remove or move `src/services/domains/modules/<domainId>/module.ts` out of the auto-discovery path.
+2. Keep domain code in tree if needed, but ensure auto-discovery does not pick it up.
 3. Keep compatibility shims untouched.
 4. Re-run lint/build and smoke tests on remaining domains.
 
@@ -310,8 +315,8 @@ Fix:
 
 Check:
 
-1. Agent IDs in templates exist in `src/agents/index.ts`.
-2. Template IDs referenced by strategy are registered in planner index.
+1. Agent IDs in templates exist in discovered `DOMAIN_AGENT_ENTRIES`.
+2. Template IDs referenced by strategy exist in discovered `DOMAIN_TEMPLATE_ENTRIES`.
 3. Extension auto-install is not silently relied on for built-in core routes.
 
 ## 10. Reference Files
@@ -330,4 +335,3 @@ Core files to keep open while extending domains:
 10. `src/pages/MatchDetail.tsx`
 11. `src/pages/Settings.tsx`
 12. `src/contexts/AnalysisContext.tsx`
-

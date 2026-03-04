@@ -1,4 +1,4 @@
-{
+﻿{
   "app": {
     "title": "MatchFlow",
     "subtitle": "AI 驱动的足球分析"
@@ -145,7 +145,14 @@
     "runtime_stage_finalizing": "收尾中",
     "runtime_stage_completed": "已完成",
     "runtime_stage_failed": "失败",
-    "runtime_stage_cancelled": "已取消"
+    "runtime_stage_cancelled": "已取消",
+    "planner_progress_label": "\u5f53\u524d\u8fdb\u5ea6\uff1a",
+    "planner_3d_loading": "\u6b63\u5728\u52a0\u8f7d 3D \u89c4\u5212\u56fe...",
+    "planner_fallback_init": "3D \u89c4\u5212\u4e0d\u53ef\u7528\uff0c\u5df2\u5207\u6362\u4e3a 2D \u56de\u9000\u89c6\u56fe\u3002",
+    "planner_fallback_runtime": "3D \u89c4\u5212\u6e32\u67d3\u5931\u8d25\uff0c\u5df2\u5207\u6362\u4e3a 2D \u56de\u9000\u89c6\u56fe\u3002",
+    "planner_fallback_performance": "\u8bbe\u5907\u6027\u80fd\u8f83\u4f4e\uff0c\u5df2\u81ea\u52a8\u5207\u6362\u4e3a 2D \u56de\u9000\u89c6\u56fe\u3002",
+    "planner_render_failed": "\u89c4\u5212\u89c6\u56fe\u6682\u4e0d\u53ef\u7528\u3002",
+    "planner_fallback_aria": "\u5206\u6790\u89c4\u5212\u56de\u9000\u89c6\u56fe"
   },
   "settings": {
     "title": "设置",
@@ -212,7 +219,14 @@
     "extension_sync_noop": "无需新增扩展。已检查 {{matches}} 场比赛中的 {{templates}} 个模板推荐。",
     "extension_sync_failed": "推荐扩展同步失败",
     "extension_sync_done": "已同步",
-    "open_extension_hub": "打开高级扩展管理"
+    "open_extension_hub": "打开高级扩展管理",
+    "storage_maintenance": "存储维护",
+    "clear_domain_data_desc": "仅清理当前领域的数据：分析历史、恢复快照和收藏主体。",
+    "clear_current_domain_data": "清理当前领域数据",
+    "confirm_clear_domain_data_desc": "确认清理 {{domain}} 的全部持久化数据吗？该操作不可恢复。",
+    "clearing_domain_data": "正在清理当前领域数据...",
+    "clear_domain_data_success": "已清理 {{domain}} 的持久化数据。",
+    "clear_domain_data_failed": "清理当前领域数据失败"
   },
   "extensions": {
     "title": "扩展 Hub",
@@ -299,3 +313,4 @@
     }
   }
 }
+

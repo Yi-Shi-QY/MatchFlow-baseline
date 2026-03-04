@@ -1,22 +1,30 @@
 import { FunctionDeclaration, Type } from "@google/genai";
-import {
-  basicTemplate,
-  comprehensiveTemplate,
-  oddsFocusedTemplate,
-  standardTemplate,
-} from "./templates/football";
-// DOMAIN_TEMPLATE_IMPORT_MARKER
 import { PlanTemplate } from "./types";
 import { listInstalledTemplateManifests } from "@/src/services/extensions/store";
 import { TemplateExtensionManifest } from "@/src/services/extensions/types";
 
-const BUILTIN_TEMPLATES: PlanTemplate[] = [
-  basicTemplate,
-  standardTemplate,
-  oddsFocusedTemplate,
-  comprehensiveTemplate,
-  // DOMAIN_TEMPLATE_REGISTRATION_MARKER
-];
+type DomainTemplateModule = {
+  DOMAIN_TEMPLATE_ENTRIES?: PlanTemplate[];
+};
+
+function collectBuiltinTemplates(): PlanTemplate[] {
+  const modules = import.meta.glob("./templates/*/index.ts", { eager: true }) as Record<
+    string,
+    DomainTemplateModule
+  >;
+  const discovered = Object.values(modules).flatMap((module) =>
+    Array.isArray(module.DOMAIN_TEMPLATE_ENTRIES) ? module.DOMAIN_TEMPLATE_ENTRIES : [],
+  );
+  const seen = new Set<string>();
+  return discovered.filter((template) => {
+    const id = typeof template?.id === "string" ? template.id.trim() : "";
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+const BUILTIN_TEMPLATES: PlanTemplate[] = collectBuiltinTemplates();
 
 function manifestToTemplate(manifest: TemplateExtensionManifest): PlanTemplate {
   return {
@@ -59,6 +67,15 @@ export function getPlanTemplateById(id: string): PlanTemplate | null {
 
 export function hasPlanTemplate(id: string): boolean {
   return !!getPlanTemplateById(id);
+}
+
+function getDefaultTemplate(): PlanTemplate {
+  const preferred =
+    BUILTIN_TEMPLATES.find((template) => template.id === "standard") || BUILTIN_TEMPLATES[0];
+  if (!preferred) {
+    throw new Error("No built-in plan templates discovered under skills/planner/templates.");
+  }
+  return preferred;
 }
 
 export function getTemplateRequirements(templateId: string): {
@@ -116,7 +133,7 @@ export async function executeSelectPlanTemplate(args: { templateType: string; la
   const { templateType, language, includeAnimations } = args;
   const isZh = language === 'zh';
 
-  const template = getPlanTemplateById(templateType) || standardTemplate;
+  const template = getPlanTemplateById(templateType) || getDefaultTemplate();
   const segments = template.getSegments(isZh);
 
   if (!includeAnimations) {

@@ -1,14 +1,3 @@
-import {
-  footballPlannerAutonomousAgent,
-  footballPlannerTemplateAgent,
-  generalAgent,
-  oddsAgent,
-  overviewAgent,
-  predictionAgent,
-  statsAgent,
-  tacticalAgent,
-} from './domains/football';
-// DOMAIN_AGENT_IMPORT_MARKER
 import { plannerTemplateAgent } from './planner_template';
 import { plannerAutonomousAgent } from './planner_autonomous';
 import { tagAgent } from './tag';
@@ -19,38 +8,52 @@ import { buildAnalysisPrompt } from './utils';
 import { getInstalledAgentManifest, listInstalledAgentManifests } from '@/src/services/extensions/store';
 import { AgentExtensionManifest } from '@/src/services/extensions/types';
 
+type DomainAgentModule = {
+  DOMAIN_AGENT_ENTRIES?: Record<string, AgentConfig>;
+  DOMAIN_AGENT_VERSION_ENTRIES?: Record<string, string>;
+};
+
+function collectBuiltinDomainAgentEntries() {
+  const modules = import.meta.glob('./domains/*/index.ts', { eager: true }) as Record<
+    string,
+    DomainAgentModule
+  >;
+  const agents: Record<string, AgentConfig> = {};
+  const versions: Record<string, string> = {};
+
+  Object.values(modules).forEach((module) => {
+    if (module.DOMAIN_AGENT_ENTRIES && typeof module.DOMAIN_AGENT_ENTRIES === 'object') {
+      Object.assign(agents, module.DOMAIN_AGENT_ENTRIES);
+    }
+    if (
+      module.DOMAIN_AGENT_VERSION_ENTRIES &&
+      typeof module.DOMAIN_AGENT_VERSION_ENTRIES === 'object'
+    ) {
+      Object.assign(versions, module.DOMAIN_AGENT_VERSION_ENTRIES);
+    }
+  });
+
+  return { agents, versions };
+}
+
+const domainAgentEntries = collectBuiltinDomainAgentEntries();
+
 export const BUILTIN_AGENTS: Record<string, AgentConfig> = {
-  overview: overviewAgent,
-  stats: statsAgent,
-  tactical: tacticalAgent,
-  prediction: predictionAgent,
-  general: generalAgent,
   planner_template: plannerTemplateAgent,
   planner_autonomous: plannerAutonomousAgent,
-  football_planner_template: footballPlannerTemplateAgent,
-  football_planner_autonomous: footballPlannerAutonomousAgent,
   tag: tagAgent,
   summary: summaryAgent,
-  odds: oddsAgent,
   animation: animationAgent,
-  // DOMAIN_AGENT_REGISTRATION_MARKER
+  ...domainAgentEntries.agents,
 };
 
 export const BUILTIN_AGENT_VERSIONS: Record<string, string> = {
-  overview: '1.0.0',
-  stats: '1.0.0',
-  tactical: '1.0.0',
-  prediction: '1.0.0',
-  general: '1.0.0',
   planner_template: '1.0.0',
   planner_autonomous: '1.0.0',
-  football_planner_template: '1.0.0',
-  football_planner_autonomous: '1.0.0',
   tag: '1.0.0',
   summary: '1.0.0',
-  odds: '1.0.0',
   animation: '1.0.0',
-  // DOMAIN_AGENT_VERSION_MARKER
+  ...domainAgentEntries.versions,
 };
 
 function buildManifestAgent(manifest: AgentExtensionManifest): AgentConfig {
@@ -100,7 +103,9 @@ export function getAgent(id: string): AgentConfig {
   if (BUILTIN_AGENTS[id]) {
     return BUILTIN_AGENTS[id];
   }
-  return getInstalledAgentConfig(id) || BUILTIN_AGENTS['general'];
+  const fallbackAgent =
+    BUILTIN_AGENTS['general'] || BUILTIN_AGENTS['planner_template'] || Object.values(BUILTIN_AGENTS)[0];
+  return getInstalledAgentConfig(id) || fallbackAgent;
 }
 
 export * from './types';

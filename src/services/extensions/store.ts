@@ -16,7 +16,8 @@ import {
   validateTemplateManifest,
 } from "./validation";
 
-const EXTENSION_STORE_KEY = "matchflow_extension_store_v1";
+const EXTENSION_STORE_KEY = "matchflow_extension_store_v2";
+let extensionStoreCache: ExtensionStore | null = null;
 
 function cloneEmptyStore(): ExtensionStore {
   return {
@@ -24,6 +25,15 @@ function cloneEmptyStore(): ExtensionStore {
     agents: {},
     skills: {},
     templates: {},
+  };
+}
+
+function cloneStore(store: ExtensionStore): ExtensionStore {
+  return {
+    schemaVersion: store.schemaVersion,
+    agents: { ...store.agents },
+    skills: { ...store.skills },
+    templates: { ...store.templates },
   };
 }
 
@@ -110,14 +120,20 @@ function normalizeStore(input: any): ExtensionStore {
 }
 
 function readStore(): ExtensionStore {
+  if (extensionStoreCache) {
+    return extensionStoreCache;
+  }
   if (typeof localStorage === "undefined") {
-    return cloneEmptyStore();
+    extensionStoreCache = cloneEmptyStore();
+    return extensionStoreCache;
   }
   const parsed = safeParseStore(localStorage.getItem(EXTENSION_STORE_KEY));
-  return normalizeStore(parsed);
+  extensionStoreCache = normalizeStore(parsed);
+  return extensionStoreCache;
 }
 
 function writeStore(store: ExtensionStore) {
+  extensionStoreCache = store;
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(EXTENSION_STORE_KEY, JSON.stringify(store));
 }
@@ -127,10 +143,11 @@ function shouldReplaceVersion(existingVersion: string, incomingVersion: string):
 }
 
 export function getExtensionStore(): ExtensionStore {
-  return readStore();
+  return cloneStore(readStore());
 }
 
 export function clearExtensionStore() {
+  extensionStoreCache = cloneEmptyStore();
   if (typeof localStorage === "undefined") return;
   localStorage.removeItem(EXTENSION_STORE_KEY);
 }

@@ -5,7 +5,6 @@ const ROOT = process.cwd();
 
 const PATHS = {
   domainsRoot: "src/services/domains/modules",
-  modulesIndex: "src/services/domains/modules/index.ts",
   builtinModules: "src/services/domains/builtinModules.ts",
   aiPlanning: "src/services/ai/planning.ts",
   aiRoot: "src/services/ai.ts",
@@ -15,23 +14,15 @@ const PATHS = {
   agentsIndex: "src/agents/index.ts",
   skillsIndex: "src/skills/index.ts",
   plannerIndex: "src/skills/planner/index.ts",
-  uiPresenter: "src/services/domains/ui/presenter.ts",
+  uiPresenterRegistry: "src/services/domains/ui/registry.ts",
+  uiPresentersRoot: "src/services/domains/ui/presenters",
   animationParams: "src/services/remotion/templateParams.ts",
   animationTemplates: "src/services/remotion/templates.tsx",
+  plannerAdapterRegistry: "src/services/planner/adapters/registry.ts",
+  plannerAdapterDefault: "src/services/planner/adapters/default.ts",
+  plannerAdapterFootball: "src/services/planner/adapters/football.ts",
+  plannerBridge: "src/components/planner/AnalysisPlannerRuntimeBridge.tsx",
 };
-
-const MARKERS = [
-  { file: PATHS.modulesIndex, marker: "DOMAIN_MODULE_EXPORT_MARKER" },
-  { file: PATHS.builtinModules, marker: "DOMAIN_MODULE_IMPORT_MARKER" },
-  { file: PATHS.builtinModules, marker: "DOMAIN_MODULE_REGISTRATION_MARKER" },
-  { file: PATHS.agentsIndex, marker: "DOMAIN_AGENT_IMPORT_MARKER" },
-  { file: PATHS.agentsIndex, marker: "DOMAIN_AGENT_REGISTRATION_MARKER" },
-  { file: PATHS.agentsIndex, marker: "DOMAIN_AGENT_VERSION_MARKER" },
-  { file: PATHS.plannerIndex, marker: "DOMAIN_TEMPLATE_IMPORT_MARKER" },
-  { file: PATHS.plannerIndex, marker: "DOMAIN_TEMPLATE_REGISTRATION_MARKER" },
-  { file: PATHS.uiPresenter, marker: "DOMAIN_UI_PRESENTER_EXTENSIONS_MARKER" },
-  { file: PATHS.uiPresenter, marker: "DOMAIN_UI_PRESENTER_REGISTRATION_MARKER" },
-];
 
 function read(relPath) {
   return fs.readFileSync(path.join(ROOT, relPath), "utf8");
@@ -170,15 +161,6 @@ function extractBuiltinTemplateMeta() {
   return meta;
 }
 
-function verifyMarkers(errors) {
-  MARKERS.forEach(({ file, marker }) => {
-    const content = read(file);
-    if (!content.includes(marker)) {
-      errors.push(`[marker] Missing marker "${marker}" in ${file}`);
-    }
-  });
-}
-
 function verifyBuiltinConstants(errors) {
   const builtin = read(PATHS.builtinModules);
   if (!/LOCAL_DOMAIN_CASE_MINIMUM\s*=\s*3/.test(builtin)) {
@@ -186,6 +168,51 @@ function verifyBuiltinConstants(errors) {
   }
   if (!/DOMAIN_ANALYSIS_AGENT_MINIMUM\s*=\s*3/.test(builtin)) {
     errors.push(`[builtin] DOMAIN_ANALYSIS_AGENT_MINIMUM must be 3 in ${PATHS.builtinModules}`);
+  }
+}
+
+function verifyBuiltinModuleDiscoveryContracts(errors) {
+  const builtin = read(PATHS.builtinModules);
+  if (!builtin.includes('import.meta.glob("./modules/*/module.ts"')) {
+    errors.push(
+      `[builtin] ${PATHS.builtinModules} must auto-discover modules via import.meta.glob("./modules/*/module.ts")`,
+    );
+  }
+  if (!builtin.includes("DOMAIN_MODULE_FACTORIES")) {
+    errors.push(
+      `[builtin] ${PATHS.builtinModules} must read DOMAIN_MODULE_FACTORIES from module files`,
+    );
+  }
+}
+
+function verifyAgentRegistryContracts(errors) {
+  const content = read(PATHS.agentsIndex);
+  if (!content.includes("import.meta.glob('./domains/*/index.ts'")) {
+    errors.push(
+      `[agents] ${PATHS.agentsIndex} must auto-discover domain agents via import.meta.glob('./domains/*/index.ts')`,
+    );
+  }
+  if (!content.includes("DOMAIN_AGENT_ENTRIES")) {
+    errors.push(`[agents] ${PATHS.agentsIndex} must read DOMAIN_AGENT_ENTRIES from domain index files`);
+  }
+  if (!content.includes("DOMAIN_AGENT_VERSION_ENTRIES")) {
+    errors.push(
+      `[agents] ${PATHS.agentsIndex} must read DOMAIN_AGENT_VERSION_ENTRIES from domain index files`,
+    );
+  }
+}
+
+function verifyTemplateRegistryContracts(errors) {
+  const content = read(PATHS.plannerIndex);
+  if (!content.includes('import.meta.glob("./templates/*/index.ts"')) {
+    errors.push(
+      `[templates] ${PATHS.plannerIndex} must auto-discover template domains via import.meta.glob("./templates/*/index.ts")`,
+    );
+  }
+  if (!content.includes("DOMAIN_TEMPLATE_ENTRIES")) {
+    errors.push(
+      `[templates] ${PATHS.plannerIndex} must read DOMAIN_TEMPLATE_ENTRIES from template index files`,
+    );
   }
 }
 
@@ -236,6 +263,77 @@ function verifySharedAgentNeutrality(errors) {
       errors.push(`[agents] ${check.message}: ${check.path}`);
     }
   });
+}
+
+function verifyPlannerAdapterContracts(errors, domainDirs) {
+  [
+    PATHS.plannerAdapterRegistry,
+    PATHS.plannerAdapterDefault,
+    PATHS.plannerBridge,
+  ].forEach((relPath) => {
+    if (!fs.existsSync(path.join(ROOT, relPath))) {
+      errors.push(`[planner] Missing planner adapter file ${relPath}`);
+    }
+  });
+
+  const registryContent = read(PATHS.plannerAdapterRegistry);
+  if (!registryContent.includes("export function getPlannerAdapter")) {
+    errors.push(`[planner] ${PATHS.plannerAdapterRegistry} must export getPlannerAdapter(...)`);
+  }
+  if (!/return\s+defaultPlannerAdapter;/.test(registryContent)) {
+    errors.push(`[planner] ${PATHS.plannerAdapterRegistry} must fallback to defaultPlannerAdapter`);
+  }
+
+  if (domainDirs.includes("football")) {
+    if (!fs.existsSync(path.join(ROOT, PATHS.plannerAdapterFootball))) {
+      errors.push(`[planner] Missing football planner adapter file ${PATHS.plannerAdapterFootball}`);
+    } else if (!registryContent.includes("footballPlannerAdapter")) {
+      errors.push(`[planner] ${PATHS.plannerAdapterRegistry} must register footballPlannerAdapter`);
+    }
+  }
+
+  const bridgeContent = read(PATHS.plannerBridge);
+  if (!bridgeContent.includes("buildPlannerGraphForDomain")) {
+    errors.push(`[planner] ${PATHS.plannerBridge} must build graph via buildPlannerGraphForDomain(...)`);
+  }
+  if (!bridgeContent.includes("mapPlannerRuntimeForDomain")) {
+    errors.push(`[planner] ${PATHS.plannerBridge} must map runtime via mapPlannerRuntimeForDomain(...)`);
+  }
+  if (bridgeContent.includes("buildDefaultPlannerGraph(")) {
+    errors.push(`[planner] ${PATHS.plannerBridge} should not hardcode buildDefaultPlannerGraph(...)`);
+  }
+}
+
+function verifyUiPresenterRegistryContracts(errors) {
+  const registryContent = read(PATHS.uiPresenterRegistry);
+  if (!registryContent.includes("import.meta.glob(\"./presenters/*.ts\"")) {
+    errors.push(
+      `[ui] ${PATHS.uiPresenterRegistry} must auto-discover presenters via import.meta.glob("./presenters/*.ts")`,
+    );
+  }
+  if (!registryContent.includes("DOMAIN_UI_PRESENTER_ENTRIES")) {
+    errors.push(
+      `[ui] ${PATHS.uiPresenterRegistry} must read DOMAIN_UI_PRESENTER_ENTRIES from presenter modules`,
+    );
+  }
+}
+
+function extractDomainAgentKeys(domainId) {
+  const relPath = `src/agents/domains/${domainId}/index.ts`;
+  if (!fs.existsSync(path.join(ROOT, relPath))) {
+    return new Set();
+  }
+  const content = read(relPath);
+  return extractObjectKeys(content, "DOMAIN_AGENT_ENTRIES");
+}
+
+function extractDomainAgentVersionKeys(domainId) {
+  const relPath = `src/agents/domains/${domainId}/index.ts`;
+  if (!fs.existsSync(path.join(ROOT, relPath))) {
+    return new Set();
+  }
+  const content = read(relPath);
+  return extractObjectKeys(content, "DOMAIN_AGENT_VERSION_ENTRIES");
 }
 
 function verifyDomain(domainId, context) {
@@ -302,26 +400,61 @@ function verifyDomain(domainId, context) {
     errors.push(`[cases] localCases.ts must provide >=3 case ids or caseMinimum-driven generation for "${domainId}"`);
   }
 
-  const factoryMatch = moduleContent.match(/export\s+function\s+([A-Za-z0-9_]+)\s*\(/);
-  const factoryName = factoryMatch ? factoryMatch[1] : null;
-  if (!factoryName) {
-    errors.push(`[module] Missing create factory export in ${moduleDir}/module.ts`);
+  if (!moduleContent.includes("DOMAIN_MODULE_FACTORIES")) {
+    errors.push(
+      `[module] ${moduleDir}/module.ts must export DOMAIN_MODULE_FACTORIES for auto registration`,
+    );
+  }
+
+  const presenterFile = `${PATHS.uiPresentersRoot}/${domainId}.ts`;
+  if (!fs.existsSync(path.join(ROOT, presenterFile))) {
+    errors.push(`[ui] Missing presenter file for "${domainId}": ${presenterFile}`);
   } else {
-    if (!context.modulesIndex.includes(`export * from "./${domainId}"`)) {
-      errors.push(`[registry] Missing modules export for "${domainId}" in ${PATHS.modulesIndex}`);
-    }
-    if (!context.builtinModules.includes(`${factoryName}(`)) {
-      errors.push(`[registry] Missing builtin module registration for "${domainId}" (${factoryName}) in ${PATHS.builtinModules}`);
+    const presenterContent = read(presenterFile);
+    if (!presenterContent.includes("DOMAIN_UI_PRESENTER_ENTRIES")) {
+      errors.push(
+        `[ui] ${presenterFile} must export DOMAIN_UI_PRESENTER_ENTRIES for auto registration`,
+      );
     }
   }
 
-  if (!context.uiPresenterKeys.has(domainId)) {
-    errors.push(`[ui] Missing UI presenter registration for "${domainId}" in ${PATHS.uiPresenter}`);
+  const domainAgentFile = `src/agents/domains/${domainId}/index.ts`;
+  if (!fs.existsSync(path.join(ROOT, domainAgentFile))) {
+    errors.push(`[agents] Missing domain agent index file: ${domainAgentFile}`);
+  } else {
+    const domainAgentContent = read(domainAgentFile);
+    if (!domainAgentContent.includes("DOMAIN_AGENT_ENTRIES")) {
+      errors.push(
+        `[agents] ${domainAgentFile} must export DOMAIN_AGENT_ENTRIES for auto registration`,
+      );
+    }
+    if (!domainAgentContent.includes("DOMAIN_AGENT_VERSION_ENTRIES")) {
+      errors.push(
+        `[agents] ${domainAgentFile} must export DOMAIN_AGENT_VERSION_ENTRIES for auto registration`,
+      );
+    }
+  }
+
+  const domainTemplateFile = `src/skills/planner/templates/${domainId}/index.ts`;
+  if (!fs.existsSync(path.join(ROOT, domainTemplateFile))) {
+    errors.push(`[templates] Missing domain template index file: ${domainTemplateFile}`);
+  } else {
+    const domainTemplateContent = read(domainTemplateFile);
+    if (!domainTemplateContent.includes("DOMAIN_TEMPLATE_ENTRIES")) {
+      errors.push(
+        `[templates] ${domainTemplateFile} must export DOMAIN_TEMPLATE_ENTRIES for auto registration`,
+      );
+    }
   }
 
   resources.agents.forEach((agentId) => {
     if (!context.agentKeys.has(agentId)) {
       errors.push(`[agents] resources.agents includes "${agentId}" but BUILTIN_AGENTS has no matching entry`);
+    }
+    if (!context.agentVersionKeys.has(agentId)) {
+      errors.push(
+        `[agents] resources.agents includes "${agentId}" but BUILTIN_AGENT_VERSIONS has no matching entry`,
+      );
     }
   });
 
@@ -361,16 +494,16 @@ function verifyDomain(domainId, context) {
 
 function run() {
   const errors = [];
-  verifyMarkers(errors);
   verifyBuiltinConstants(errors);
+  verifyBuiltinModuleDiscoveryContracts(errors);
   verifyPlanningRoutingContracts(errors);
   verifySharedAgentNeutrality(errors);
+  verifyAgentRegistryContracts(errors);
+  verifyTemplateRegistryContracts(errors);
+  verifyUiPresenterRegistryContracts(errors);
 
-  const modulesIndexContent = read(PATHS.modulesIndex);
-  const builtinModulesContent = read(PATHS.builtinModules);
   const agentsIndexContent = read(PATHS.agentsIndex);
   const skillsIndexContent = read(PATHS.skillsIndex);
-  const uiPresenterContent = read(PATHS.uiPresenter);
   const animationParamsContent = read(PATHS.animationParams);
   const animationTemplatesContent = read(PATHS.animationTemplates);
 
@@ -378,13 +511,32 @@ function run() {
     if (name === "shared") return false;
     return fs.existsSync(path.join(ROOT, PATHS.domainsRoot, name, "domain.ts"));
   });
+  verifyPlannerAdapterContracts(errors, domainDirs);
+
+  const domainAgentKeys = new Set();
+  const domainAgentVersionKeys = new Set();
+  domainDirs.forEach((domainId) => {
+    extractDomainAgentKeys(domainId).forEach((key) => domainAgentKeys.add(key));
+    extractDomainAgentVersionKeys(domainId).forEach((key) =>
+      domainAgentVersionKeys.add(key),
+    );
+  });
+
+  const sharedAgentKeys = extractObjectKeys(agentsIndexContent, "BUILTIN_AGENTS");
+  const sharedAgentVersionKeys = extractObjectKeys(
+    agentsIndexContent,
+    "BUILTIN_AGENT_VERSIONS",
+  );
+  const mergedAgentKeys = new Set([...sharedAgentKeys, ...domainAgentKeys]);
+  const mergedAgentVersionKeys = new Set([
+    ...sharedAgentVersionKeys,
+    ...domainAgentVersionKeys,
+  ]);
 
   const context = {
-    modulesIndex: modulesIndexContent,
-    builtinModules: builtinModulesContent,
-    agentKeys: extractObjectKeys(agentsIndexContent, "BUILTIN_AGENTS"),
+    agentKeys: mergedAgentKeys,
+    agentVersionKeys: mergedAgentVersionKeys,
     skillKeys: extractObjectKeys(skillsIndexContent, "BUILTIN_SKILL_DECLARATIONS"),
-    uiPresenterKeys: extractObjectKeys(uiPresenterContent, "BUILTIN_DOMAIN_UI_PRESENTERS"),
     templateMeta: extractBuiltinTemplateMeta(),
     animationTypeMap: extractAnimationTypeMap(animationParamsContent),
     remotionTemplateIds: extractTemplateRegistryIds(animationTemplatesContent),

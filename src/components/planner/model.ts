@@ -1,46 +1,16 @@
 import type { PlannerGraph, PlannerRuntimeState, PlannerStage } from "@/src/services/planner/runtime";
+import {
+  PLANNER_MACRO_STAGE_SEQUENCE,
+  buildPlannerGraphFromSegments,
+  getPlannerMacroStageLabel,
+  type PlannerLanguage,
+} from "@/src/services/planner/adapters/utils";
 
-export type PlannerLanguage = "zh" | "en";
+export type { PlannerLanguage };
 
 export type PlannerNodeVisualState = "pending" | "running" | "completed" | "failed" | "cancelled";
 
-export const MACRO_STAGE_SEQUENCE: PlannerStage[] = [
-  "booting",
-  "planning",
-  "segment_running",
-  "animation_generating",
-  "tag_generating",
-  "summary_generating",
-  "finalizing",
-  "completed",
-];
-
-const MACRO_STAGE_LABELS: Record<PlannerLanguage, Record<PlannerStage, string>> = {
-  en: {
-    booting: "Booting",
-    planning: "Planning",
-    segment_running: "Segment",
-    animation_generating: "Animation",
-    tag_generating: "Tags",
-    summary_generating: "Summary",
-    finalizing: "Finalizing",
-    completed: "Completed",
-    failed: "Failed",
-    cancelled: "Cancelled",
-  },
-  zh: {
-    booting: "启动",
-    planning: "规划",
-    segment_running: "分段执行",
-    animation_generating: "动画",
-    tag_generating: "标签",
-    summary_generating: "总结",
-    finalizing: "收尾",
-    completed: "完成",
-    failed: "失败",
-    cancelled: "取消",
-  },
-};
+export const MACRO_STAGE_SEQUENCE: PlannerStage[] = PLANNER_MACRO_STAGE_SEQUENCE;
 
 const STAGE_RANK: Record<PlannerStage, number> = {
   booting: 0,
@@ -56,7 +26,7 @@ const STAGE_RANK: Record<PlannerStage, number> = {
 };
 
 export function getMacroStageLabel(stage: PlannerStage, language: PlannerLanguage): string {
-  return MACRO_STAGE_LABELS[language][stage] || stage;
+  return getPlannerMacroStageLabel(stage, language);
 }
 
 export function buildDefaultPlannerGraph(
@@ -64,64 +34,8 @@ export function buildDefaultPlannerGraph(
   language: PlannerLanguage,
 ): PlannerGraph {
   const safeTotal = Math.max(0, Math.floor(totalSegments));
-  const nodes: PlannerGraph["nodes"] = [];
-  const edges: PlannerGraph["edges"] = [];
-
-  MACRO_STAGE_SEQUENCE.forEach((stage) => {
-    nodes.push({
-      id: `stage:${stage}`,
-      label: getMacroStageLabel(stage, language),
-      kind: "stage",
-      weight: 1,
-    });
-  });
-
-  for (let i = 0; i < safeTotal; i++) {
-    nodes.push({
-      id: `segment:${i}`,
-      label: language === "zh" ? `段 ${i + 1}` : `Seg ${i + 1}`,
-      kind: "segment",
-      weight: 1,
-    });
-  }
-
-  for (let i = 0; i < MACRO_STAGE_SEQUENCE.length - 1; i++) {
-    edges.push({
-      id: `edge:stage:${MACRO_STAGE_SEQUENCE[i]}->${MACRO_STAGE_SEQUENCE[i + 1]}`,
-      from: `stage:${MACRO_STAGE_SEQUENCE[i]}`,
-      to: `stage:${MACRO_STAGE_SEQUENCE[i + 1]}`,
-    });
-  }
-
-  if (safeTotal > 0) {
-    edges.push({
-      id: "edge:planning->segment:0",
-      from: "stage:planning",
-      to: "segment:0",
-    });
-
-    for (let i = 0; i < safeTotal - 1; i++) {
-      edges.push({
-        id: `edge:segment:${i}->segment:${i + 1}`,
-        from: `segment:${i}`,
-        to: `segment:${i + 1}`,
-      });
-    }
-
-    edges.push({
-      id: `edge:segment:${safeTotal - 1}->summary`,
-      from: `segment:${safeTotal - 1}`,
-      to: "stage:summary_generating",
-    });
-  } else {
-    edges.push({
-      id: "edge:planning->summary",
-      from: "stage:planning",
-      to: "stage:summary_generating",
-    });
-  }
-
-  return { nodes, edges };
+  const placeholderSegments = Array.from({ length: safeTotal }, () => ({}));
+  return buildPlannerGraphFromSegments(placeholderSegments, language);
 }
 
 function toCoreRuntimeStage(stage: PlannerStage): PlannerStage {

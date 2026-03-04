@@ -7,7 +7,7 @@ Scope: `MatchFlow/src` client-side domain extension workflow.
 
 This document introduces two automation tools for domain onboarding:
 
-1. A scaffold generator to create a complete domain skeleton and optional registrations.
+1. A scaffold generator to create a complete domain skeleton with auto-discovery contracts.
 2. A compliance checker to enforce go-live gates before merge.
 
 These tools are designed to reduce manual registry mistakes and improve repeatability.
@@ -17,7 +17,7 @@ These tools are designed to reduce manual registry mistakes and improve repeatab
 ## 2.1 Generate a new domain scaffold
 
 ```bash
-npm run domain:scaffold -- --id <domain_id> [--name "Domain Name"] [--no-register] [--force] [--dry-run]
+npm run domain:scaffold -- --id <domain_id> [--name "Domain Name"] [--force] [--dry-run]
 ```
 
 Examples:
@@ -25,7 +25,6 @@ Examples:
 ```bash
 npm run domain:scaffold -- --id risk_control --name "Risk Control Analysis"
 npm run domain:scaffold -- --id supply_chain --dry-run
-npm run domain:scaffold -- --id pricing --no-register
 ```
 
 Behavior:
@@ -33,8 +32,8 @@ Behavior:
 1. Creates domain module files under `src/services/domains/modules/<domainId>/`.
 2. Creates domain agents under `src/agents/domains/<domainId>/`.
 3. Creates planner templates under `src/skills/planner/templates/<domainId>/`.
-4. By default, auto-registers the new domain into module/agent/template/UI registries.
-5. Uses marker-based insertion to avoid brittle text replacement.
+4. Creates a UI presenter file under `src/services/domains/ui/presenters/<domainId>.ts`.
+5. Relies on runtime auto-discovery instead of marker-based shared-file patching.
 
 ## 2.2 Verify domain extension compliance
 
@@ -48,10 +47,11 @@ Behavior:
 2. Validates required file structure.
 3. Validates resource contract (templates/animations/agents/skills non-empty).
 4. Validates planner/terminal agents against domain resources.
-5. Validates built-in registry coverage:
-   - module export and builtin registration
-   - UI presenter registration
-   - agent/skill/template registration consistency
+5. Validates auto-discovery registry contracts:
+   - module discovery contract (`DOMAIN_MODULE_FACTORIES`)
+   - UI presenter discovery contract (`DOMAIN_UI_PRESENTER_ENTRIES`)
+   - agent/template discovery contracts (`DOMAIN_AGENT_ENTRIES`, `DOMAIN_AGENT_VERSION_ENTRIES`, `DOMAIN_TEMPLATE_ENTRIES`)
+   - agent/skill/template consistency against domain resources
 6. Validates animation contracts:
    - template `animationType` must map in `templateParams.ts`
    - mapped template IDs must be listed in `resources.animations`
@@ -63,22 +63,23 @@ Behavior:
    - `src/agents/planner_template.ts`, `src/agents/planner_autonomous.ts`, `src/agents/tag.ts` must avoid hardcoded football-only semantics
 9. Fails with non-zero exit code when any gate is violated.
 
-## 3. Marker-based Registry Slots
+## 3. Auto-discovery Registration Contracts
 
-The scaffold command patches these markers:
+The scaffold no longer patches shared registry files for domain onboarding.
+Built-in domain parts are now discovered by file convention:
 
-1. `DOMAIN_MODULE_EXPORT_MARKER` in `src/services/domains/modules/index.ts`
-2. `DOMAIN_MODULE_IMPORT_MARKER` in `src/services/domains/builtinModules.ts`
-3. `DOMAIN_MODULE_REGISTRATION_MARKER` in `src/services/domains/builtinModules.ts`
-4. `DOMAIN_AGENT_IMPORT_MARKER` in `src/agents/index.ts`
-5. `DOMAIN_AGENT_REGISTRATION_MARKER` in `src/agents/index.ts`
-6. `DOMAIN_AGENT_VERSION_MARKER` in `src/agents/index.ts`
-7. `DOMAIN_TEMPLATE_IMPORT_MARKER` in `src/skills/planner/index.ts`
-8. `DOMAIN_TEMPLATE_REGISTRATION_MARKER` in `src/skills/planner/index.ts`
-9. `DOMAIN_UI_PRESENTER_EXTENSIONS_MARKER` in `src/services/domains/ui/presenter.ts`
-10. `DOMAIN_UI_PRESENTER_REGISTRATION_MARKER` in `src/services/domains/ui/presenter.ts`
-
-Do not remove these markers unless the scaffold script is updated accordingly.
+1. Built-in modules:
+   - `src/services/domains/builtinModules.ts` auto-discovers `src/services/domains/modules/*/module.ts`
+   - each module file must export `DOMAIN_MODULE_FACTORIES`
+2. Domain agents:
+   - `src/agents/index.ts` auto-discovers `src/agents/domains/*/index.ts`
+   - each domain agent index must export `DOMAIN_AGENT_ENTRIES` and `DOMAIN_AGENT_VERSION_ENTRIES`
+3. Domain templates:
+   - `src/skills/planner/index.ts` auto-discovers `src/skills/planner/templates/*/index.ts`
+   - each template index must export `DOMAIN_TEMPLATE_ENTRIES`
+4. UI presenters:
+   - `src/services/domains/ui/registry.ts` auto-discovers `src/services/domains/ui/presenters/*.ts`
+   - each presenter module must export `DOMAIN_UI_PRESENTER_ENTRIES`
 
 ## 4. Recommended Workflow
 

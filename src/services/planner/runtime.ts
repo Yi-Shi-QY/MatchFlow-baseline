@@ -10,10 +10,16 @@ export type PlannerStage =
   | "failed"
   | "cancelled";
 
+export type PlannerRuntimeSource = "pipeline" | "context" | "bridge" | "resume";
+
 export interface PlannerRuntimeState {
   stage: PlannerStage;
   runId: string;
   timestamp: number;
+  stageStartedAt: number;
+  stageDurationMs: number;
+  eventSeq: number;
+  source?: PlannerRuntimeSource;
   segmentIndex: number;
   totalSegments: number;
   stageLabel?: string;
@@ -64,6 +70,10 @@ interface PlannerRuntimeStateInput {
   progressPercent?: number;
   errorMessage?: string;
   timestamp?: number;
+  stageStartedAt?: number;
+  stageDurationMs?: number;
+  eventSeq?: number;
+  source?: PlannerRuntimeSource;
 }
 
 function toSafeNonNegativeInt(value: number | undefined): number {
@@ -114,6 +124,21 @@ export function buildPlannerRuntimeState(input: PlannerRuntimeStateInput): Plann
   const segmentIndex = totalSegments > 0
     ? Math.min(toSafeNonNegativeInt(input.segmentIndex), totalSegments)
     : toSafeNonNegativeInt(input.segmentIndex);
+  const timestamp = typeof input.timestamp === "number" ? input.timestamp : Date.now();
+  const stageStartedAtRaw =
+    typeof input.stageStartedAt === "number" && Number.isFinite(input.stageStartedAt)
+      ? Math.floor(input.stageStartedAt)
+      : timestamp;
+  const stageStartedAt = Math.max(0, Math.min(stageStartedAtRaw, timestamp));
+  const stageDurationMs =
+    typeof input.stageDurationMs === "number" && Number.isFinite(input.stageDurationMs)
+      ? Math.max(0, Math.floor(input.stageDurationMs))
+      : Math.max(0, timestamp - stageStartedAt);
+  const eventSeq = toSafeNonNegativeInt(input.eventSeq);
+  const source =
+    typeof input.source === "string" && input.source.trim().length > 0
+      ? input.source
+      : undefined;
 
   const stageLabel =
     typeof input.stageLabel === "string" && input.stageLabel.trim().length > 0
@@ -144,7 +169,11 @@ export function buildPlannerRuntimeState(input: PlannerRuntimeStateInput): Plann
   return {
     stage: input.stage,
     runId: input.runId,
-    timestamp: typeof input.timestamp === "number" ? input.timestamp : Date.now(),
+    timestamp,
+    stageStartedAt,
+    stageDurationMs,
+    eventSeq,
+    source,
     segmentIndex,
     totalSegments,
     stageLabel,
