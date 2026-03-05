@@ -12,3 +12,12 @@ export interface AgentSkill {
   /** Function to execute the tools */
   execute?: (toolName: string, args: any) => Promise<any>;
 }
+
+export type BuiltinSkillExecutor = (args: any) => Promise<any>;
+
+export interface BuiltinSkillEntry {
+  id: string;
+  declaration: FunctionDeclaration;
+  execute: BuiltinSkillExecutor;
+  version?: string;
+}

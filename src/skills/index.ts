@@ -1,5 +1,4 @@
 import { FunctionDeclaration } from "@google/genai";
-import { calculatorDeclaration, executeCalculator } from "./calculator";
 import {
   getInstalledSkillManifest,
   listInstalledSkillManifests,
@@ -8,26 +7,64 @@ import {
   SkillRuntimeHttpJson,
   SkillRuntimeStaticResult,
 } from "@/src/services/extensions/types";
-import { executeSelectPlanTemplate, selectPlanTemplateDeclaration } from "./planner";
 import { getInstalledDomainPackManifest } from "@/src/services/domains/packStore";
 import { getSettings } from "@/src/services/settings";
+import type { BuiltinSkillEntry, BuiltinSkillExecutor } from "./types";
 
-type BuiltinSkillExecutor = (args: any) => Promise<any>;
-
-const BUILTIN_SKILL_DECLARATIONS: Record<string, FunctionDeclaration> = {
-  calculator: calculatorDeclaration,
-  select_plan_template: selectPlanTemplateDeclaration,
+type BuiltinSkillModule = {
+  BUILTIN_SKILL_ENTRIES?: BuiltinSkillEntry[];
 };
 
-const BUILTIN_SKILL_EXECUTORS: Record<string, BuiltinSkillExecutor> = {
-  calculator: executeCalculator,
-  select_plan_template: executeSelectPlanTemplate,
-};
+function collectBuiltinSkillEntries(): BuiltinSkillEntry[] {
+  const modules = import.meta.glob(
+    ["./general/**/*.ts", "./domains/**/*.ts"],
+    { eager: true },
+  ) as Record<string, BuiltinSkillModule>;
 
-export const BUILTIN_SKILL_VERSIONS: Record<string, string> = {
-  calculator: "1.0.0",
-  select_plan_template: "1.0.0",
-};
+  const entries = Object.values(modules).flatMap((module) =>
+    Array.isArray(module.BUILTIN_SKILL_ENTRIES) ? module.BUILTIN_SKILL_ENTRIES : [],
+  );
+
+  const byId = new Map<string, BuiltinSkillEntry>();
+  entries.forEach((entry) => {
+    const skillId = typeof entry?.id === "string" ? entry.id.trim() : "";
+    if (!skillId || !entry.declaration || typeof entry.execute !== "function") return;
+    if (byId.has(skillId)) {
+      console.warn(`[skills] Duplicate built-in skill id detected: ${skillId}`);
+      return;
+    }
+    byId.set(skillId, {
+      ...entry,
+      id: skillId,
+      version:
+        typeof entry.version === "string" && entry.version.trim().length > 0
+          ? entry.version.trim()
+          : "1.0.0",
+    });
+  });
+
+  return Array.from(byId.values());
+}
+
+const BUILTIN_SKILL_ENTRIES: BuiltinSkillEntry[] = collectBuiltinSkillEntries();
+
+const BUILTIN_SKILL_DECLARATIONS: Record<string, FunctionDeclaration> =
+  BUILTIN_SKILL_ENTRIES.reduce<Record<string, FunctionDeclaration>>((acc, entry) => {
+    acc[entry.id] = entry.declaration;
+    return acc;
+  }, {});
+
+const BUILTIN_SKILL_EXECUTORS: Record<string, BuiltinSkillExecutor> =
+  BUILTIN_SKILL_ENTRIES.reduce<Record<string, BuiltinSkillExecutor>>((acc, entry) => {
+    acc[entry.id] = entry.execute;
+    return acc;
+  }, {});
+
+export const BUILTIN_SKILL_VERSIONS: Record<string, string> =
+  BUILTIN_SKILL_ENTRIES.reduce<Record<string, string>>((acc, entry) => {
+    acc[entry.id] = entry.version || "1.0.0";
+    return acc;
+  }, {});
 
 function isPlainObject(input: any): input is Record<string, any> {
   return !!input && typeof input === "object" && !Array.isArray(input);

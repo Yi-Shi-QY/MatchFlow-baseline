@@ -1,0 +1,14 @@
+{
+  "scan": {
+    "title": "扫描赛事二维码",
+    "camera_permission_error": "无法访问摄像头，请在系统设置中授予权限。",
+    "invalid_qr": "无效的赛事分析二维码",
+    "scan_error": "扫描出错",
+    "requesting_permission": "正在请求摄像头权限...",
+    "no_permission_title": "无摄像头权限",
+    "no_permission_desc": "请在系统设置中允许应用访问摄像头，然后刷新页面重试。",
+    "refresh_retry": "刷新重试",
+    "scan_success": "扫描成功！正在跳转...",
+    "scan_hint": "将二维码放入框内即可扫描"
+  }
+}

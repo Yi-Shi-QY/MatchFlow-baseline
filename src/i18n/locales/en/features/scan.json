@@ -1,0 +1,14 @@
+{
+  "scan": {
+    "title": "Scan QR Code",
+    "camera_permission_error": "Cannot access camera. Please grant permission in system settings.",
+    "invalid_qr": "Invalid match analysis QR code",
+    "scan_error": "Scan error",
+    "requesting_permission": "Requesting camera permission...",
+    "no_permission_title": "No Camera Permission",
+    "no_permission_desc": "Please allow camera access in system settings and refresh the page.",
+    "refresh_retry": "Refresh & Retry",
+    "scan_success": "Scan successful! Redirecting...",
+    "scan_hint": "Place QR code within the frame to scan"
+  }
+}

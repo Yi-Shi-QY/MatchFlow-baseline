@@ -1,0 +1,13 @@
+{
+  "match": {
+    "generate_animation": "生成演示动画（可能会增加分析时间）",
+    "data_visualization": "数据可视化",
+    "view_remotion_code": "查看生成的 Remotion 代码",
+    "regen_animation_placeholder": "输入指令重新生成动画（例如：把颜色换成红色）",
+    "regenerate": "重新生成",
+    "download_video": "下载视频",
+    "downloading_video": "录制中...",
+    "download_video_failed": "导出动画视频失败",
+    "download_video_unsupported": "当前设备或浏览器不支持视频导出。"
+  }
+}

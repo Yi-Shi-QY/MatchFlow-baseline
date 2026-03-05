@@ -1,0 +1,12 @@
+{
+  "share": {
+    "invalid_link": "无效链接",
+    "return_home": "返回首页",
+    "home_win": "主胜",
+    "away_win": "客胜",
+    "received_config": "收到一个赛事分析配置",
+    "config_desc": "包含球队信息、近期状态和自定义数据",
+    "import_save": "导入并保存到历史",
+    "import_analyze": "导入数据并开始分析"
+  }
+}

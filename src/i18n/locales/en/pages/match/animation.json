@@ -1,0 +1,13 @@
+{
+  "match": {
+    "generate_animation": "Generate Demo Animation (May increase analysis time)",
+    "data_visualization": "Data Visualization",
+    "view_remotion_code": "View Generated Remotion Code",
+    "regen_animation_placeholder": "Enter instruction to regenerate animation (e.g., Change color to red)",
+    "regenerate": "Regenerate",
+    "download_video": "Download Video",
+    "downloading_video": "Recording video...",
+    "download_video_failed": "Failed to export animation video",
+    "download_video_unsupported": "Current device or browser does not support video export."
+  }
+}

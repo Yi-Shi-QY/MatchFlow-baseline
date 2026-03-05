@@ -1,6 +1,6 @@
 import { BUILTIN_AGENTS, BUILTIN_AGENT_VERSIONS } from "@/src/agents";
 import { BUILTIN_SKILL_VERSIONS, getAvailableSkills } from "@/src/skills";
-import { listPlanTemplates } from "@/src/skills/planner";
+import { listPlanTemplates } from "@/src/skills/domains/planner";
 
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 

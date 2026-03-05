@@ -1,6 +1,9 @@
 import { hasAgent } from "@/src/agents";
 import { hasSkill } from "@/src/skills";
-import { getTemplateRequirements, hasPlanTemplate } from "@/src/skills/planner";
+import {
+  getTemplateRequirements,
+  hasPlanTemplate,
+} from "@/src/skills/domains/planner";
 import { getActiveAnalysisDomain } from "@/src/services/domains/registry";
 import { getInstalledDomainPackManifest } from "@/src/services/domains/packStore";
 import { getSettings } from "@/src/services/settings";

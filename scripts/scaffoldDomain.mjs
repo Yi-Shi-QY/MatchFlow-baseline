@@ -140,24 +140,50 @@ function buildLocalePatch(config, language) {
 
 function upsertLocaleFile(relPath, patch, dryRun) {
   const abs = path.join(ROOT, relPath);
-  if (!fs.existsSync(abs)) return;
-
-  const raw = fs.readFileSync(abs, "utf8").replace(/^\uFEFF/, "");
-  const parsed = JSON.parse(raw);
+  const parsed = fs.existsSync(abs)
+    ? JSON.parse(fs.readFileSync(abs, "utf8").replace(/^\uFEFF/, ""))
+    : {};
   mergeIfMissing(parsed, patch);
 
   if (dryRun) {
-    console.log(`[dry-run] update ${relPath}`);
+    console.log(`[dry-run] upsert ${relPath}`);
     return;
   }
 
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
-  console.log(`update ${relPath}`);
+  console.log(`upsert ${relPath}`);
 }
 
 function updateLocaleFiles(config, dryRun) {
-  upsertLocaleFile("src/i18n/locales/en.json", buildLocalePatch(config, "en"), dryRun);
-  upsertLocaleFile("src/i18n/locales/zh.json", buildLocalePatch(config, "zh"), dryRun);
+  const perLanguagePatches = [
+    { language: "en", patch: buildLocalePatch(config, "en") },
+    { language: "zh", patch: buildLocalePatch(config, "zh") },
+  ];
+
+  perLanguagePatches.forEach(({ language, patch }) => {
+    Object.entries(patch).forEach(([moduleKey, modulePatch]) => {
+      if (moduleKey === "domains") {
+        upsertLocaleFile(
+          `src/i18n/locales/${language}/domains/${config.id}.json`,
+          { domains: { [config.id]: modulePatch[config.id] } },
+          dryRun,
+        );
+        return;
+      }
+
+      if (moduleKey === config.id) {
+        upsertLocaleFile(
+          `src/i18n/locales/${language}/domainProfiles/${config.id}.json`,
+          { [config.id]: modulePatch },
+          dryRun,
+        );
+        return;
+      }
+
+      upsertLocaleFile(`src/i18n/locales/${language}/${moduleKey}.json`, { [moduleKey]: modulePatch }, dryRun);
+    });
+  });
 }
 
 function simpleRoleAgent(id, varName, roleEn, roleZh, deps) {
@@ -194,7 +220,7 @@ function buildTemplateFile(varName, templateId, name, description, rule, segment
     },`)
     .join("\n");
 
-  return `import { PlanTemplate } from "../../types";
+  return `import { PlanTemplate } from "../../planner/types";
 
 export const ${varName}: PlanTemplate = {
   id: "${templateId}",
@@ -572,7 +598,7 @@ export const DOMAIN_AGENT_VERSION_ENTRIES: Record<string, string> = {
 };
 `;
 
-  files[`src/skills/planner/templates/${id}/basic.ts`] = buildTemplateFile(
+  files[`src/skills/domains/${id}/planner/basic.ts`] = buildTemplateFile(
     templateVars.basic,
     templateIds.basic,
     `${name} Basic Template`,
@@ -601,7 +627,7 @@ export const DOMAIN_AGENT_VERSION_ENTRIES: Record<string, string> = {
     [agentIds.overview, agentIds.prediction],
   );
 
-  files[`src/skills/planner/templates/${id}/standard.ts`] = buildTemplateFile(
+  files[`src/skills/domains/${id}/planner/standard.ts`] = buildTemplateFile(
     templateVars.standard,
     templateIds.standard,
     `${name} Standard Template`,
@@ -639,7 +665,7 @@ export const DOMAIN_AGENT_VERSION_ENTRIES: Record<string, string> = {
     [agentIds.overview, agentIds.analysis, agentIds.prediction],
   );
 
-  files[`src/skills/planner/templates/${id}/focused.ts`] = buildTemplateFile(
+  files[`src/skills/domains/${id}/planner/focused.ts`] = buildTemplateFile(
     templateVars.focused,
     templateIds.focused,
     `${name} Focused Template`,
@@ -668,7 +694,7 @@ export const DOMAIN_AGENT_VERSION_ENTRIES: Record<string, string> = {
     [agentIds.analysis, agentIds.prediction],
   );
 
-  files[`src/skills/planner/templates/${id}/comprehensive.ts`] = buildTemplateFile(
+  files[`src/skills/domains/${id}/planner/comprehensive.ts`] = buildTemplateFile(
     templateVars.comprehensive,
     templateIds.comprehensive,
     `${name} Comprehensive Template`,
@@ -715,7 +741,7 @@ export const DOMAIN_AGENT_VERSION_ENTRIES: Record<string, string> = {
     [agentIds.overview, agentIds.analysis, agentIds.prediction],
   );
 
-  files[`src/skills/planner/templates/${id}/index.ts`] = `import { PlanTemplate } from "../../types";
+  files[`src/skills/domains/${id}/planner/index.ts`] = `import { PlanTemplate } from "../../planner/types";
 import { ${templateVars.basic} } from "./basic";
 import { ${templateVars.standard} } from "./standard";
 import { ${templateVars.focused} } from "./focused";

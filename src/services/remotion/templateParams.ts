@@ -1,4 +1,5 @@
 import { TEMPLATES } from "./templates";
+import type { DomainAnimationMapping } from "./animationMappings/types";
 
 export type AnimationType =
   | "stats"
@@ -38,14 +39,49 @@ const ANIMATION_TO_TEMPLATE: Record<string, string> = {
   odds: "odds-card",
 };
 
-const DOMAIN_ANIMATION_TO_TEMPLATE: Record<string, Record<string, string>> = {
-  fengshui: {
-    stats: "fengshui-qi-radar",
-    comparison: "fengshui-qi-radar",
-    tactical: "fengshui-compass-grid",
-    odds: "fengshui-cycle-board",
-  },
+type DomainAnimationMappingModule = {
+  DOMAIN_ANIMATION_MAPPING_ENTRIES?: DomainAnimationMapping[];
 };
+
+function collectDomainAnimationMappings(): Record<string, Record<string, string>> {
+  const modules = import.meta.glob("./animationMappings/modules/*.ts", {
+    eager: true,
+  }) as Record<string, DomainAnimationMappingModule>;
+
+  const entries = Object.values(modules).flatMap((module) =>
+    Array.isArray(module.DOMAIN_ANIMATION_MAPPING_ENTRIES)
+      ? module.DOMAIN_ANIMATION_MAPPING_ENTRIES
+      : [],
+  );
+
+  const mapping: Record<string, Record<string, string>> = {};
+  entries.forEach((entry) => {
+    const domainId = normalizeDomainId(entry?.domainId);
+    if (!domainId) return;
+    if (!entry.animationToTemplate || typeof entry.animationToTemplate !== "object") return;
+
+    const normalizedMap: Record<string, string> = {};
+    Object.entries(entry.animationToTemplate).forEach(([animationType, templateId]) => {
+      if (typeof animationType !== "string" || animationType.trim().length === 0) return;
+      if (typeof templateId !== "string" || templateId.trim().length === 0) return;
+      normalizedMap[animationType.trim()] = templateId.trim();
+    });
+
+    if (!mapping[domainId]) {
+      mapping[domainId] = normalizedMap;
+      return;
+    }
+    mapping[domainId] = {
+      ...mapping[domainId],
+      ...normalizedMap,
+    };
+  });
+
+  return mapping;
+}
+
+const DOMAIN_ANIMATION_TO_TEMPLATE: Record<string, Record<string, string>> =
+  collectDomainAnimationMappings();
 
 export interface TemplateResolveOptions {
   domainId?: string | null;
@@ -186,28 +222,8 @@ export function validateAndNormalizeAnimationPayload(
     }
   }
 
-  if (payload.templateId === "stats-comparison") {
-    if (!Number.isFinite(payload.params.homeValue)) errors.push("homeValue must be a finite number");
-    if (!Number.isFinite(payload.params.awayValue)) errors.push("awayValue must be a finite number");
-  }
-  if (payload.templateId === "odds-card") {
-    if (!Number.isFinite(payload.params?.had?.h)) errors.push("had.h must be a finite number");
-    if (!Number.isFinite(payload.params?.had?.d)) errors.push("had.d must be a finite number");
-    if (!Number.isFinite(payload.params?.had?.a)) errors.push("had.a must be a finite number");
-  }
-  if (payload.templateId === "fengshui-qi-radar") {
-    if (!Number.isFinite(payload.params?.qiFlowScore)) errors.push("qiFlowScore must be a finite number");
-    if (!Number.isFinite(payload.params?.harmonyScore)) errors.push("harmonyScore must be a finite number");
-    if (!Number.isFinite(payload.params?.pressureScore)) errors.push("pressureScore must be a finite number");
-  }
-  if (payload.templateId === "fengshui-cycle-board") {
-    if (!Number.isFinite(payload.params?.yearlyInfluence)) {
-      errors.push("yearlyInfluence must be a finite number");
-    }
-    if (!Number.isFinite(payload.params?.monthlyInfluence)) {
-      errors.push("monthlyInfluence must be a finite number");
-    }
-  }
+  const templateValidationErrors = template.validateParams?.(payload.params) || [];
+  errors.push(...templateValidationErrors);
 
   return {
     isValid: errors.length === 0,
@@ -231,54 +247,12 @@ export function buildFallbackAnimationPayload(
   const declaration = getTemplateDeclaration(animationType, options);
   const template = TEMPLATES[declaration.templateId];
 
-  let fallbackParams: any = template.example;
-  if (declaration.templateId === "stats-comparison") {
-    fallbackParams = {
-      ...template.example,
-      homeLabel: homeName || "Home Team",
-      awayLabel: awayName || "Away Team",
-      metric: "Comparison",
-      homeValue: 0,
-      awayValue: 0,
-    };
-  }
-  if (declaration.templateId === "odds-card") {
-    fallbackParams = {
-      ...template.example,
-      homeLabel: homeName || "HOME",
-      awayLabel: awayName || "AWAY",
-    };
-  }
-  if (declaration.templateId === "fengshui-qi-radar") {
-    fallbackParams = {
-      ...template.example,
-      subjectLabel: homeName || "Subject",
-      referenceLabel: awayName || "Reference",
-      metric: "Qi Structure",
-      qiFlowScore: 0,
-      harmonyScore: 0,
-      pressureScore: 0,
-    };
-  }
-  if (declaration.templateId === "fengshui-compass-grid") {
-    fallbackParams = {
-      ...template.example,
-      direction: "South",
-      activeSector: "Center Axis",
-      supportSector: "Support Sector",
-      cautionSector: "Caution Sector",
-      note: "",
-    };
-  }
-  if (declaration.templateId === "fengshui-cycle-board") {
-    fallbackParams = {
-      ...template.example,
-      yearlyInfluence: 0,
-      monthlyInfluence: 0,
-      favorableWindow: "Favorable window",
-      cautionWindow: "Caution window",
-    };
-  }
+  const fallbackParams =
+    template.buildFallbackParams?.({
+      homeName,
+      awayName,
+      baseExample: template.example,
+    }) ?? template.example;
 
   const normalizedParams = template.fillParams(fallbackParams);
   return {
@@ -301,30 +275,12 @@ export function buildTemplatePromptSpec(
   const declaration = getTemplateDeclaration(animationType, options);
   const template = TEMPLATES[declaration.templateId];
 
-  const prefillExample = (() => {
-    if (declaration.templateId === "stats-comparison") {
-      return {
-        ...template.example,
-        homeLabel: homeName || "Home Team",
-        awayLabel: awayName || "Away Team",
-      };
-    }
-    if (declaration.templateId === "odds-card") {
-      return {
-        ...template.example,
-        homeLabel: homeName || "HOME",
-        awayLabel: awayName || "AWAY",
-      };
-    }
-    if (declaration.templateId === "fengshui-qi-radar") {
-      return {
-        ...template.example,
-        subjectLabel: homeName || "Subject",
-        referenceLabel: awayName || "Reference",
-      };
-    }
-    return template.example;
-  })();
+  const prefillExample =
+    template.buildPromptExample?.({
+      homeName,
+      awayName,
+      baseExample: template.example,
+    }) ?? template.example;
 
   return [
     `Animation Type: ${animationType}`,

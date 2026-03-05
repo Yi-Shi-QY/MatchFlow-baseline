@@ -1,0 +1,21 @@
+{
+  "home": {
+    "welcome": "欢迎使用 MatchFlow",
+    "start_analysis": "开始分析",
+    "history": "历史记录",
+    "saved_matches": "已保存赛事",
+    "history_analysis": "历史分析",
+    "sort_newest": "最新",
+    "sort_oldest": "最早",
+    "clear": "清空",
+    "search_placeholder": "搜索球队或联赛...",
+    "analyzing": "分析中...",
+    "completed": "已完成",
+    "no_records_found": "未找到匹配 \"{{query}}\" 的记录",
+    "popular_matches": "热门赛事",
+    "live_upcoming": "直播与即将开始",
+    "refresh_matches": "刷新比赛",
+    "click_to_analyze": "点击开始分析",
+    "no_match_data": "暂无赛事数据"
+  }
+}

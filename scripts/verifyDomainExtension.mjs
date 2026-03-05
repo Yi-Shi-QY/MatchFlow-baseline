@@ -13,11 +13,15 @@ const PATHS = {
   sharedTagAgent: "src/agents/tag.ts",
   agentsIndex: "src/agents/index.ts",
   skillsIndex: "src/skills/index.ts",
-  plannerIndex: "src/skills/planner/index.ts",
+  skillsGeneralRoot: "src/skills/general",
+  skillsDomainsRoot: "src/skills/domains",
+  plannerIndex: "src/skills/domains/planner/index.ts",
   uiPresenterRegistry: "src/services/domains/ui/registry.ts",
   uiPresentersRoot: "src/services/domains/ui/presenters",
   animationParams: "src/services/remotion/templateParams.ts",
   animationTemplates: "src/services/remotion/templates.tsx",
+  animationTemplateModulesRoot: "src/services/remotion/templates/modules",
+  animationMappingModulesRoot: "src/services/remotion/animationMappings/modules",
   plannerAdapterRegistry: "src/services/planner/adapters/registry.ts",
   plannerAdapterDefault: "src/services/planner/adapters/default.ts",
   plannerAdapterFootball: "src/services/planner/adapters/football.ts",
@@ -127,21 +131,38 @@ function extractAnimationTypeMap(content) {
 function extractTemplateRegistryIds(content) {
   const match = content.match(/export\s+const\s+TEMPLATES[\s\S]*?=\s*\{([\s\S]*?)\};/);
   const ids = new Set();
-  if (!match) return ids;
-  const keyRegex = /["']([^"']+)["']\s*:/g;
-  let keyMatch = keyRegex.exec(match[1]);
-  while (keyMatch) {
-    ids.add(keyMatch[1]);
-    keyMatch = keyRegex.exec(match[1]);
+  if (match) {
+    const keyRegex = /["']([^"']+)["']\s*:/g;
+    let keyMatch = keyRegex.exec(match[1]);
+    while (keyMatch) {
+      ids.add(keyMatch[1]);
+      keyMatch = keyRegex.exec(match[1]);
+    }
   }
+
+  if (ids.size > 0) return ids;
+
+  const moduleFiles = listFilesRecursively(PATHS.animationTemplateModulesRoot).filter((absPath) => {
+    const rel = path.relative(ROOT, absPath).replace(/\\/g, "/");
+    return rel.endsWith(".ts") || rel.endsWith(".tsx");
+  });
+
+  moduleFiles.forEach((absPath) => {
+    const fileContent = fs.readFileSync(absPath, "utf8");
+    Array.from(fileContent.matchAll(/\bid\s*:\s*["']([^"']+)["']/g)).forEach((idMatch) => {
+      if (idMatch?.[1]) ids.add(idMatch[1]);
+    });
+  });
+
   return ids;
 }
 
 function extractBuiltinTemplateMeta() {
-  const root = "src/skills/planner/templates";
+  const root = "src/skills/domains";
   const files = listFilesRecursively(root).filter((absPath) => {
     const rel = path.relative(ROOT, absPath).replace(/\\/g, "/");
-    return rel.endsWith(".ts") && !rel.endsWith("/index.ts");
+    if (!/^src\/skills\/domains\/[^/]+\/planner\/[^/]+\.ts$/.test(rel)) return false;
+    return !rel.endsWith("/planner/index.ts");
   });
 
   const meta = new Map();
@@ -159,6 +180,30 @@ function extractBuiltinTemplateMeta() {
   });
 
   return meta;
+}
+
+function extractBuiltinSkillIds(content) {
+  const literalIds = Array.from(
+    extractObjectKeys(content, "BUILTIN_SKILL_DECLARATIONS"),
+  ).filter((id) => /^[a-z][a-z0-9_]*$/.test(id));
+  const ids = new Set(literalIds);
+  if (ids.size > 0) return ids;
+
+  const roots = [PATHS.skillsGeneralRoot, PATHS.skillsDomainsRoot];
+  roots.forEach((relRoot) => {
+    const files = listFilesRecursively(relRoot).filter((absPath) => {
+      const rel = path.relative(ROOT, absPath).replace(/\\/g, "/");
+      return rel.endsWith(".ts") || rel.endsWith(".tsx");
+    });
+    files.forEach((absPath) => {
+      const fileContent = fs.readFileSync(absPath, "utf8");
+      Array.from(fileContent.matchAll(/\bid\s*:\s*["']([^"']+)["']/g)).forEach((idMatch) => {
+        if (idMatch?.[1]) ids.add(idMatch[1]);
+      });
+    });
+  });
+
+  return ids;
 }
 
 function verifyBuiltinConstants(errors) {
@@ -202,11 +247,25 @@ function verifyAgentRegistryContracts(errors) {
   }
 }
 
+function verifySkillRegistryContracts(errors) {
+  const content = read(PATHS.skillsIndex);
+  if (!content.includes('["./general/**/*.ts", "./domains/**/*.ts"]')) {
+    errors.push(
+      `[skills] ${PATHS.skillsIndex} must auto-discover built-in skills via import.meta.glob(["./general/**/*.ts", "./domains/**/*.ts"], ...)`,
+    );
+  }
+  if (!content.includes("BUILTIN_SKILL_ENTRIES")) {
+    errors.push(
+      `[skills] ${PATHS.skillsIndex} must read BUILTIN_SKILL_ENTRIES from skill module files`,
+    );
+  }
+}
+
 function verifyTemplateRegistryContracts(errors) {
   const content = read(PATHS.plannerIndex);
-  if (!content.includes('import.meta.glob("./templates/*/index.ts"')) {
+  if (!content.includes('import.meta.glob("../*/planner/index.ts"')) {
     errors.push(
-      `[templates] ${PATHS.plannerIndex} must auto-discover template domains via import.meta.glob("./templates/*/index.ts")`,
+      `[templates] ${PATHS.plannerIndex} must auto-discover template domains via import.meta.glob("../*/planner/index.ts")`,
     );
   }
   if (!content.includes("DOMAIN_TEMPLATE_ENTRIES")) {
@@ -314,6 +373,32 @@ function verifyUiPresenterRegistryContracts(errors) {
   if (!registryContent.includes("DOMAIN_UI_PRESENTER_ENTRIES")) {
     errors.push(
       `[ui] ${PATHS.uiPresenterRegistry} must read DOMAIN_UI_PRESENTER_ENTRIES from presenter modules`,
+    );
+  }
+}
+
+function verifyRemotionRegistryContracts(errors) {
+  const templatesContent = read(PATHS.animationTemplates);
+  if (!templatesContent.includes('import.meta.glob("./templates/modules/**/*.tsx"')) {
+    errors.push(
+      `[animation] ${PATHS.animationTemplates} must auto-discover animation templates via import.meta.glob("./templates/modules/**/*.tsx")`,
+    );
+  }
+  if (!templatesContent.includes("ANIMATION_TEMPLATE_ENTRIES")) {
+    errors.push(
+      `[animation] ${PATHS.animationTemplates} must read ANIMATION_TEMPLATE_ENTRIES from template module files`,
+    );
+  }
+
+  const paramsContent = read(PATHS.animationParams);
+  if (!paramsContent.includes('import.meta.glob("./animationMappings/modules/*.ts"')) {
+    errors.push(
+      `[animation] ${PATHS.animationParams} must auto-discover domain animation mappings via import.meta.glob("./animationMappings/modules/*.ts")`,
+    );
+  }
+  if (!paramsContent.includes("DOMAIN_ANIMATION_MAPPING_ENTRIES")) {
+    errors.push(
+      `[animation] ${PATHS.animationParams} must read DOMAIN_ANIMATION_MAPPING_ENTRIES from mapping module files`,
     );
   }
 }
@@ -466,14 +551,14 @@ function verifyDomain(domainId, context) {
     }
   }
 
-  const domainTemplateFile = `src/skills/planner/templates/${domainId}/index.ts`;
-  if (!fs.existsSync(path.join(ROOT, domainTemplateFile))) {
-    errors.push(`[templates] Missing domain template index file: ${domainTemplateFile}`);
+  const domainPlannerTemplateFile = `src/skills/domains/${domainId}/planner/index.ts`;
+  if (!fs.existsSync(path.join(ROOT, domainPlannerTemplateFile))) {
+    errors.push(`[templates] Missing domain template index file: ${domainPlannerTemplateFile}`);
   } else {
-    const domainTemplateContent = read(domainTemplateFile);
+    const domainTemplateContent = read(domainPlannerTemplateFile);
     if (!domainTemplateContent.includes("DOMAIN_TEMPLATE_ENTRIES")) {
       errors.push(
-        `[templates] ${domainTemplateFile} must export DOMAIN_TEMPLATE_ENTRIES for auto registration`,
+        `[templates] ${domainPlannerTemplateFile} must export DOMAIN_TEMPLATE_ENTRIES for auto registration`,
       );
     }
   }
@@ -530,8 +615,10 @@ function run() {
   verifyPlanningRoutingContracts(errors);
   verifySharedAgentNeutrality(errors);
   verifyAgentRegistryContracts(errors);
+  verifySkillRegistryContracts(errors);
   verifyTemplateRegistryContracts(errors);
   verifyUiPresenterRegistryContracts(errors);
+  verifyRemotionRegistryContracts(errors);
 
   const agentsIndexContent = read(PATHS.agentsIndex);
   const skillsIndexContent = read(PATHS.skillsIndex);
@@ -567,7 +654,7 @@ function run() {
   const context = {
     agentKeys: mergedAgentKeys,
     agentVersionKeys: mergedAgentVersionKeys,
-    skillKeys: extractObjectKeys(skillsIndexContent, "BUILTIN_SKILL_DECLARATIONS"),
+    skillKeys: extractBuiltinSkillIds(skillsIndexContent),
     templateMeta: extractBuiltinTemplateMeta(),
     animationTypeMap: extractAnimationTypeMap(animationParamsContent),
     remotionTemplateIds: extractTemplateRegistryIds(animationTemplatesContent),

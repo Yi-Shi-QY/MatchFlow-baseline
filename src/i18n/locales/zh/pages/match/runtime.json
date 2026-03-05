@@ -1,0 +1,26 @@
+{
+  "match": {
+    "resume_checkpoint": "恢复检查点",
+    "resume_stage": "阶段",
+    "resume_progress": "进度",
+    "resume_segment": "当前段落",
+    "resume_last_saved": "最后保存",
+    "runtime_stage_booting": "启动中",
+    "runtime_stage_planning": "规划中",
+    "runtime_stage_segment_running": "执行分段",
+    "runtime_stage_animation_generating": "生成动画",
+    "runtime_stage_tag_generating": "生成标签",
+    "runtime_stage_summary_generating": "生成总结",
+    "runtime_stage_finalizing": "收尾中",
+    "runtime_stage_completed": "已完成",
+    "runtime_stage_failed": "失败",
+    "runtime_stage_cancelled": "已取消",
+    "planner_progress_label": "当前进度：",
+    "planner_3d_loading": "正在加载 3D 规划图...",
+    "planner_fallback_init": "3D 规划不可用，已切换为 2D 回退视图。",
+    "planner_fallback_runtime": "3D 规划渲染失败，已切换为 2D 回退视图。",
+    "planner_fallback_performance": "设备性能较低，已自动切换为 2D 回退视图。",
+    "planner_render_failed": "规划视图暂不可用。",
+    "planner_fallback_aria": "分析规划回退视图"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "home": {
+    "welcome": "Welcome to MatchFlow",
+    "start_analysis": "Start Analysis",
+    "history": "History",
+    "saved_matches": "Saved Matches",
+    "history_analysis": "History Analysis",
+    "sort_newest": "Newest",
+    "sort_oldest": "Oldest",
+    "clear": "Clear",
+    "search_placeholder": "Search teams or leagues...",
+    "analyzing": "Analyzing...",
+    "completed": "Completed",
+    "no_records_found": "No records found for \"{{query}}\"",
+    "popular_matches": "Popular Matches",
+    "live_upcoming": "Live & Upcoming",
+    "refresh_matches": "Refresh Matches",
+    "click_to_analyze": "Click to Analyze",
+    "no_match_data": "No match data available"
+  }
+}

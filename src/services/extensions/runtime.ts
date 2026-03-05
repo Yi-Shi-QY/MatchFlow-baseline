@@ -1,6 +1,9 @@
 import { hasAgent } from "@/src/agents";
 import { hasSkill } from "@/src/skills";
-import { getTemplateRequirements, hasPlanTemplate } from "@/src/skills/planner";
+import {
+  getTemplateRequirements,
+  hasPlanTemplate,
+} from "@/src/skills/domains/planner";
 import { installAgentFromHub, installSkillFromHub, installTemplateFromHub } from "./hub";
 import { HubEndpointHint } from "./types";
 

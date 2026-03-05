@@ -1,0 +1,12 @@
+{
+  "home": {
+    "confirm_clear_history": "Clear History?",
+    "confirm_clear_history_desc": "Are you sure you want to delete all match analysis history? This action cannot be undone.",
+    "confirm_delete_item": "Delete this analysis record?",
+    "confirm_delete_item_title": "Delete this record?",
+    "confirm_delete_item_desc": "This action cannot be undone.",
+    "confirm_delete_item_action": "Delete",
+    "cancel": "Cancel",
+    "confirm": "Confirm Clear"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "share": {
+    "invalid_link": "Invalid Link",
+    "return_home": "Return Home",
+    "home_win": "Home Win",
+    "away_win": "Away Win",
+    "received_config": "Received a match analysis config",
+    "config_desc": "Includes team info, recent form, and custom data",
+    "import_save": "Import & Save to History",
+    "import_analyze": "Import Data & Start Analysis"
+  }
+}
