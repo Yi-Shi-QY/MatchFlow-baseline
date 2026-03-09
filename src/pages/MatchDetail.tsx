@@ -23,7 +23,6 @@ import { AgentResult } from '@/src/services/agentParser';
 import { RemotionPlayer } from '@/src/components/RemotionPlayer';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
 import { compressToEncodedURIComponent } from 'lz-string';
-import { Capacitor } from '@capacitor/core';
 import {
   fetchMatchAnalysisConfig,
   mergeServerPlanningIntoMatchData,
@@ -45,6 +44,7 @@ import {
   getDomainUiPresenter,
   type ResultPresenterContext,
 } from '@/src/services/domains/ui/presenter';
+import { exportMatchReportPdf } from '@/src/pages/matchDetail/exportReportPdf';
 import type { PlannerRuntimeState, PlannerStage } from '@/src/services/planner/runtime';
 import { getPlannerStageI18nKey } from '@/src/services/planner/stageI18n';
 import { AnalysisPlannerRuntimeBridge } from '@/src/components/planner/AnalysisPlannerRuntimeBridge';
@@ -243,17 +243,6 @@ export default function MatchDetail() {
     return <FileText className="w-5 h-5 text-zinc-400" />;
   };
 
-  const normalizeTextForPdf = (input: string) => {
-    return input
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/[*_`>#-]/g, ' ')
-      .replace(/\|/g, ' ')
-      .replace(/\s+\n/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/[ \t]{2,}/g, ' ')
-      .trim();
-  };
-
   const resolvePresenterSubjectSnapshot = (draftData: any | null): unknown => {
     return (
       draftData ??
@@ -289,19 +278,6 @@ export default function MatchDetail() {
       exportDraftData = null;
     }
     const presenterSubjectSnapshot = resolvePresenterSubjectSnapshot(exportDraftData);
-    const exportMeta = resultPresenter.getExportMeta(
-      match,
-      exportDraftData,
-      resultPresenterContext,
-      presenterSubjectSnapshot,
-    );
-    const exportHeader = resultPresenter.getHeader(
-      match,
-      exportDraftData,
-      resultPresenterContext,
-      presenterSubjectSnapshot,
-    );
-
     const selectedSegments = (stream?.segments || []).filter(
       seg => exportSegments[seg.id]?.includeSegment
     );
@@ -315,163 +291,18 @@ export default function MatchDetail() {
     setShowExportModal(false);
 
     try {
-      const [{ jsPDF }, { ensurePdfCjkFont, PDF_CJK_FONT_FAMILY }] = await Promise.all([
-        import('jspdf'),
-        import('@/src/services/pdfFont'),
-      ]);
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const canUseCjkFont = await ensurePdfCjkFont(pdf);
-      const pdfFontFamily = canUseCjkFont ? PDF_CJK_FONT_FAMILY : 'helvetica';
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 12;
-      const maxTextWidth = pageWidth - margin * 2;
-      const lineHeight = 5;
-      let cursorY = 14;
-
-      const ensureSpace = (requiredHeight: number) => {
-        if (cursorY + requiredHeight > pageHeight - 12) {
-          pdf.addPage();
-          cursorY = 14;
-        }
-      };
-
-      const writeParagraph = (
-        text: string,
-        options: { fontSize?: number; bold?: boolean; spacingAfter?: number } = {}
-      ) => {
-        const content = text.trim();
-        if (!content) return;
-        const fontSize = options.fontSize ?? 11;
-        const spacingAfter = options.spacingAfter ?? 1.5;
-        pdf.setFont(pdfFontFamily, options.bold ? 'bold' : 'normal');
-        pdf.setFontSize(fontSize);
-        const lines = pdf.splitTextToSize(content, maxTextWidth);
-        ensureSpace(lines.length * lineHeight + spacingAfter + 1);
-        pdf.text(lines, margin, cursorY);
-        cursorY += lines.length * lineHeight + spacingAfter;
-      };
-
-      const locale = i18n.language.startsWith('zh') ? 'zh-CN' : 'en-US';
-      const timestamp = new Date().toLocaleString(locale);
-      const title = exportMeta.reportTitle;
-      const statusLabel = exportMeta.statusLabel;
-      const metadataLabel = exportHeader.subtitle || match.league;
-      const primaryName = exportMeta.primaryEntityName;
-      const secondaryName =
-        typeof exportMeta.secondaryEntityName === 'string' &&
-        exportMeta.secondaryEntityName.trim().length > 0
-          ? exportMeta.secondaryEntityName.trim()
-          : primaryName;
-
-      writeParagraph(title, { fontSize: 16, bold: true, spacingAfter: 2 });
-      writeParagraph(`${metadataLabel} | ${match.date} | ${statusLabel}`, { fontSize: 10 });
-      writeParagraph(t('match.generated_by', { time: timestamp }), { fontSize: 9, spacingAfter: 3 });
-
-      selectedSegments.forEach((seg, index) => {
-        ensureSpace(10);
-        writeParagraph(`${index + 1}. ${seg.title || t('match.export_segment_fallback', { index: index + 1 })}`, {
-          fontSize: 13,
-          bold: true,
-          spacingAfter: 1.5,
-        });
-
-        const cleanedThoughts = normalizeTextForPdf(seg.thoughts || '');
-        if (cleanedThoughts) {
-          writeParagraph(cleanedThoughts, { fontSize: 10.5, spacingAfter: 1.5 });
-        }
-
-        if (seg.tags && seg.tags.length > 0) {
-          writeParagraph(`${t('match.pdf_tags')}: ${seg.tags.map(tag => tag.label).join(', ')}`, {
-            fontSize: 9.5,
-            spacingAfter: 1.5,
-          });
-        }
-
-        cursorY += 1;
+      await exportMatchReportPdf({
+        match,
+        selectedSegments,
+        includeSummaryInExport,
+        summary,
+        draftData: exportDraftData,
+        resultPresenter,
+        resultPresenterContext,
+        presenterSubjectSnapshot,
+        language: i18n.language,
+        t: (key, options) => String(t(key, options as any)),
       });
-
-      if (includeSummaryInExport && summary) {
-        ensureSpace(14);
-        writeParagraph(t('match.final_summary'), { fontSize: 13, bold: true, spacingAfter: 1.5 });
-        if (summary.prediction) {
-          writeParagraph(`${t('match.pdf_prediction')}: ${normalizeTextForPdf(summary.prediction)}`, { fontSize: 10.5 });
-        }
-        const isZh = i18n.language.startsWith('zh');
-        const summaryDistribution = resultPresenter.getSummaryDistribution(
-          summary,
-          match,
-          exportDraftData,
-          resultPresenterContext,
-          presenterSubjectSnapshot,
-        );
-        if (summaryDistribution.length > 0) {
-          writeParagraph(
-            `${isZh ? '结果分布' : 'Outcome Distribution'}: ${summaryDistribution
-              .map((entry) => `${entry.label} ${entry.value}%`)
-              .join(' / ')}`,
-            { fontSize: 10 },
-          );
-        }
-        const summaryCards = getAnalysisConclusionCards(summary);
-        if (summaryCards.length > 0) {
-          writeParagraph(isZh ? '结论卡片' : 'Conclusion Cards', { fontSize: 10, bold: true, spacingAfter: 1 });
-          summaryCards.forEach((card) => {
-            const details: string[] = [];
-            if (typeof card.confidence === 'number') details.push(`${isZh ? '置信度' : 'Confidence'} ${card.confidence}%`);
-            if (card.trend) details.push(`${isZh ? '趋势' : 'Trend'} ${card.trend}`);
-            if (card.note) details.push(card.note);
-            const detailSuffix = details.length > 0 ? ` (${details.join(' | ')})` : '';
-            writeParagraph(`- ${card.label}: ${formatConclusionCardValue(card)}${detailSuffix}`, { fontSize: 10 });
-          });
-        }
-        if (summary.expectedGoals) {
-          writeParagraph(t('match.pdf_expected_goals', {
-            home: summary.expectedGoals.home,
-            away: summary.expectedGoals.away,
-          }), { fontSize: 10 });
-        }
-        if (Array.isArray(summary.keyFactors) && summary.keyFactors.length > 0) {
-          writeParagraph(`${t('match.pdf_key_factors')}: ${summary.keyFactors.join(' / ')}`, { fontSize: 10 });
-        }
-      }
-
-      // Disclaimer page is always included by policy.
-      pdf.addPage();
-      cursorY = 16;
-      writeParagraph(t('match.disclaimer_title'), { fontSize: 14, bold: true, spacingAfter: 3 });
-      [1, 2, 3, 4, 5].forEach((index) => {
-        writeParagraph(t(`match.disclaimer_${index}`), { fontSize: 10 });
-      });
-
-      const safeFilePart = (value: string) =>
-        value.replace(/[\\/:*?"<>|]/g, '_').trim() || 'match';
-      const fileName = t('match.export_file_name', {
-        home: safeFilePart(primaryName),
-        away: safeFilePart(secondaryName),
-      }).replace(/[\\/:*?"<>|]/g, '_');
-
-      if (Capacitor.isNativePlatform()) {
-        const [{ Filesystem, Directory }, { Share: NativeShare }] = await Promise.all([
-          import('@capacitor/filesystem'),
-          import('@capacitor/share'),
-        ]);
-        const pdfBase64 = pdf.output('datauristring').split(',')[1];
-        const fileResult = await Filesystem.writeFile({
-          path: fileName,
-          data: pdfBase64,
-          directory: Directory.Cache
-        });
-
-        await NativeShare.share({
-          title: t('match.share_report'),
-          text: t('match.share_text', { home: primaryName, away: secondaryName }),
-          url: fileResult.uri,
-          dialogTitle: t('match.share_report')
-        });
-      } else {
-        pdf.save(fileName);
-      }
     } catch (error: any) {
       console.error('Failed to export PDF:', error);
       alert(`${t('match.export_failed')}: ${error?.message || t('match.export_unknown_error')}`);
