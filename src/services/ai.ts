@@ -32,6 +32,7 @@ import {
   streamAnalysisAgent,
   streamSummaryAgent,
 } from "./ai/agentRuntime";
+import { normalizeMultimodalInputForProvider } from "./ai/multimodalCompatibility";
 import {
   buildPlannerRuntimeState,
   createPlannerRunId,
@@ -308,7 +309,16 @@ export async function* streamAgentThoughts(
   runtimeRunId?: string,
 ) {
   const runId = runtimeRunId || createPlannerRunId("analysis");
-  const hubHint = resolvePlanningHubHint(matchData);
+  const settings = getSettings();
+  const multimodalNormalization = normalizeMultimodalInputForProvider(matchData, {
+    provider: settings.provider,
+    model: settings.model,
+    logger: (message, meta) => {
+      console.info(`[multimodal] ${message}`, meta || {});
+    },
+  });
+  const effectiveMatchData = multimodalNormalization.payload;
+  const hubHint = resolvePlanningHubHint(effectiveMatchData);
   // 1. Planning Phase (Hidden)
   let plan = resumeState?.plan || [];
   let completedSegmentIndices = resumeState?.completedSegmentIndices || [];
@@ -370,7 +380,7 @@ export async function* streamAgentThoughts(
         stageLabel: "Planning",
       });
       try {
-        plan = await generateAnalysisPlan(matchData, includeAnimations, abortSignal);
+        plan = await generateAnalysisPlan(effectiveMatchData, includeAnimations, abortSignal);
       } catch (e) {
         if (isAbortError(e)) {
           throw e;
@@ -392,7 +402,7 @@ export async function* streamAgentThoughts(
       if (!includeAnimations) {
         segment.animationType = "none";
       }
-      const scopedMatchData = buildSegmentScopedMatchData(matchData, segment);
+      const scopedMatchData = buildSegmentScopedMatchData(effectiveMatchData, segment);
 
       const agentId = segment.agentType || "general";
       emitRuntime({
@@ -496,7 +506,11 @@ export async function* streamAgentThoughts(
       totalSegments: plan.length,
       stageLabel: "Summary",
     });
-    const summaryStream = streamSummaryAgent(matchData, fullAnalysisText, abortSignal);
+    const summaryStream = streamSummaryAgent(
+      effectiveMatchData,
+      fullAnalysisText,
+      abortSignal,
+    );
     for await (const chunk of summaryStream) {
       throwIfAborted(abortSignal);
       yield chunk;
