@@ -48,14 +48,18 @@ function collectDomainAnimationMappings(): Record<string, Record<string, string>
     eager: true,
   }) as Record<string, DomainAnimationMappingModule>;
 
-  const entries = Object.values(modules).flatMap((module) =>
-    Array.isArray(module.DOMAIN_ANIMATION_MAPPING_ENTRIES)
-      ? module.DOMAIN_ANIMATION_MAPPING_ENTRIES
-      : [],
-  );
+  const entries = Object.entries(modules)
+    .sort(([pathA], [pathB]) => pathA.localeCompare(pathB))
+    .flatMap(([modulePath, module]) => {
+      const mappingEntries = Array.isArray(module.DOMAIN_ANIMATION_MAPPING_ENTRIES)
+        ? module.DOMAIN_ANIMATION_MAPPING_ENTRIES
+        : [];
+      return mappingEntries.map((entry) => ({ entry, modulePath }));
+    });
 
   const mapping: Record<string, Record<string, string>> = {};
-  entries.forEach((entry) => {
+  const sourceByDomainAndType: Record<string, string> = {};
+  entries.forEach(({ entry, modulePath }) => {
     const domainId = normalizeDomainId(entry?.domainId);
     if (!domainId) return;
     if (!entry.animationToTemplate || typeof entry.animationToTemplate !== "object") return;
@@ -64,7 +68,18 @@ function collectDomainAnimationMappings(): Record<string, Record<string, string>
     Object.entries(entry.animationToTemplate).forEach(([animationType, templateId]) => {
       if (typeof animationType !== "string" || animationType.trim().length === 0) return;
       if (typeof templateId !== "string" || templateId.trim().length === 0) return;
-      normalizedMap[animationType.trim()] = templateId.trim();
+      const normalizedAnimationType = animationType.trim();
+      const normalizedTemplateId = templateId.trim();
+      const entryKey = `${domainId}:${normalizedAnimationType}`;
+      const existingTemplateId = mapping[domainId]?.[normalizedAnimationType];
+      if (existingTemplateId) {
+        throw new Error(
+          `[animation] Duplicate domain animation mapping "${entryKey}" in ${modulePath}. ` +
+            `Already registered in ${sourceByDomainAndType[entryKey]}.`,
+        );
+      }
+      normalizedMap[normalizedAnimationType] = normalizedTemplateId;
+      sourceByDomainAndType[entryKey] = modulePath;
     });
 
     if (!mapping[domainId]) {

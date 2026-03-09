@@ -12,15 +12,30 @@ function collectBuiltinTemplates(): PlanTemplate[] {
     string,
     DomainTemplateModule
   >;
-  const discovered = Object.values(modules).flatMap((module) =>
-    Array.isArray(module.DOMAIN_TEMPLATE_ENTRIES) ? module.DOMAIN_TEMPLATE_ENTRIES : [],
-  );
-  const seen = new Set<string>();
-  return discovered.filter((template) => {
+  const discovered = Object.entries(modules)
+    .sort(([pathA], [pathB]) => pathA.localeCompare(pathB))
+    .flatMap(([modulePath, module]) => {
+      const templateEntries = Array.isArray(module.DOMAIN_TEMPLATE_ENTRIES)
+        ? module.DOMAIN_TEMPLATE_ENTRIES
+        : [];
+      return templateEntries.map((template) => ({ template, modulePath }));
+    });
+
+  const seenSourceById = new Map<string, string>();
+  return discovered.flatMap(({ template, modulePath }) => {
     const id = typeof template?.id === "string" ? template.id.trim() : "";
-    if (!id || seen.has(id)) return false;
-    seen.add(id);
-    return true;
+    if (!id || !template) return [];
+
+    const previousSource = seenSourceById.get(id);
+    if (previousSource) {
+      throw new Error(
+        `[templates] Duplicate built-in template id "${id}" in ${modulePath}. ` +
+          `Already registered in ${previousSource}.`,
+      );
+    }
+
+    seenSourceById.set(id, modulePath);
+    return [template];
   });
 }
 

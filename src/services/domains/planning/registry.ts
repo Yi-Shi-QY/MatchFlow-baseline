@@ -3,14 +3,28 @@ import { DEFAULT_DOMAIN_ID, listBuiltinPlanningStrategies } from "../builtinModu
 import type { DomainPlanningStrategy } from "./types";
 import { getInstalledDomainPackManifest } from "../packStore";
 
-const DOMAIN_PLANNING_STRATEGIES: Record<string, DomainPlanningStrategy> =
-  listBuiltinPlanningStrategies().reduce(
-    (acc, strategy) => {
-      acc[strategy.domainId] = strategy;
-      return acc;
-    },
-    {} as Record<string, DomainPlanningStrategy>,
+function collectBuiltinPlanningStrategiesByDomainId(): Record<string, DomainPlanningStrategy> {
+  const strategies = listBuiltinPlanningStrategies().slice().sort((a, b) =>
+    a.domainId.localeCompare(b.domainId),
   );
+  const byDomainId: Record<string, DomainPlanningStrategy> = {};
+
+  strategies.forEach((strategy) => {
+    const domainId = typeof strategy?.domainId === "string" ? strategy.domainId.trim() : "";
+    if (!domainId) {
+      throw new Error("[planning] Built-in planning strategy has empty domainId.");
+    }
+    if (byDomainId[domainId]) {
+      throw new Error(`[planning] Duplicate built-in planning strategy domainId: ${domainId}.`);
+    }
+    byDomainId[domainId] = strategy;
+  });
+
+  return byDomainId;
+}
+
+const DOMAIN_PLANNING_STRATEGIES: Record<string, DomainPlanningStrategy> =
+  collectBuiltinPlanningStrategiesByDomainId();
 
 function getDefaultPlanningStrategy(): DomainPlanningStrategy {
   const explicitDefault = DOMAIN_PLANNING_STRATEGIES[DEFAULT_DOMAIN_ID];

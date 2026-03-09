@@ -17,9 +17,11 @@ function collectBuiltinDomainModules(caseMinimum: number): BuiltinDomainModule[]
     string,
     DomainModuleFactoryModule
   >;
-  const factories = Object.values(modules).flatMap((module) =>
-    Array.isArray(module.DOMAIN_MODULE_FACTORIES) ? module.DOMAIN_MODULE_FACTORIES : [],
-  );
+  const factories = Object.entries(modules)
+    .sort(([pathA], [pathB]) => pathA.localeCompare(pathB))
+    .flatMap(([_modulePath, module]) =>
+      Array.isArray(module.DOMAIN_MODULE_FACTORIES) ? module.DOMAIN_MODULE_FACTORIES : [],
+    );
   return factories.map((factory) => factory(caseMinimum));
 }
 
@@ -124,21 +126,18 @@ function validateBuiltinModules() {
     const planningDomainId = moduleItem?.planningStrategy?.domainId;
 
     if (!domainId) {
-      console.warn("Found built-in domain module without domain.id");
-      return;
+      throw new Error("Found built-in domain module without domain.id.");
     }
     if (seenDomainIds.has(domainId)) {
-      console.warn(`Duplicate built-in domain id detected: ${domainId}`);
-      return;
+      throw new Error(`Duplicate built-in domain id detected: ${domainId}.`);
     }
     seenDomainIds.add(domainId);
 
     if (!planningDomainId) {
-      console.warn(`Built-in domain ${domainId} is missing planningStrategy.domainId`);
-      return;
+      throw new Error(`Built-in domain ${domainId} is missing planningStrategy.domainId.`);
     }
     if (planningDomainId !== domainId) {
-      console.warn(
+      throw new Error(
         `Built-in domain module mismatch: domain.id=${domainId}, planning.domainId=${planningDomainId}`,
       );
     }
@@ -152,7 +151,7 @@ function validateBuiltinModules() {
       .filter((id): id is string => typeof id === "string" && id.trim().length > 0);
     const duplicateSourceIds = sourceIds.filter((id, index) => sourceIds.indexOf(id) !== index);
     if (duplicateSourceIds.length > 0) {
-      console.warn(
+      throw new Error(
         `Domain ${domainId} contains duplicated data source ids: ${Array.from(new Set(duplicateSourceIds)).join(", ")}`,
       );
     }

@@ -20,16 +20,60 @@ function collectBuiltinDomainAgentEntries() {
   >;
   const agents: Record<string, AgentConfig> = {};
   const versions: Record<string, string> = {};
+  const agentSourceById: Record<string, string> = {};
+  const versionSourceById: Record<string, string> = {};
 
-  Object.values(modules).forEach((module) => {
-    if (module.DOMAIN_AGENT_ENTRIES && typeof module.DOMAIN_AGENT_ENTRIES === 'object') {
-      Object.assign(agents, module.DOMAIN_AGENT_ENTRIES);
+  Object.entries(modules)
+    .sort(([pathA], [pathB]) => pathA.localeCompare(pathB))
+    .forEach(([modulePath, module]) => {
+      if (module.DOMAIN_AGENT_ENTRIES && typeof module.DOMAIN_AGENT_ENTRIES === 'object') {
+        Object.entries(module.DOMAIN_AGENT_ENTRIES).forEach(([rawAgentId, config]) => {
+          const agentId = typeof rawAgentId === 'string' ? rawAgentId.trim() : '';
+          if (!agentId || !config || typeof config !== 'object') return;
+          if (agents[agentId]) {
+            throw new Error(
+              `[agents] Duplicate domain agent id "${agentId}" in ${modulePath}. ` +
+                `Already registered in ${agentSourceById[agentId]}.`,
+            );
+          }
+          agents[agentId] = config;
+          agentSourceById[agentId] = modulePath;
+        });
+      }
+
+      if (
+        module.DOMAIN_AGENT_VERSION_ENTRIES &&
+        typeof module.DOMAIN_AGENT_VERSION_ENTRIES === 'object'
+      ) {
+        Object.entries(module.DOMAIN_AGENT_VERSION_ENTRIES).forEach(([rawAgentId, rawVersion]) => {
+          const agentId = typeof rawAgentId === 'string' ? rawAgentId.trim() : '';
+          const version = typeof rawVersion === 'string' ? rawVersion.trim() : '';
+          if (!agentId || !version) return;
+          if (versions[agentId]) {
+            throw new Error(
+              `[agents] Duplicate domain agent version id "${agentId}" in ${modulePath}. ` +
+                `Already registered in ${versionSourceById[agentId]}.`,
+            );
+          }
+          versions[agentId] = version;
+          versionSourceById[agentId] = modulePath;
+        });
+      }
+    });
+
+  const sharedAgentIds = ['planner_template', 'planner_autonomous', 'tag', 'summary', 'animation'];
+  sharedAgentIds.forEach((agentId) => {
+    if (agents[agentId]) {
+      throw new Error(
+        `[agents] Domain agent registration must not override shared agent "${agentId}". ` +
+          `Found in ${agentSourceById[agentId]}.`,
+      );
     }
-    if (
-      module.DOMAIN_AGENT_VERSION_ENTRIES &&
-      typeof module.DOMAIN_AGENT_VERSION_ENTRIES === 'object'
-    ) {
-      Object.assign(versions, module.DOMAIN_AGENT_VERSION_ENTRIES);
+    if (versions[agentId]) {
+      throw new Error(
+        `[agents] Domain agent version registration must not override shared agent "${agentId}". ` +
+          `Found in ${versionSourceById[agentId]}.`,
+      );
     }
   });
 

@@ -1,12 +1,55 @@
 import { getInstalledDomainPackManifest } from "@/src/services/domains/packStore";
 import type { DomainPlannerAdapter, PlannerGraph, PlannerRuntimeState } from "../runtime";
 import { defaultPlannerAdapter } from "./default";
-import { footballPlannerAdapter } from "./football";
 import type { PlannerLanguage } from "./utils";
 
-export const BUILTIN_DOMAIN_PLANNER_ADAPTERS: Record<string, DomainPlannerAdapter> = {
-  football: footballPlannerAdapter,
+type DomainPlannerAdapterModule = {
+  DOMAIN_PLANNER_ADAPTER_ENTRIES?: DomainPlannerAdapter[];
 };
+
+function collectBuiltinDomainPlannerAdapters(): Record<string, DomainPlannerAdapter> {
+  const modules = import.meta.glob(["./*.ts", "!./registry.ts", "!./index.ts"], {
+    eager: true,
+  }) as Record<string, DomainPlannerAdapterModule>;
+
+  const entries = Object.entries(modules)
+    .sort(([pathA], [pathB]) => pathA.localeCompare(pathB))
+    .flatMap(([modulePath, module]) => {
+      const adapterEntries = Array.isArray(module.DOMAIN_PLANNER_ADAPTER_ENTRIES)
+        ? module.DOMAIN_PLANNER_ADAPTER_ENTRIES
+        : [];
+      return adapterEntries.map((adapter) => ({ adapter, modulePath }));
+    });
+
+  const byDomainId: Record<string, DomainPlannerAdapter> = {};
+  const sourceByDomainId: Record<string, string> = {};
+  entries.forEach(({ adapter, modulePath }) => {
+    if (!adapter || typeof adapter.domainId !== "string" || adapter.domainId.trim().length === 0) {
+      return;
+    }
+    if (typeof adapter.buildGraph !== "function") {
+      return;
+    }
+
+    const domainId = adapter.domainId.trim();
+    if (domainId === "default") {
+      return;
+    }
+    if (byDomainId[domainId]) {
+      throw new Error(
+        `[planner] Duplicate domain planner adapter id "${domainId}" in ${modulePath}. ` +
+          `Already registered in ${sourceByDomainId[domainId]}.`,
+      );
+    }
+    byDomainId[domainId] = adapter;
+    sourceByDomainId[domainId] = modulePath;
+  });
+
+  return byDomainId;
+}
+
+export const BUILTIN_DOMAIN_PLANNER_ADAPTERS: Record<string, DomainPlannerAdapter> =
+  collectBuiltinDomainPlannerAdapters();
 
 function normalizeDomainId(domainId: string | null | undefined): string | null {
   if (typeof domainId !== "string") return null;

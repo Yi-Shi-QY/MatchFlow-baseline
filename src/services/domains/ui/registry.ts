@@ -10,18 +10,30 @@ function collectBuiltinDomainUiPresenters(): Record<string, DomainUiPresenter> {
     string,
     DomainPresenterModule
   >;
-  const entries = Object.values(modules).flatMap((module) =>
-    Array.isArray(module.DOMAIN_UI_PRESENTER_ENTRIES)
-      ? module.DOMAIN_UI_PRESENTER_ENTRIES
-      : [],
-  );
+  const entries = Object.entries(modules)
+    .sort(([pathA], [pathB]) => pathA.localeCompare(pathB))
+    .flatMap(([modulePath, module]) => {
+      const presenterEntries = Array.isArray(module.DOMAIN_UI_PRESENTER_ENTRIES)
+        ? module.DOMAIN_UI_PRESENTER_ENTRIES
+        : [];
+      return presenterEntries.map((presenter) => ({ presenter, modulePath }));
+    });
 
   const presenterMap: Record<string, DomainUiPresenter> = {};
-  entries.forEach((presenter) => {
+  const sourceById: Record<string, string> = {};
+  entries.forEach(({ presenter, modulePath }) => {
     if (!presenter || typeof presenter.id !== "string" || presenter.id.trim().length === 0) {
       return;
     }
-    presenterMap[presenter.id] = presenter;
+    const presenterId = presenter.id.trim();
+    if (presenterMap[presenterId]) {
+      throw new Error(
+        `[domains/ui] Duplicate domain presenter id "${presenterId}" in ${modulePath}. ` +
+          `Already registered in ${sourceById[presenterId]}.`,
+      );
+    }
+    presenterMap[presenterId] = presenter;
+    sourceById[presenterId] = modulePath;
   });
 
   return presenterMap;

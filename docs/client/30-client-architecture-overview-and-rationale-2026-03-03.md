@@ -4,6 +4,12 @@
 
 This document is the complete explanation of the current client architecture after the 2026-03-03 refactor wave.
 
+Status update (2026-03-09):
+
+1. Current built-in baseline is football-only.
+2. Planner templates are now discovered from `src/skills/domains/*/planner/index.ts`.
+3. References to basketball in this document are extension examples, not active built-in baseline.
+
 It answers:
 
 1. What the target architecture is.
@@ -43,7 +49,7 @@ Defines each analysis domain and its data-source behavior.
 - Core type: `AnalysisDomain`
 - Source files:
   - `src/services/domains/modules/football/domain.ts`
-  - `src/services/domains/modules/basketball/domain.ts`
+  - `src/services/domains/modules/<domainId>/domain.ts` (when adding new domain)
   - `src/services/domains/types.ts`
 
 Responsibilities:
@@ -58,7 +64,7 @@ Defines how each domain routes to plan mode and template under different source 
 
 - Source files:
   - `src/services/domains/modules/football/planning.ts`
-  - `src/services/domains/modules/basketball/planning.ts`
+  - `src/services/domains/modules/<domainId>/planning.ts` (when adding new domain)
   - `src/services/domains/planning/registry.ts`
   - `src/services/ai/planning.ts`
 
@@ -77,7 +83,7 @@ Central assembly and validation of built-in domains.
   - `src/services/domains/builtinModules.ts`
   - `src/services/domains/modules/types.ts`
   - `src/services/domains/modules/football/module.ts`
-  - `src/services/domains/modules/basketball/module.ts`
+  - `src/services/domains/modules/<domainId>/module.ts` (when adding new domain)
 
 Responsibilities:
 
@@ -93,7 +99,7 @@ Domain agents are now folder-scoped.
 
 - Source files:
   - `src/agents/domains/football/*`
-  - `src/agents/domains/basketball/*`
+  - `src/agents/domains/<domainId>/*` (when adding new domain)
   - `src/agents/index.ts`
 
 Responsibilities:
@@ -107,9 +113,9 @@ Responsibilities:
 Template catalog split by domain folders.
 
 - Source files:
-  - `src/skills/planner/templates/football/*`
-  - `src/skills/planner/templates/basketball/*`
-  - `src/skills/planner/index.ts`
+  - `src/skills/domains/football/planner/*`
+  - `src/skills/domains/<domainId>/planner/*` (when adding new domain)
+  - `src/skills/domains/planner/index.ts`
 
 Responsibilities:
 
@@ -159,7 +165,7 @@ src/
   agents/
     domains/
       football/
-      basketball/
+      <domainId>/
     index.ts
     planner_template.ts
     planner_autonomous.ts
@@ -167,11 +173,13 @@ src/
     tag.ts
     animation.ts
   skills/
-    planner/
-      templates/
-        football/
-        basketball/
-      index.ts
+    domains/
+      football/
+        planner/
+      <domainId>/
+        planner/
+      planner/
+        index.ts
   services/
     ai/
       planning.ts
@@ -183,7 +191,7 @@ src/
           localCases.ts
           module.ts
           index.ts
-        basketball/
+        <domainId>/
           domain.ts
           planning.ts
           localCases.ts
@@ -198,9 +206,9 @@ src/
       planning/
         registry.ts
         football.ts        (compat shim)
-        basketball.ts      (compat shim)
+        <domainId>.ts      (compat shim, optional)
       football.ts          (compat shim)
-      basketball.ts        (compat shim)
+      <domainId>.ts        (compat shim, optional)
     remotion/
       templates.tsx
       templateParams.ts
@@ -250,7 +258,7 @@ Central guards in `builtinModules.ts`:
 
 1. Each built-in domain must have unique `domain.id`.
 2. `planningStrategy.domainId` must exist and match `domain.id`.
-3. Data-source IDs inside one domain should not duplicate (warning).
+3. Data-source IDs inside one domain must not duplicate (blocking error).
 4. Each built-in domain must provide at least 3 local test cases.
 5. Local case IDs must be non-empty and unique.
 
@@ -262,9 +270,9 @@ To avoid breaking existing imports during refactor:
 
 1. Kept shim exports:
    - `src/services/domains/football.ts`
-   - `src/services/domains/basketball.ts`
+   - `src/services/domains/<domainId>.ts` (optional during migration)
    - `src/services/domains/planning/football.ts`
-   - `src/services/domains/planning/basketball.ts`
+   - `src/services/domains/planning/<domainId>.ts` (optional during migration)
 2. Old callers still resolve, while new code uses module folders.
 3. Summary layer keeps legacy `winProbability` compatibility.
 
@@ -274,7 +282,7 @@ To avoid breaking existing imports during refactor:
 |---|---|---|
 | Domain service layout | Flat files | Module folders per domain |
 | Agent organization | Mostly flat | `agents/domains/<domain>/` |
-| Planner templates | Mixed in one folder | `templates/football` and `templates/basketball` |
+| Planner templates | Mixed in one folder | `skills/domains/<domainId>/planner` + auto-discovery |
 | Built-in domain assembly | Scattered references | Central module registry + validation |
 | Local case policy | No strict minimum gate | Hard minimum: 3 cases per built-in domain |
 | Final summary model | Football-centric | Generic distribution/cards with legacy fallback |
@@ -302,4 +310,3 @@ Read with:
 2. `docs/client/28-service-domain-modules-refactor-2026-03-03.md`
 3. `docs/client/29-builtin-module-split-refactor-2026-03-03.md`
 4. `docs/client/26-client-optimization-and-server-alignment-2026-03-03.md`
-

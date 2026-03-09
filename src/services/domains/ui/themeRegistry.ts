@@ -73,16 +73,30 @@ function collectBuiltinDomainUiThemes(): Record<string, ResolvedDomainUiTheme> {
     string,
     DomainThemeModule
   >;
-  const entries = Object.values(modules).flatMap((module) =>
-    Array.isArray(module.DOMAIN_UI_THEME_ENTRIES) ? module.DOMAIN_UI_THEME_ENTRIES : [],
-  );
+  const entries = Object.entries(modules)
+    .sort(([pathA], [pathB]) => pathA.localeCompare(pathB))
+    .flatMap(([modulePath, module]) => {
+      const themeEntries = Array.isArray(module.DOMAIN_UI_THEME_ENTRIES)
+        ? module.DOMAIN_UI_THEME_ENTRIES
+        : [];
+      return themeEntries.map((theme) => ({ theme, modulePath }));
+    });
 
   const themeMap: Record<string, ResolvedDomainUiTheme> = {};
-  entries.forEach((theme) => {
+  const sourceById: Record<string, string> = {};
+  entries.forEach(({ theme, modulePath }) => {
     if (!theme || typeof theme.id !== "string" || theme.id.trim().length === 0) {
       return;
     }
-    themeMap[theme.id] = mergeDomainUiTheme(theme);
+    const themeId = theme.id.trim();
+    if (themeMap[themeId]) {
+      throw new Error(
+        `[domains/ui] Duplicate domain theme id "${themeId}" in ${modulePath}. ` +
+          `Already registered in ${sourceById[themeId]}.`,
+      );
+    }
+    themeMap[themeId] = mergeDomainUiTheme(theme);
+    sourceById[themeId] = modulePath;
   });
 
   return themeMap;

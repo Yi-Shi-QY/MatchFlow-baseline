@@ -34,8 +34,8 @@ For a new domain `<domainId>`, all of the following should exist:
 7. `src/services/domains/builtinModules.ts` auto-discovery remains valid
 8. Domain agents under `src/agents/domains/<domainId>/`
 9. `src/agents/domains/<domainId>/index.ts` exports `DOMAIN_AGENT_ENTRIES` and `DOMAIN_AGENT_VERSION_ENTRIES`
-10. Planner templates under `src/skills/planner/templates/<domainId>/`
-11. `src/skills/planner/templates/<domainId>/index.ts` exports `DOMAIN_TEMPLATE_ENTRIES`
+10. Planner templates under `src/skills/domains/<domainId>/planner/`
+11. `src/skills/domains/<domainId>/planner/index.ts` exports `DOMAIN_TEMPLATE_ENTRIES`
 12. Domain UI presenter under `src/services/domains/ui/presenters/<domainId>.ts` exporting `DOMAIN_UI_PRESENTER_ENTRIES`
 13. Animation template and type mapping if templates use non-`none` animations
 14. Home/MatchDetail smoke flow works with local cases and history/resume
@@ -164,7 +164,7 @@ Rules:
 
 Create folder:
 
-- `src/skills/planner/templates/<domainId>/`
+- `src/skills/domains/<domainId>/planner/`
 
 Add templates (example):
 
@@ -175,9 +175,9 @@ Add templates (example):
 
 Then:
 
-1. Export from `src/skills/planner/templates/<domainId>/index.ts`.
+1. Export from `src/skills/domains/<domainId>/planner/index.ts`.
 2. Export `DOMAIN_TEMPLATE_ENTRIES` from that index file.
-3. `src/skills/planner/index.ts` auto-discovers `src/skills/planner/templates/*/index.ts`.
+3. `src/skills/domains/planner/index.ts` auto-discovers `src/skills/domains/*/planner/index.ts`.
 
 Template quality rules:
 
@@ -328,7 +328,7 @@ Core files to keep open while extending domains:
 3. `src/services/domains/planning/registry.ts`
 4. `src/services/ai/planning.ts`
 5. `src/agents/index.ts`
-6. `src/skills/planner/index.ts`
+6. `src/skills/domains/planner/index.ts`
 7. `src/services/remotion/templateParams.ts`
 8. `src/services/analysisSummary.ts`
 9. `src/pages/Home.tsx`

@@ -21,17 +21,25 @@ function collectBuiltinSkillEntries(): BuiltinSkillEntry[] {
     { eager: true },
   ) as Record<string, BuiltinSkillModule>;
 
-  const entries = Object.values(modules).flatMap((module) =>
-    Array.isArray(module.BUILTIN_SKILL_ENTRIES) ? module.BUILTIN_SKILL_ENTRIES : [],
-  );
+  const entries = Object.entries(modules)
+    .sort(([pathA], [pathB]) => pathA.localeCompare(pathB))
+    .flatMap(([modulePath, module]) => {
+      const skillEntries = Array.isArray(module.BUILTIN_SKILL_ENTRIES)
+        ? module.BUILTIN_SKILL_ENTRIES
+        : [];
+      return skillEntries.map((entry) => ({ entry, modulePath }));
+    });
 
   const byId = new Map<string, BuiltinSkillEntry>();
-  entries.forEach((entry) => {
+  const sourceById = new Map<string, string>();
+  entries.forEach(({ entry, modulePath }) => {
     const skillId = typeof entry?.id === "string" ? entry.id.trim() : "";
     if (!skillId || !entry.declaration || typeof entry.execute !== "function") return;
     if (byId.has(skillId)) {
-      console.warn(`[skills] Duplicate built-in skill id detected: ${skillId}`);
-      return;
+      throw new Error(
+        `[skills] Duplicate built-in skill id "${skillId}" in ${modulePath}. ` +
+          `Already registered in ${sourceById.get(skillId)}.`,
+      );
     }
     byId.set(skillId, {
       ...entry,
@@ -41,6 +49,7 @@ function collectBuiltinSkillEntries(): BuiltinSkillEntry[] {
           ? entry.version.trim()
           : "1.0.0",
     });
+    sourceById.set(skillId, modulePath);
   });
 
   return Array.from(byId.values());
