@@ -6,6 +6,7 @@ import type {
   FormFieldSchema,
   SourceSelection,
 } from '@/src/services/dataSources';
+import type { EditableSubjectDataFormModel } from './contracts';
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 type MatchStep = 'selection' | 'analyzing' | 'result';
@@ -15,7 +16,7 @@ interface UseEditableSourceFormArgs {
   setEditableData: React.Dispatch<React.SetStateAction<string>>;
   step: MatchStep;
   match: Match | undefined;
-  importedData: any;
+  importedData: EditableSubjectDataFormModel | null;
   activeDomain: AnalysisDomain;
   domainSourceCatalog: DataSourceDefinition[];
   resolvedSelectedSources: SourceSelection;
@@ -49,17 +50,17 @@ export function useEditableSourceForm({
   React.useEffect(() => {
     if (!match || step !== 'selection') return;
 
-    let currentData: any = {};
+    let currentData: EditableSubjectDataFormModel = {};
     try {
       if (editableDataRef.current) {
-        currentData = JSON.parse(editableDataRef.current);
+        currentData = JSON.parse(editableDataRef.current) as EditableSubjectDataFormModel;
       }
     } catch (e) {
       // If JSON is invalid and not empty, avoid overwriting user's work
       if (editableDataRef.current && editableDataRef.current.trim() !== '') return;
     }
 
-    const nextData: any = { ...currentData };
+    const nextData: EditableSubjectDataFormModel = { ...currentData };
     const sourceContext = { match, importedData };
 
     domainSourceCatalog.forEach((source) => {

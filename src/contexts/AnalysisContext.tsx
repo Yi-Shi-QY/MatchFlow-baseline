@@ -7,6 +7,7 @@ import {
 } from '@/src/services/history';
 import { deleteSavedSubject } from '@/src/services/savedSubjects';
 import { AgentResult, AgentSegment, parseAgentStream } from '@/src/services/agentParser';
+import type { AnalysisRequestPayload } from '@/src/services/ai/contracts';
 import { getSettings } from '@/src/services/settings';
 import {
   buildPlannerRuntimeState,
@@ -24,7 +25,12 @@ export type { ActiveAnalysis };
 
 interface AnalysisContextType {
   activeAnalyses: Record<string, ActiveAnalysis>;
-  startAnalysis: (match: Match, dataToAnalyze: any, includeAnimations: boolean, isResume?: boolean) => void;
+  startAnalysis: (
+    match: Match,
+    dataToAnalyze: AnalysisRequestPayload,
+    includeAnimations: boolean,
+    isResume?: boolean,
+  ) => void;
   stopAnalysis: (matchId: string) => void;
   clearActiveAnalysis: (matchId: string) => void;
   setCollapsedSegments: (matchId: string, segments: Record<string, boolean>) => void;
@@ -191,7 +197,12 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     updateAnalysis(matchId, { collapsedSegments: segments });
   }, [updateAnalysis]);
 
-  const startAnalysis = useCallback(async (match: Match, dataToAnalyze: any, includeAnimations: boolean, isResume: boolean = false) => {
+  const startAnalysis = useCallback(async (
+    match: Match,
+    dataToAnalyze: AnalysisRequestPayload,
+    includeAnimations: boolean,
+    isResume: boolean = false,
+  ) => {
     const matchId = match.id;
     const analysisDomainId =
       typeof dataToAnalyze?.sourceContext?.domainId === 'string' &&

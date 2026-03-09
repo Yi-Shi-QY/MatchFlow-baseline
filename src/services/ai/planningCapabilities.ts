@@ -8,6 +8,10 @@ import { getAnalysisDomainById } from "../domains/registry";
 import type { AnalysisDomain } from "../domains/types";
 import type { HubEndpointHint } from "../extensions/types";
 import { getTemplateDeclaration } from "../remotion/templateParams";
+import type {
+  AnalysisRequestPayload,
+  NormalizedPlanSegment,
+} from "./contracts";
 
 const RESERVED_UTILITY_AGENT_IDS = new Set(["tag", "summary", "animation"]);
 
@@ -81,11 +85,15 @@ function cloneJsonLike<T>(input: T): T {
 }
 
 export function resolvePlanningHubHint(
-  matchData: any,
+  matchData: AnalysisRequestPayload,
   routeHub?: HubEndpointHint,
 ): HubEndpointHint | undefined {
-  const sourceHub = matchData?.sourceContext?.planning?.hub;
-  if (!routeHub && (!sourceHub || typeof sourceHub !== "object")) {
+  const rawSourceHub = matchData?.sourceContext?.planning?.hub;
+  const sourceHub =
+    rawSourceHub && typeof rawSourceHub === "object"
+      ? (rawSourceHub as Record<string, unknown>)
+      : undefined;
+  if (!routeHub && !sourceHub) {
     return undefined;
   }
 
@@ -105,7 +113,10 @@ export function resolvePlanningHubHint(
   };
 }
 
-export function resolvePlannerDomainId(matchData: any, activeDomainId?: string): string | null {
+export function resolvePlannerDomainId(
+  matchData: AnalysisRequestPayload,
+  activeDomainId?: string,
+): string | null {
   const fromSourceContext = normalizeDomainId(matchData?.sourceContext?.domainId);
   if (fromSourceContext) return fromSourceContext;
   return normalizeDomainId(activeDomainId);
@@ -203,7 +214,7 @@ export function resolveEffectiveAllowedAnimationTypes(
 export function buildPlanningSourceCatalog(
   domain: AnalysisDomain | null,
   allowedSourceIds: string[] | undefined,
-  matchData: any,
+  matchData: AnalysisRequestPayload,
 ): PlanningSourceCapability[] {
   if (!domain || !Array.isArray(domain.dataSources) || domain.dataSources.length === 0) {
     return [];
@@ -256,7 +267,10 @@ export function resolveEffectiveAllowedSourceIds(
   return fromCatalog;
 }
 
-export function buildSegmentScopedMatchData(matchData: any, segmentPlan: any): any {
+export function buildSegmentScopedMatchData(
+  matchData: AnalysisRequestPayload,
+  segmentPlan: NormalizedPlanSegment,
+): AnalysisRequestPayload {
   if (!matchData || typeof matchData !== "object") return matchData;
 
   const sourceContext =

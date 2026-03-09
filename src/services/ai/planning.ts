@@ -13,6 +13,10 @@ import {
 import type { DomainPlanningStrategy } from "../domains/planning/types";
 import type { PlanningRouteDecision } from "../domains/planning/types";
 import { listAnimationTypesForDomain } from "../remotion/templateParams";
+import type {
+  AnalysisRequestPayload,
+  NormalizedPlanSegment,
+} from "./contracts";
 
 export type TemplateType = string;
 export type { PlanningRouteDecision };
@@ -105,7 +109,10 @@ function resolveDomainAllowedAgentTypes(domainId: string): string[] {
   return Array.from(new Set(allowed));
 }
 
-function resolveAllowedAnimationTypes(matchData: any, domainId: string): string[] {
+function resolveAllowedAnimationTypes(
+  matchData: AnalysisRequestPayload,
+  domainId: string,
+): string[] {
   const planningContext = matchData?.sourceContext?.planning || {};
   const explicit = normalizeSourceIdList(
     planningContext?.allowedAnimationTypes || planningContext?.animationTypes,
@@ -165,7 +172,7 @@ function resolvePlannerAgentIdForMode(
 }
 
 export function resolvePlanningRoute(
-  matchData: any,
+  matchData: AnalysisRequestPayload,
   settings: Pick<AppSettings, "enableAutonomousPlanning" | "activeDomainId">,
 ): PlanningRouteDecision {
   const planningContext = matchData?.sourceContext?.planning || {};
@@ -266,7 +273,7 @@ export function resolvePlanningRoute(
 
 export function buildFallbackPlan(
   language: "en" | "zh",
-  matchData?: any,
+  matchData?: AnalysisRequestPayload,
   settings?: Pick<AppSettings, "activeDomainId">,
 ) {
   const strategy = getPlanningStrategyForAnalysis(matchData, resolveDomainSettings(settings));
@@ -281,7 +288,7 @@ function normalizeSourceIdList(input: unknown): string[] {
   return Array.from(new Set(normalized));
 }
 
-function resolveSelectedSourceIds(matchData: any): string[] {
+function resolveSelectedSourceIds(matchData: AnalysisRequestPayload): string[] {
   const sourceContext = matchData?.sourceContext;
   if (!sourceContext || typeof sourceContext !== "object") return [];
 
@@ -302,7 +309,10 @@ function resolveSelectedSourceIds(matchData: any): string[] {
     .map(([key]) => key.trim());
 }
 
-function normalizeSegmentSourceIds(segment: any, matchData: any): string[] {
+function normalizeSegmentSourceIds(
+  segment: any,
+  matchData: AnalysisRequestPayload,
+): string[] {
   const fromSourceIds = normalizeSourceIdList(segment?.sourceIds);
   const fromDataSourceIds = normalizeSourceIdList(segment?.dataSourceIds);
   const explicit = fromSourceIds.length > 0 ? fromSourceIds : fromDataSourceIds;
@@ -317,9 +327,9 @@ export function normalizePlan(
   allowedAgentTypes: string[] | null,
   allowedAnimationTypes: string[] | null,
   language: "en" | "zh",
-  matchData?: any,
+  matchData: AnalysisRequestPayload = {},
   settings?: Pick<AppSettings, "activeDomainId">,
-) {
+): NormalizedPlanSegment[] {
   const strategy = getPlanningStrategyForAnalysis(matchData, resolveDomainSettings(settings));
   let plan = Array.isArray(rawPlan) ? [...rawPlan] : [];
 

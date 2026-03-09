@@ -1,5 +1,9 @@
 import type { Match } from '@/src/data/matches';
 import type { MatchAnalysis } from '@/src/services/ai';
+import type {
+  AnalysisRequestPayload,
+  NormalizedPlanSegment,
+} from '@/src/services/ai/contracts';
 import type { AgentResult } from '@/src/services/agentParser';
 import type { PlannerRuntimeState } from '@/src/services/planner/runtime';
 
@@ -8,8 +12,8 @@ export interface ActiveAnalysis {
   domainId: string;
   subjectId: string;
   match: Match;
-  dataToAnalyze: any;
-  plan: any[];
+  dataToAnalyze: AnalysisRequestPayload;
+  plan: NormalizedPlanSegment[];
   includeAnimations: boolean;
   thoughts: string;
   parsedStream: AgentResult | null;

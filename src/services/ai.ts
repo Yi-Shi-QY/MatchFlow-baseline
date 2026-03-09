@@ -4,9 +4,12 @@ import { getAgent } from "../agents";
 import { buildFallbackPlan, normalizePlan, resolvePlanningRoute } from "./ai/planning";
 import { streamAIRequest } from "./ai/streamRequest";
 import { generateValidatedAnimationBlock } from "./ai/animationPipeline";
-import { extractJson } from "../utils/json";
 import type { Match } from "../data/matches";
 import { getAnalysisDomainById } from "./domains/registry";
+import type {
+  AnalysisRequestPayload,
+  NormalizedPlanSegment,
+} from "./ai/contracts";
 import {
   ensureAgentAvailable,
   ensurePlanAgentRequirements,
@@ -25,6 +28,11 @@ import {
   resolvePlanningHubHint,
 } from "./ai/planningCapabilities";
 import {
+  generateValidatedTagsBlock,
+  streamAnalysisAgent,
+  streamSummaryAgent,
+} from "./ai/agentRuntime";
+import {
   buildPlannerRuntimeState,
   createPlannerRunId,
   type PlannerRuntimeState,
@@ -35,6 +43,11 @@ export {
   streamAnimationAgent,
   streamFixAnimationParams,
 } from "./ai/animationPipeline";
+export {
+  streamAnalysisAgent,
+  streamTagAgent,
+  streamSummaryAgent,
+} from "./ai/agentRuntime";
 
 export interface OutcomeDistributionEntry {
   label: string;
@@ -69,14 +82,6 @@ export interface MatchAnalysis {
   };
 }
 
-type TagTeam = "home" | "away" | "neutral";
-
-interface NormalizedTag {
-  label: string;
-  team: TagTeam;
-  color?: string;
-}
-
 function createAbortError() {
   const err = new Error("Analysis aborted");
   (err as any).name = "AbortError";
@@ -92,109 +97,11 @@ export function isAbortError(error: any): boolean {
   return error?.name === "AbortError";
 }
 
-async function collectStreamText(
-  stream: AsyncGenerator<string>,
-  abortSignal?: AbortSignal,
-): Promise<string> {
-  throwIfAborted(abortSignal);
-  let output = "";
-  for await (const chunk of stream) {
-    throwIfAborted(abortSignal);
-    output += chunk;
-  }
-  throwIfAborted(abortSignal);
-  return output;
-}
-
-function normalizeTagArray(input: any): NormalizedTag[] {
-  if (!Array.isArray(input)) return [];
-
-  const normalized: NormalizedTag[] = [];
-  for (const item of input) {
-    if (!item || typeof item !== "object") continue;
-    const rawLabel = typeof item.label === "string" ? item.label.trim() : "";
-    if (!rawLabel) continue;
-
-    const rawTeam = typeof item.team === "string" ? item.team.toLowerCase() : "neutral";
-    const team: TagTeam =
-      rawTeam === "home" || rawTeam === "away" || rawTeam === "neutral"
-        ? (rawTeam as TagTeam)
-        : "neutral";
-
-    const tag: NormalizedTag = { label: rawLabel, team };
-    if (typeof item.color === "string" && item.color.trim().length > 0) {
-      tag.color = item.color.trim();
-    }
-    normalized.push(tag);
-    if (normalized.length >= 5) break;
-  }
-
-  return normalized;
-}
-
-function extractTagsFromModelOutput(raw: string): NormalizedTag[] {
-  if (!raw || !raw.trim()) return [];
-
-  const tagsBlock = raw.match(/<tags>([\s\S]*?)(?:<\/tags>|$)/i);
-  if (tagsBlock && tagsBlock[0].includes("</tags>")) {
-    const parsed = extractJson(tagsBlock[1].trim());
-    const normalized = normalizeTagArray(parsed);
-    if (normalized.length > 0) return normalized;
-  }
-
-  const directParsed = extractJson(raw);
-  return normalizeTagArray(directParsed);
-}
-
-function buildFallbackTags(language: "zh" | "en"): NormalizedTag[] {
-  if (language === "zh") {
-    return [
-      { label: "关键观察", team: "neutral", color: "zinc" },
-      { label: "核心趋势", team: "neutral", color: "zinc" },
-    ];
-  }
-
-  return [
-    { label: "Key Insight", team: "neutral", color: "zinc" },
-    { label: "Core Trend", team: "neutral", color: "zinc" },
-  ];
-}
-
-function buildTagsBlock(tags: NormalizedTag[]): string {
-  return `<tags>\n${JSON.stringify(tags, null, 2)}\n</tags>`;
-}
-
-async function generateValidatedTagsBlock(
-  analysisText: string,
-  abortSignal?: AbortSignal,
-): Promise<string> {
-  const settings = getSettings();
-  const language = settings.language === "zh" ? "zh" : "en";
-  const maxAttempts = 2;
-
-  const retryInstruction =
-    language === "zh"
-      ? "严格要求：仅输出一个完整闭合的 <tags> 区块，内部必须是合法 JSON 数组，不要输出任何解释文本。"
-      : "STRICT: Output only one complete <tags> block with a valid JSON array. Do not output explanations.";
-
-  for (let attempt = 0; attempt <= maxAttempts; attempt++) {
-    throwIfAborted(abortSignal);
-    const promptText = attempt === 0 ? analysisText : `${analysisText}\n\n${retryInstruction}`;
-    const raw = await collectStreamText(streamTagAgent(promptText, abortSignal), abortSignal);
-    const normalized = extractTagsFromModelOutput(raw);
-    if (normalized.length > 0) {
-      return buildTagsBlock(normalized);
-    }
-  }
-
-  return buildTagsBlock(buildFallbackTags(language));
-}
-
 export async function generateAnalysisPlan(
-  matchData: any,
+  matchData: AnalysisRequestPayload,
   includeAnimations: boolean = true,
   abortSignal?: AbortSignal,
-): Promise<any[]> {
+): Promise<NormalizedPlanSegment[]> {
   const settings = getSettings();
   const route = resolvePlanningRoute(matchData, settings);
   const language = settings.language === "zh" ? "zh" : "en";
@@ -375,46 +282,6 @@ export async function generateAnalysisPlan(
   }
 }
 
-export async function* streamAnalysisAgent(
-  matchData: any,
-  segmentPlan: any,
-  previousAnalysis: string = "",
-  abortSignal?: AbortSignal,
-) {
-  throwIfAborted(abortSignal);
-  const settings = getSettings();
-  const hubHint = resolvePlanningHubHint(matchData);
-  const agentId = segmentPlan.agentType || 'general';
-  await ensureAgentAvailable(agentId, hubHint);
-  const agent = getAgent(agentId);
-  // No animation schema passed here anymore
-  const prompt = agent.systemPrompt({ matchData, segmentPlan, language: settings.language, previousAnalysis });
-
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
-}
-
-export async function* streamTagAgent(analysisText: string, abortSignal?: AbortSignal) {
-  throwIfAborted(abortSignal);
-  const settings = getSettings();
-  const agent = getAgent('tag');
-  const prompt = agent.systemPrompt({ analysisText, language: settings.language });
-
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
-}
-
-export async function* streamSummaryAgent(
-  matchData: any,
-  previousAnalysis: string,
-  abortSignal?: AbortSignal,
-) {
-  throwIfAborted(abortSignal);
-  const settings = getSettings();
-  const agent = getAgent('summary');
-  const prompt = agent.systemPrompt({ matchData, previousAnalysis, language: settings.language });
-
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
-}
-
 export interface SegmentResult {
   agentId: string;
   title: string;
@@ -422,7 +289,7 @@ export interface SegmentResult {
 }
 
 export interface AnalysisResumeState {
-  plan: any[];
+  plan: NormalizedPlanSegment[];
   completedSegmentIndices: number[];
   fullAnalysisText: string;
   segmentResults?: SegmentResult[];
@@ -432,7 +299,7 @@ export interface AnalysisResumeState {
 }
 
 export async function* streamAgentThoughts(
-  matchData: any, 
+  matchData: AnalysisRequestPayload,
   includeAnimations: boolean = true,
   resumeState?: AnalysisResumeState,
   onStateUpdate?: (state: AnalysisResumeState) => void,
