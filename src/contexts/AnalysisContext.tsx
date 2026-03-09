@@ -1,43 +1,26 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react';
 import { Match } from '@/src/data/matches';
 import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState, isAbortError } from '@/src/services/ai';
 import {
   saveHistory,
-  saveResumeState,
   clearResumeState,
-  getResumeState,
-  isResumeStateRecoverable,
 } from '@/src/services/history';
 import { deleteSavedSubject } from '@/src/services/savedSubjects';
 import { AgentResult, AgentSegment, parseAgentStream } from '@/src/services/agentParser';
-import { LocalNotifications } from '@capacitor/local-notifications';
-import { Capacitor } from '@capacitor/core';
 import { getSettings } from '@/src/services/settings';
 import {
   buildPlannerRuntimeState,
   createPlannerRunId,
   type PlannerRuntimeState,
 } from '@/src/services/planner/runtime';
-import { buildSubjectRoute } from '@/src/services/navigation/subjectRoute';
+import { useAnalysisBackgroundNotification } from '@/src/contexts/analysis/notificationAdapter';
+import {
+  bootstrapResumeState,
+  createResumeSnapshotPersister,
+} from '@/src/contexts/analysis/resumePersistenceAdapter';
+import type { ActiveAnalysis } from '@/src/contexts/analysis/types';
 
-export interface ActiveAnalysis {
-  matchId: string;
-  domainId: string;
-  subjectId: string;
-  match: Match;
-  dataToAnalyze: any;
-  plan: any[];
-  includeAnimations: boolean;
-  thoughts: string;
-  parsedStream: AgentResult | null;
-  collapsedSegments: Record<string, boolean>;
-  isAnalyzing: boolean;
-  analysis: MatchAnalysis | null;
-  error: string | null;
-  planTotalSegments: number;
-  planCompletedSegments: number;
-  runtimeStatus: PlannerRuntimeState | null;
-}
+export type { ActiveAnalysis };
 
 interface AnalysisContextType {
   activeAnalyses: Record<string, ActiveAnalysis>;
@@ -47,7 +30,6 @@ interface AnalysisContextType {
   setCollapsedSegments: (matchId: string, segments: Record<string, boolean>) => void;
 }
 
-const RESUME_SNAPSHOT_INTERVAL_MS = 3000;
 const STREAM_UI_UPDATE_INTERVAL_MS = 80;
 
 function areTagsEqual(a: AgentSegment['tags'], b: AgentSegment['tags']): boolean {
@@ -133,106 +115,13 @@ const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined
 export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [activeAnalyses, setActiveAnalyses] = useState<Record<string, ActiveAnalysis>>({});
   const analysisAbortControllersRef = useRef<Record<string, AbortController>>({});
-  const lastNotificationKeyRef = useRef<string>('');
-  const lastNotificationAtRef = useRef<number>(0);
+  useAnalysisBackgroundNotification(activeAnalyses);
 
   const createAbortError = () => {
     const err = new Error("Analysis aborted");
     (err as any).name = "AbortError";
     return err;
   };
-
-  // Background Notification Effect
-  useEffect(() => {
-    const updateNotification = async () => {
-      if (!Capacitor.isNativePlatform()) return;
-      
-      const settings = getSettings();
-      if (!settings.enableBackgroundMode) return;
-
-      const analyzingMatches = Object.values(activeAnalyses).filter(a => a.isAnalyzing);
-      
-      if (analyzingMatches.length > 0) {
-        const additionalCount = Math.max(0, analyzingMatches.length - 1);
-        const firstMatch = analyzingMatches[0];
-        const segments = firstMatch.parsedStream?.segments || [];
-        const lastSegment = segments[segments.length - 1];
-        const language = settings.language === 'zh' ? 'zh' : 'en';
-        const completedFromSegments = segments.filter(seg => seg.isThoughtComplete).length;
-        const totalSegments =
-          firstMatch.planTotalSegments > 0
-            ? firstMatch.planTotalSegments
-            : Math.max(segments.length, completedFromSegments, 1);
-        const completedSegments = Math.min(
-          totalSegments,
-          Math.max(firstMatch.planCompletedSegments, completedFromSegments),
-        );
-        const progressPercent =
-          totalSegments > 0
-            ? Math.min(99, Math.floor((completedSegments / totalSegments) * 100))
-            : 0;
-        const status = lastSegment
-          ? (lastSegment.title || (language === 'zh' ? '处理中...' : 'Processing...'))
-          : (language === 'zh' ? '启动中...' : 'Starting...');
-
-        const title =
-          language === 'zh'
-            ? `MatchFlow 后台分析中 (${analyzingMatches.length} 场)`
-            : `MatchFlow Analysis Running (${analyzingMatches.length})`;
-        const bodyLines = [
-          `${firstMatch.match.homeTeam.name} vs ${firstMatch.match.awayTeam.name}`,
-          language === 'zh'
-            ? `进度：${completedSegments}/${totalSegments} (${progressPercent}%)`
-            : `Progress: ${completedSegments}/${totalSegments} (${progressPercent}%)`,
-          language === 'zh' ? `当前：${status}` : `Current: ${status}`,
-          additionalCount > 0
-            ? (language === 'zh' ? `另有 ${additionalCount} 场分析进行中` : `+${additionalCount} more matches in progress`)
-            : '',
-        ].filter(Boolean);
-        const body = bodyLines.join('\n');
-
-        const notificationKey = `${firstMatch.matchId}|${completedSegments}|${totalSegments}|${status}|${additionalCount}|${language}`;
-        const now = Date.now();
-        if (
-          notificationKey === lastNotificationKeyRef.current &&
-          now - lastNotificationAtRef.current < 1200
-        ) {
-          return;
-        }
-        lastNotificationKeyRef.current = notificationKey;
-        lastNotificationAtRef.current = now;
-        
-        await LocalNotifications.schedule({
-          notifications: [{
-            id: 1001,
-            title,
-            body,
-            ongoing: true,
-            autoCancel: false,
-            schedule: { at: new Date(Date.now() + 100) },
-            extra: {
-              matchId: firstMatch.matchId,
-              domainId: firstMatch.domainId,
-              route: buildSubjectRoute(firstMatch.domainId, firstMatch.subjectId),
-            } as any,
-          }]
-        });
-      } else {
-        // Cancel notification if no analysis is running
-        // We only cancel if we might have scheduled one (id 1001)
-        try {
-          await LocalNotifications.cancel({ notifications: [{ id: 1001 }] });
-          lastNotificationKeyRef.current = '';
-          lastNotificationAtRef.current = 0;
-        } catch (e) {
-          // Ignore error if notification doesn't exist
-        }
-      }
-    };
-
-    updateNotification();
-  }, [activeAnalyses]);
-
   const updateAnalysis = useCallback((matchId: string, updates: Partial<ActiveAnalysis>) => {
     setActiveAnalyses(prev => {
       if (!prev[matchId]) return prev;
@@ -323,56 +212,18 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     const abortController = new AbortController();
     analysisAbortControllersRef.current[matchId] = abortController;
     
-    // Initialize state
-    let initialThoughts = '';
-    let initialParsedStream: AgentResult | null = null;
-    let initialCollapsed: Record<string, boolean> = {};
-    let resumeStateData: AnalysisResumeState | undefined = undefined;
-    let shouldResume = isResume;
-
-    if (shouldResume) {
-      const savedState = await getResumeState(matchId, resumeOptions);
-      if (isResumeStateRecoverable(savedState)) {
-        resumeStateData = savedState.state;
-        
-        // Prefer completed segments. Keep draft thoughts only for temporary preview.
-        if (resumeStateData && resumeStateData.segmentResults) {
-          initialThoughts = resumeStateData.segmentResults.map(r => r.content).join('');
-        } else {
-          initialThoughts = savedState.thoughts;
-        }
-
-        initialParsedStream = parseAgentStream(initialThoughts);
-        
-        initialParsedStream.segments.forEach(seg => {
-          if (seg.isThoughtComplete) {
-            initialCollapsed[seg.id] = true;
-          }
-        });
-      } else {
-        shouldResume = false;
-        await clearResumeState(matchId, resumeOptions);
-      }
-    } else {
-      await clearResumeState(matchId, resumeOptions);
-    }
-
-    const initialResumeState: AnalysisResumeState = {
-      plan: Array.isArray(resumeStateData?.plan) ? resumeStateData.plan : [],
-      completedSegmentIndices: Array.isArray(resumeStateData?.completedSegmentIndices)
-        ? resumeStateData.completedSegmentIndices
-        : [],
-      fullAnalysisText:
-        typeof resumeStateData?.fullAnalysisText === 'string'
-          ? resumeStateData.fullAnalysisText
-          : initialThoughts,
-      segmentResults: Array.isArray(resumeStateData?.segmentResults)
-        ? resumeStateData.segmentResults
-        : [],
-      runtimeStatus: resumeStateData?.runtimeStatus,
-      subjectSnapshot: resumeStateData?.subjectSnapshot ?? resumeStateData?.matchSnapshot,
-      matchSnapshot: resumeStateData?.matchSnapshot,
-    };
+    const {
+      shouldResume,
+      resumeStateData,
+      initialThoughts,
+      initialParsedStream,
+      initialCollapsed,
+      initialResumeState,
+    } = await bootstrapResumeState({
+      matchId,
+      isResume,
+      resumeOptions,
+    });
     const initialPlanTotalSegments = initialResumeState.plan.length;
     const initialPlanCompletedSegments = initialResumeState.completedSegmentIndices.length;
 
@@ -454,33 +305,29 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       runtimeStatus: initialRuntimeStatus,
     };
     let latestRuntimeStatus: PlannerRuntimeState = initialRuntimeStatus;
-    let lastSnapshotAt = 0;
     let lastUiRenderAt = 0;
     let dropStaleDraftOnFirstChunk =
       shouldResume && (!resumeStateData?.segmentResults || resumeStateData.segmentResults.length === 0);
     const baselineCompletedSegments = initialPlanCompletedSegments;
     let hasProducedNewChunks = false;
     let hasAdvancedCompletedSegments = false;
+    const { persistSnapshot } = createResumeSnapshotPersister({
+      matchId,
+      match,
+      resumeOptions,
+      ownerController: abortController,
+      getCurrentController: () => analysisAbortControllersRef.current[matchId],
+    });
 
     const persistResumeSnapshot = (force: boolean = false) => {
-      if (analysisAbortControllersRef.current[matchId] !== abortController) {
-        return;
-      }
-      const now = Date.now();
-      if (!force && now - lastSnapshotAt < RESUME_SNAPSHOT_INTERVAL_MS) {
-        return;
-      }
-      lastSnapshotAt = now;
-      const stateToPersist: AnalysisResumeState = {
-        ...latestResumeState,
-        subjectSnapshot: match,
-        runtimeStatus: latestRuntimeStatus,
-        matchSnapshot: match,
-      };
-      void saveResumeState(matchId, stateToPersist, currentThoughts, {
-        ...resumeOptions,
-        subjectSnapshot: match,
-      });
+      persistSnapshot(
+        {
+          latestResumeState,
+          latestRuntimeStatus,
+          currentThoughts,
+        },
+        force,
+      );
     };
 
     const commitLivePreview = (
@@ -811,3 +658,4 @@ export function useAnalysis() {
   }
   return context;
 }
+
