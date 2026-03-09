@@ -23,11 +23,7 @@ import { AgentResult } from '@/src/services/agentParser';
 import { RemotionPlayer } from '@/src/components/RemotionPlayer';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
 import { compressToEncodedURIComponent } from 'lz-string';
-import { jsPDF } from 'jspdf';
 import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share';
-import { ensurePdfCjkFont, PDF_CJK_FONT_FAMILY } from '@/src/services/pdfFont';
 import {
   fetchMatchAnalysisConfig,
   mergeServerPlanningIntoMatchData,
@@ -319,6 +315,10 @@ export default function MatchDetail() {
     setShowExportModal(false);
 
     try {
+      const [{ jsPDF }, { ensurePdfCjkFont, PDF_CJK_FONT_FAMILY }] = await Promise.all([
+        import('jspdf'),
+        import('@/src/services/pdfFont'),
+      ]);
       const pdf = new jsPDF('p', 'mm', 'a4');
       const canUseCjkFont = await ensurePdfCjkFont(pdf);
       const pdfFontFamily = canUseCjkFont ? PDF_CJK_FONT_FAMILY : 'helvetica';
@@ -452,6 +452,10 @@ export default function MatchDetail() {
       }).replace(/[\\/:*?"<>|]/g, '_');
 
       if (Capacitor.isNativePlatform()) {
+        const [{ Filesystem, Directory }, { Share: NativeShare }] = await Promise.all([
+          import('@capacitor/filesystem'),
+          import('@capacitor/share'),
+        ]);
         const pdfBase64 = pdf.output('datauristring').split(',')[1];
         const fileResult = await Filesystem.writeFile({
           path: fileName,
@@ -459,7 +463,7 @@ export default function MatchDetail() {
           directory: Directory.Cache
         });
 
-        await Share.share({
+        await NativeShare.share({
           title: t('match.share_report'),
           text: t('match.share_text', { home: primaryName, away: secondaryName }),
           url: fileResult.uri,

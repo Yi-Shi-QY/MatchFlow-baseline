@@ -3,20 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useEffect, Component, ErrorInfo, ReactNode, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import Home from './pages/Home';
-import MatchDetail from './pages/MatchDetail';
-import Share from './pages/Share';
-import Scan from './pages/Scan';
-import Settings from './pages/Settings';
-import ExtensionsHub from './pages/ExtensionsHub';
 import { AnalysisProvider } from './contexts/AnalysisContext';
 import { App as CapacitorApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { getSettings } from './services/settings';
 import { buildLegacyMatchRoute, buildSubjectRoute } from './services/navigation/subjectRoute';
+
+const MatchDetail = lazy(() => import('./pages/MatchDetail'));
+const Share = lazy(() => import('./pages/Share'));
+const Scan = lazy(() => import('./pages/Scan'));
+const Settings = lazy(() => import('./pages/Settings'));
+const ExtensionsHub = lazy(() => import('./pages/ExtensionsHub'));
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -56,6 +57,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 
 function AppRoutes() {
   const navigate = useNavigate();
+  const routeFallback = (
+    <div className="min-h-screen bg-black text-zinc-400 flex items-center justify-center text-sm">
+      Loading page...
+    </div>
+  );
 
   useEffect(() => {
     const checkAndRequestPermissions = async () => {
@@ -110,15 +116,17 @@ function AppRoutes() {
   }, [navigate]);
 
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/match/:id" element={<MatchDetail />} />
-      <Route path="/subject/:domainId/:subjectId" element={<MatchDetail />} />
-      <Route path="/share" element={<Share />} />
-      <Route path="/scan" element={<Scan />} />
-      <Route path="/settings" element={<Settings />} />
-      <Route path="/extensions" element={<ExtensionsHub />} />
-    </Routes>
+    <Suspense fallback={routeFallback}>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/match/:id" element={<MatchDetail />} />
+        <Route path="/subject/:domainId/:subjectId" element={<MatchDetail />} />
+        <Route path="/share" element={<Share />} />
+        <Route path="/scan" element={<Scan />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/extensions" element={<ExtensionsHub />} />
+      </Routes>
+    </Suspense>
   );
 }
 
