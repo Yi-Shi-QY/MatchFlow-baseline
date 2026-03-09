@@ -44,6 +44,44 @@ interface BuildMatchDetailDisplayDataArgs {
   activeDomainId: string;
 }
 
+function buildParsedStreamFromHistory(historyRecord: HistoryRecord): AgentResult | null {
+  if (historyRecord.parsedStream) {
+    return historyRecord.parsedStream;
+  }
+  const blocks = historyRecord.analysisOutputEnvelope?.blocks;
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    return null;
+  }
+
+  const textBlocks = blocks
+    .filter((block) => block.type === 'text' && typeof block.content === 'string')
+    .map((block, index) => ({
+      id: `restored_seg_${index}`,
+      title:
+        typeof block.title === 'string' && block.title.trim().length > 0
+          ? block.title.trim()
+          : `Segment ${index + 1}`,
+      thoughts: block.content!.trim(),
+      tags: [],
+      animationJson: '',
+      animation: null,
+      isThoughtComplete: true,
+      isAnimationComplete: true,
+    }))
+    .filter((segment) => segment.thoughts.length > 0);
+
+  if (textBlocks.length === 0) {
+    return null;
+  }
+
+  return {
+    segments: textBlocks,
+    summaryJson: historyRecord.analysisOutputEnvelope?.summaryMarkdown || '',
+    summary: historyRecord.analysis,
+    isComplete: true,
+  };
+}
+
 export function buildMatchDetailDisplayData({
   activeAnalysis,
   historyRecord,
@@ -72,11 +110,15 @@ export function buildMatchDetailDisplayData({
   }
 
   if (historyRecord) {
+    const restoredParsedStream = buildParsedStreamFromHistory(historyRecord);
+    const restoredSummary = historyRecord.analysisOutputEnvelope?.summaryMarkdown?.trim() || '';
     return {
       analysis: historyRecord.analysis,
       analyzedMatch: historyRecord.match,
-      thoughts: '[SYSTEM] Loaded from local history cache.\n\nAnalysis complete.',
-      parsedStream: historyRecord.parsedStream || null,
+      thoughts: restoredSummary
+        ? `[SYSTEM] Loaded from local history cache.\n\n${restoredSummary}`
+        : '[SYSTEM] Loaded from local history cache.\n\nAnalysis complete.',
+      parsedStream: restoredParsedStream,
       collapsedSegments: {},
       isAnalyzing: false,
       error: null,

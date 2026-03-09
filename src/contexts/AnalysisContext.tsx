@@ -7,13 +7,14 @@ import {
 } from '@/src/services/history';
 import { deleteSavedSubject } from '@/src/services/savedSubjects';
 import { AgentResult, AgentSegment, parseAgentStream } from '@/src/services/agentParser';
-import type { AnalysisRequestPayload } from '@/src/services/ai/contracts';
+import type { AnalysisOutputBlock, AnalysisRequestPayload } from '@/src/services/ai/contracts';
 import { getSettings } from '@/src/services/settings';
 import {
   buildPlannerRuntimeState,
   createPlannerRunId,
   type PlannerRuntimeState,
 } from '@/src/services/planner/runtime';
+import { buildAnalysisOutputEnvelope } from '@/src/services/ai/multimodalCompatibility';
 import { useAnalysisBackgroundNotification } from '@/src/contexts/analysis/notificationAdapter';
 import {
   bootstrapResumeState,
@@ -483,6 +484,50 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
       if (finalParsed.summary) {
         const finalAnalysis = finalParsed.summary as MatchAnalysis;
+        const summaryLines: string[] = [];
+        if (typeof finalAnalysis.prediction === 'string' && finalAnalysis.prediction.trim().length > 0) {
+          summaryLines.push(finalAnalysis.prediction.trim());
+        }
+        if (Array.isArray(finalAnalysis.keyFactors) && finalAnalysis.keyFactors.length > 0) {
+          summaryLines.push('', 'Key factors:');
+          summaryLines.push(
+            ...finalAnalysis.keyFactors
+              .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+              .map((item) => `- ${item.trim()}`),
+          );
+        }
+        const summaryMarkdown =
+          summaryLines.join('\n').trim() ||
+          (typeof finalParsed.summaryJson === 'string' ? finalParsed.summaryJson.trim() : '') ||
+          currentThoughts.trim();
+        const segmentBlocks: AnalysisOutputBlock[] = [];
+        for (let index = 0; index < finalParsed.segments.length; index++) {
+          const segment = finalParsed.segments[index];
+          const content = typeof segment.thoughts === 'string' ? segment.thoughts.trim() : '';
+          if (!content) {
+            continue;
+          }
+          segmentBlocks.push({
+            type: 'text',
+            title:
+              typeof segment.title === 'string' && segment.title.trim().length > 0
+                ? segment.title.trim()
+                : `Segment ${index + 1}`,
+            content,
+          });
+        }
+        const summaryBlock: AnalysisOutputBlock = {
+          type: 'text',
+          title: 'Summary',
+          content: summaryMarkdown,
+        };
+        const outputBlocks: AnalysisOutputBlock[] = summaryMarkdown
+          ? [summaryBlock, ...segmentBlocks]
+          : segmentBlocks;
+        const analysisOutputEnvelope = buildAnalysisOutputEnvelope(summaryMarkdown, outputBlocks, {
+          summaryJson: finalParsed.summaryJson,
+          summary: finalParsed.summary,
+        });
         
         // Update match object with edited names before saving
         const finalMatch: Match & { customInfo?: unknown } = { ...match };
@@ -500,6 +545,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
             subjectId: matchId,
             subjectType: analysisSubjectType,
             subjectSnapshot: finalMatch,
+            analysisOutputEnvelope,
           }).catch(console.error);
 
           // Also try to delete from saved matches if it exists (it's now history)

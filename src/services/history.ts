@@ -3,6 +3,7 @@ import { Match } from '../data/matches';
 import { AgentResult, parseAgentStream } from './agentParser';
 import { getDB, HISTORY_TABLE, RESUME_STATE_TABLE } from './db';
 import { Capacitor } from '@capacitor/core';
+import type { AnalysisOutputEnvelope } from './ai/contracts';
 
 export interface SubjectRefInput {
   domainId?: string | null;
@@ -14,6 +15,7 @@ export interface HistoryQueryOptions extends SubjectRefInput {}
 
 export interface HistorySaveOptions extends SubjectRefInput {
   subjectSnapshot?: unknown;
+  analysisOutputEnvelope?: AnalysisOutputEnvelope;
 }
 
 export interface ResumeStateOptions extends SubjectRefInput {
@@ -38,6 +40,7 @@ export interface HistoryRecord {
   analysis: MatchAnalysis;
   parsedStream?: AgentResult;
   generatedCodes?: Record<string, string>;
+  analysisOutputEnvelope?: AnalysisOutputEnvelope;
   timestamp: number;
 }
 
@@ -49,6 +52,7 @@ const MAX_HISTORY_RECORD_COUNT = 20;
 const DEFAULT_DOMAIN_ID = 'football';
 const DEFAULT_SUBJECT_TYPE = 'match';
 const SUBJECT_KEY_SEPARATOR = '::';
+export const ANALYSIS_OUTPUT_ENVELOPE_CODE_KEY = 'analysisOutputEnvelope';
 
 export interface SavedResumeState {
   matchId: string; // legacy alias of subjectId
@@ -152,6 +156,86 @@ function buildSubjectRef(fallbackSubjectId: string, input?: SubjectRefInput): No
 
 function isRecordObject(input: unknown): input is Record<string, unknown> {
   return !!input && typeof input === 'object' && !Array.isArray(input);
+}
+
+function normalizeGeneratedCodes(input: unknown): Record<string, string> | undefined {
+  if (!isRecordObject(input)) return undefined;
+  const entries = Object.entries(input).filter(
+    (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string',
+  );
+  if (entries.length === 0) return undefined;
+  return Object.fromEntries(entries);
+}
+
+function normalizeOutputBlocks(input: unknown): AnalysisOutputEnvelope['blocks'] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((block) => {
+      if (!isRecordObject(block) || typeof block.type !== 'string') {
+        return null;
+      }
+      if (
+        block.type !== 'text' &&
+        block.type !== 'table' &&
+        block.type !== 'chart' &&
+        block.type !== 'image' &&
+        block.type !== 'reference'
+      ) {
+        return null;
+      }
+      const nextBlock: AnalysisOutputEnvelope['blocks'][number] = {
+        type: block.type,
+      };
+      if (typeof block.title === 'string') {
+        nextBlock.title = block.title;
+      }
+      if (typeof block.content === 'string') {
+        nextBlock.content = block.content;
+      }
+      if (isRecordObject(block.data)) {
+        nextBlock.data = block.data;
+      }
+      return nextBlock;
+    })
+    .filter((block): block is AnalysisOutputEnvelope['blocks'][number] => Boolean(block));
+}
+
+function normalizeAnalysisOutputEnvelope(input: unknown): AnalysisOutputEnvelope | undefined {
+  if (!isRecordObject(input)) return undefined;
+  if (typeof input.summaryMarkdown !== 'string') return undefined;
+  const blocks = normalizeOutputBlocks(input.blocks);
+  return {
+    summaryMarkdown: input.summaryMarkdown,
+    blocks,
+    rawProviderPayload: input.rawProviderPayload,
+  };
+}
+
+function parseAnalysisOutputEnvelopeFromGeneratedCodes(
+  generatedCodes?: Record<string, string>,
+): AnalysisOutputEnvelope | undefined {
+  if (!generatedCodes) return undefined;
+  const rawEnvelope = generatedCodes[ANALYSIS_OUTPUT_ENVELOPE_CODE_KEY];
+  if (typeof rawEnvelope !== 'string' || rawEnvelope.trim().length === 0) {
+    return undefined;
+  }
+  try {
+    return normalizeAnalysisOutputEnvelope(JSON.parse(rawEnvelope));
+  } catch {
+    return undefined;
+  }
+}
+
+function mergeAnalysisOutputEnvelopeIntoGeneratedCodes(
+  generatedCodes: Record<string, string> | undefined,
+  outputEnvelope: AnalysisOutputEnvelope | undefined,
+): Record<string, string> | undefined {
+  if (!outputEnvelope) {
+    return generatedCodes;
+  }
+  const merged = generatedCodes ? { ...generatedCodes } : {};
+  merged[ANALYSIS_OUTPUT_ENVELOPE_CODE_KEY] = JSON.stringify(outputEnvelope);
+  return merged;
 }
 
 function buildFallbackMatch(subjectId: string, domainId: string): Match {
@@ -380,6 +464,10 @@ function normalizeHistoryRecord(raw: unknown): HistoryRecord | null {
   const subjectType = normalizeSubjectType(raw.subjectType);
   const subjectSnapshot = raw.subjectSnapshot ?? raw.subjectSnapshotData ?? raw.match;
   const match = coerceMatch(raw.match ?? subjectSnapshot, subjectId, domainId);
+  const generatedCodes = normalizeGeneratedCodes(raw.generatedCodes);
+  const analysisOutputEnvelope =
+    normalizeAnalysisOutputEnvelope(raw.analysisOutputEnvelope) ??
+    parseAnalysisOutputEnvelopeFromGeneratedCodes(generatedCodes);
 
   const id =
     typeof raw.id === 'string' && raw.id.trim().length > 0
@@ -396,7 +484,8 @@ function normalizeHistoryRecord(raw: unknown): HistoryRecord | null {
     match,
     analysis: raw.analysis as MatchAnalysis,
     parsedStream: raw.parsedStream as AgentResult | undefined,
-    generatedCodes: raw.generatedCodes as Record<string, string> | undefined,
+    generatedCodes,
+    analysisOutputEnvelope,
     timestamp: raw.timestamp,
   };
 }
@@ -469,6 +558,12 @@ function normalizeSqlHistoryRow(row: unknown): HistoryRecord | null {
       subjectId,
       domainId,
     );
+    const generatedCodes = normalizeGeneratedCodes(
+      typeof rowValue?.generatedCodesData === 'string'
+        ? JSON.parse(rowValue.generatedCodesData)
+        : undefined,
+    );
+    const analysisOutputEnvelope = parseAnalysisOutputEnvelopeFromGeneratedCodes(generatedCodes);
 
     return {
       id:
@@ -489,10 +584,8 @@ function normalizeSqlHistoryRow(row: unknown): HistoryRecord | null {
         typeof rowValue?.parsedStreamData === 'string'
           ? JSON.parse(rowValue.parsedStreamData)
           : undefined,
-      generatedCodes:
-        typeof rowValue?.generatedCodesData === 'string'
-          ? JSON.parse(rowValue.generatedCodesData)
-          : undefined,
+      generatedCodes,
+      analysisOutputEnvelope,
       timestamp: typeof rowValue?.timestamp === 'number' ? rowValue.timestamp : Date.now(),
     };
   } catch {
@@ -785,6 +878,13 @@ export async function saveHistory(
   try {
     const timestamp = Date.now();
     const subjectSnapshot = options?.subjectSnapshot ?? match;
+    const mergedGeneratedCodes = mergeAnalysisOutputEnvelopeIntoGeneratedCodes(
+      generatedCodes,
+      options?.analysisOutputEnvelope,
+    );
+    const analysisOutputEnvelope =
+      normalizeAnalysisOutputEnvelope(options?.analysisOutputEnvelope) ??
+      parseAnalysisOutputEnvelopeFromGeneratedCodes(mergedGeneratedCodes);
     const record: HistoryRecord = {
       id: subjectRef.subjectKey,
       matchId: subjectRef.subjectId,
@@ -795,7 +895,8 @@ export async function saveHistory(
       match: coerceMatch(match, subjectRef.subjectId, subjectRef.domainId),
       analysis,
       parsedStream,
-      generatedCodes,
+      generatedCodes: mergedGeneratedCodes,
+      analysisOutputEnvelope,
       timestamp,
     };
 
@@ -803,7 +904,7 @@ export async function saveHistory(
       const db = await getDB();
       if (db) {
         const parsedStreamStr = parsedStream ? JSON.stringify(parsedStream) : null;
-        const generatedCodesStr = generatedCodes ? JSON.stringify(generatedCodes) : null;
+        const generatedCodesStr = mergedGeneratedCodes ? JSON.stringify(mergedGeneratedCodes) : null;
 
         await db.run(
           `
