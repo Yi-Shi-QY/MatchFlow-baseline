@@ -86,3 +86,5 @@ export const footballPlannerAdapter: DomainPlannerAdapter = {
   },
   mapRuntimeState: mapFootballRuntimeState,
 };
+
+export const DOMAIN_PLANNER_ADAPTER_ENTRIES: DomainPlannerAdapter[] = [footballPlannerAdapter];

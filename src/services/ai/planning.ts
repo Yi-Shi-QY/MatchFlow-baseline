@@ -6,6 +6,10 @@ import {
   getPlanningStrategyByDomainId,
   getPlanningStrategyForAnalysis,
 } from "../domains/planning/registry";
+import {
+  extractScopedPrefix,
+  isTemplateCompatibleWithDomain,
+} from "../domains/planning/templateCompatibility";
 import type { DomainPlanningStrategy } from "../domains/planning/types";
 import type { PlanningRouteDecision } from "../domains/planning/types";
 import { listAnimationTypesForDomain } from "../remotion/templateParams";
@@ -65,13 +69,6 @@ function normalizePlannerAgentId(agentId: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function extractScopedPrefix(value: string): string | null {
-  const index = value.indexOf("_");
-  if (index <= 0) return null;
-  const prefix = value.slice(0, index).trim();
-  return prefix.length > 0 ? prefix : null;
-}
-
 function isPlannerAgentCompatibleWithDomain(agentId: string, domainId: string): boolean {
   if (agentId === "planner_template" || agentId === "planner_autonomous") {
     return true;
@@ -82,14 +79,6 @@ function isPlannerAgentCompatibleWithDomain(agentId: string, domainId: string): 
   }
 
   const prefix = extractScopedPrefix(agentId);
-  if (!prefix) return true;
-  const strategy = getPlanningStrategyByDomainId(prefix);
-  if (!strategy) return true;
-  return prefix === domainId;
-}
-
-function isTemplateCompatibleWithDomain(templateId: string, domainId: string): boolean {
-  const prefix = extractScopedPrefix(templateId);
   if (!prefix) return true;
   const strategy = getPlanningStrategyByDomainId(prefix);
   if (!strategy) return true;

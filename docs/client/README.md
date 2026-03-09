@@ -36,6 +36,7 @@ If you are new to client work, read in this order:
 12. [33-domain-onboarding-retro-and-playbook-2026-03-03.md](./33-domain-onboarding-retro-and-playbook-2026-03-03.md)
 13. [34-domain-extension-go-live-standard-v1-2026-03-03.md](./34-domain-extension-go-live-standard-v1-2026-03-03.md)
 14. [35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md](./35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md)
+15. [37-client-performance-and-maintainability-optimization-plan-v1-2026-03-09.md](./37-client-performance-and-maintainability-optimization-plan-v1-2026-03-09.md)
 
 ## 4. Related Shared Docs
 
@@ -79,6 +80,7 @@ If you are new to client work, read in this order:
 12. [33-domain-onboarding-retro-and-playbook-2026-03-03.md](./33-domain-onboarding-retro-and-playbook-2026-03-03.md)
 13. [34-domain-extension-go-live-standard-v1-2026-03-03.md](./34-domain-extension-go-live-standard-v1-2026-03-03.md)
 14. [35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md](./35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md)
+15. [37-client-performance-and-maintainability-optimization-plan-v1-2026-03-09.md](./37-client-performance-and-maintainability-optimization-plan-v1-2026-03-09.md)
 
 ## 4. 关联公共文档
 

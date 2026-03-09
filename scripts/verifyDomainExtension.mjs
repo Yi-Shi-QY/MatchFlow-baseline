@@ -24,7 +24,6 @@ const PATHS = {
   animationMappingModulesRoot: "src/services/remotion/animationMappings/modules",
   plannerAdapterRegistry: "src/services/planner/adapters/registry.ts",
   plannerAdapterDefault: "src/services/planner/adapters/default.ts",
-  plannerAdapterFootball: "src/services/planner/adapters/football.ts",
   plannerBridge: "src/components/planner/AnalysisPlannerRuntimeBridge.tsx",
 };
 
@@ -324,7 +323,7 @@ function verifySharedAgentNeutrality(errors) {
   });
 }
 
-function verifyPlannerAdapterContracts(errors, domainDirs) {
+function verifyPlannerAdapterContracts(errors) {
   [
     PATHS.plannerAdapterRegistry,
     PATHS.plannerAdapterDefault,
@@ -336,19 +335,21 @@ function verifyPlannerAdapterContracts(errors, domainDirs) {
   });
 
   const registryContent = read(PATHS.plannerAdapterRegistry);
+  if (!registryContent.includes('import.meta.glob(["./*.ts", "!./registry.ts", "!./index.ts"]')) {
+    errors.push(
+      `[planner] ${PATHS.plannerAdapterRegistry} must auto-discover adapters via import.meta.glob(["./*.ts", "!./registry.ts", "!./index.ts"])`,
+    );
+  }
+  if (!registryContent.includes("DOMAIN_PLANNER_ADAPTER_ENTRIES")) {
+    errors.push(
+      `[planner] ${PATHS.plannerAdapterRegistry} must read DOMAIN_PLANNER_ADAPTER_ENTRIES from adapter modules`,
+    );
+  }
   if (!registryContent.includes("export function getPlannerAdapter")) {
     errors.push(`[planner] ${PATHS.plannerAdapterRegistry} must export getPlannerAdapter(...)`);
   }
   if (!/return\s+defaultPlannerAdapter;/.test(registryContent)) {
     errors.push(`[planner] ${PATHS.plannerAdapterRegistry} must fallback to defaultPlannerAdapter`);
-  }
-
-  if (domainDirs.includes("football")) {
-    if (!fs.existsSync(path.join(ROOT, PATHS.plannerAdapterFootball))) {
-      errors.push(`[planner] Missing football planner adapter file ${PATHS.plannerAdapterFootball}`);
-    } else if (!registryContent.includes("footballPlannerAdapter")) {
-      errors.push(`[planner] ${PATHS.plannerAdapterRegistry} must register footballPlannerAdapter`);
-    }
   }
 
   const bridgeContent = read(PATHS.plannerBridge);
@@ -629,7 +630,7 @@ function run() {
     if (name === "shared") return false;
     return fs.existsSync(path.join(ROOT, PATHS.domainsRoot, name, "domain.ts"));
   });
-  verifyPlannerAdapterContracts(errors, domainDirs);
+  verifyPlannerAdapterContracts(errors);
 
   const domainAgentKeys = new Set();
   const domainAgentVersionKeys = new Set();

@@ -1,3 +1,7 @@
+import {
+  resolveDomainTemplateIds,
+  scopeTemplateIdsByDomain,
+} from "@/src/services/domains/planning/templateCompatibility";
 import { AgentConfig } from "./types";
 
 const DEFAULT_TEMPLATE_OPTIONS = ["basic", "standard", "odds_focused", "comprehensive"];
@@ -11,10 +15,16 @@ function dedupeNonEmptyStrings(input: unknown): string[] {
 }
 
 function resolveDomainId(matchData: any): string {
-  if (typeof matchData?.sourceContext?.domainId === "string" && matchData.sourceContext.domainId.trim()) {
+  if (
+    typeof matchData?.sourceContext?.domainId === "string" &&
+    matchData.sourceContext.domainId.trim()
+  ) {
     return matchData.sourceContext.domainId.trim();
   }
-  if (typeof matchData?.analysisConfig?.domainId === "string" && matchData.analysisConfig.domainId.trim()) {
+  if (
+    typeof matchData?.analysisConfig?.domainId === "string" &&
+    matchData.analysisConfig.domainId.trim()
+  ) {
     return matchData.analysisConfig.domainId.trim();
   }
   return "default";
@@ -22,10 +32,21 @@ function resolveDomainId(matchData: any): string {
 
 function resolveTemplateCandidates(matchData: any): string[] {
   const planning = matchData?.sourceContext?.planning || {};
-  const candidates = dedupeNonEmptyStrings(planning?.templateCandidates);
+  const domainId = resolveDomainId(matchData);
+  const domainTemplateIds = resolveDomainTemplateIds(domainId);
+
+  const candidates = scopeTemplateIdsByDomain(
+    dedupeNonEmptyStrings(planning?.templateCandidates),
+    domainId,
+    { domainTemplateIds },
+  );
   if (candidates.length > 0) return candidates;
 
-  const available = dedupeNonEmptyStrings(planning?.availableTemplates);
+  const available = scopeTemplateIdsByDomain(
+    dedupeNonEmptyStrings(planning?.availableTemplates),
+    domainId,
+    { domainTemplateIds },
+  );
   if (available.length > 0) return available;
 
   const forcedTemplate =
@@ -34,7 +55,16 @@ function resolveTemplateCandidates(matchData: any): string[] {
       : typeof planning?.templateType === "string" && planning.templateType.trim().length > 0
         ? planning.templateType.trim()
         : "";
-  if (forcedTemplate) return [forcedTemplate];
+  if (forcedTemplate) {
+    const scopedForced = scopeTemplateIdsByDomain([forcedTemplate], domainId, {
+      domainTemplateIds,
+    });
+    if (scopedForced.length > 0) return scopedForced;
+  }
+
+  if (domainTemplateIds.size > 0) {
+    return Array.from(domainTemplateIds);
+  }
 
   return [...DEFAULT_TEMPLATE_OPTIONS];
 }
