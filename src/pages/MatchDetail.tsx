@@ -5,15 +5,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { MOCK_MATCHES, Match } from '@/src/data/matches';
 import { MatchAnalysis } from '@/src/services/ai';
-import {
-  getHistory,
-  getResumeState,
-  clearResumeState,
-  isResumeStateRecoverable,
-  HistoryRecord,
-  SavedResumeState,
-} from '@/src/services/history';
-import { getSavedSubjects, type SavedSubjectRecord } from '@/src/services/savedSubjects';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
 import { ArrowLeft, Share2, BrainCircuit, Play, Pause, Activity, Info, CheckCircle2, TrendingUp, BarChart2, RefreshCw, Code2, LayoutTemplate, FileText, ChevronDown, ChevronUp, Video, Download, Loader2 } from 'lucide-react';
@@ -23,11 +14,6 @@ import { AgentResult } from '@/src/services/agentParser';
 import { RemotionPlayer } from '@/src/components/RemotionPlayer';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
 import { compressToEncodedURIComponent } from 'lz-string';
-import {
-  fetchMatchAnalysisConfig,
-  mergeServerPlanningIntoMatchData,
-  resolveAnalysisConfig,
-} from '@/src/services/analysisConfig';
 import {
   FormFieldSchema,
   SourceIconKey,
@@ -45,8 +31,12 @@ import {
   type ResultPresenterContext,
 } from '@/src/services/domains/ui/presenter';
 import { exportMatchReportPdf } from '@/src/pages/matchDetail/exportReportPdf';
-import type { PlannerRuntimeState, PlannerStage } from '@/src/services/planner/runtime';
-import { getPlannerStageI18nKey } from '@/src/services/planner/stageI18n';
+import { useMatchRecordContext } from '@/src/pages/matchDetail/useMatchRecordContext';
+import { useResumeRecoveryState } from '@/src/pages/matchDetail/useResumeRecoveryState';
+import {
+  buildMatchDetailDisplayData,
+  useAnalysisRuntime,
+} from '@/src/pages/matchDetail/useAnalysisRuntime';
 import { AnalysisPlannerRuntimeBridge } from '@/src/components/planner/AnalysisPlannerRuntimeBridge';
 
 interface ExportSegmentOption {
@@ -116,51 +106,15 @@ export default function MatchDetail() {
     } as Match;
   }, [importedData]);
   
-  const [historyRecord, setHistoryRecord] = useState<HistoryRecord | undefined>(undefined);
-  const [savedMatchRecord, setSavedMatchRecord] = useState<SavedSubjectRecord | undefined>(undefined);
-  const [resumeMatch, setResumeMatch] = useState<Match | undefined>(undefined);
-  const [isLoadingRecordContext, setIsLoadingRecordContext] = useState(true);
-
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoadingRecordContext(true);
-      try {
-        const currentDomainId = activeDomain.id;
-        const history = await getHistory({ domainId: currentDomainId });
-        const record = history.find(
-          (h) => h.subjectId === id || h.matchId === id || h.id === id,
-        );
-        setHistoryRecord(record);
-
-        if (!record) {
-          const savedMatches = await getSavedSubjects({ domainId: currentDomainId });
-          const saved = savedMatches.find((s) => s.subjectId === id || s.id === id);
-          setSavedMatchRecord(saved);
-        } else {
-          setSavedMatchRecord(undefined);
-        }
-
-        if (id) {
-          const resumeState = await getResumeState(id, {
-            domainId: currentDomainId,
-            subjectId: id,
-            subjectType: 'match',
-          });
-          const snapshot = resumeState?.state?.subjectSnapshot || resumeState?.state?.matchSnapshot;
-          if (snapshot && typeof snapshot === 'object') {
-            setResumeMatch(snapshot as Match);
-          } else {
-            setResumeMatch(undefined);
-          }
-        } else {
-          setResumeMatch(undefined);
-        }
-      } finally {
-        setIsLoadingRecordContext(false);
-      }
-    };
-    loadData();
-  }, [id, activeDomain.id]);
+  const {
+    historyRecord,
+    savedMatchRecord,
+    resumeMatch,
+    isLoadingRecordContext,
+  } = useMatchRecordContext({
+    id,
+    domainId: activeDomain.id,
+  });
 
   const routeActiveAnalysis = id
     ? Object.values(activeAnalyses).find(
@@ -185,7 +139,6 @@ export default function MatchDetail() {
   const activeAnalysis = routeActiveAnalysis || (match ? activeAnalyses[match.id] : null);
 
   // Local state for UI
-  const [step, setStep] = useState<'selection' | 'analyzing' | 'result'>('selection');
   const [includeAnimations, setIncludeAnimations] = useState(true);
   const [selectedSources, setSelectedSources] = useState<Partial<SourceSelection>>({});
   const domainUiPresenter = getDomainUiPresenter(activeDomain);
@@ -202,7 +155,6 @@ export default function MatchDetail() {
 
   const [editableData, setEditableData] = useState("");
   const [showJson, setShowJson] = useState(false);
-  const [savedResumeState, setSavedResumeState] = useState<SavedResumeState | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isPreviewExpanded, setIsPreviewExpanded] = useState(true);
@@ -210,7 +162,26 @@ export default function MatchDetail() {
   const [exportSegments, setExportSegments] = useState<Record<string, ExportSegmentOption>>({});
   const [includeSummaryInExport, setIncludeSummaryInExport] = useState(true);
   const [segmentAnimationOverrides, setSegmentAnimationOverrides] = useState<Record<string, any>>({});
-  const [isPlannerCompact, setIsPlannerCompact] = useState(false);
+
+  const { savedResumeState, resumeStatusMeta } = useResumeRecoveryState({
+    match,
+    activeAnalysis,
+    historyRecord,
+    activeDomainId: activeDomain.id,
+    language: i18n.language,
+    t: (key, options) => String(t(key, options as any)),
+  });
+
+  const { step, setStep, startAnalysis, stopAnalysis, isPlannerCompact } = useAnalysisRuntime({
+    match,
+    editableData,
+    includeAnimations,
+    activeDomainId: activeDomain.id,
+    activeAnalysis,
+    startAnalysisInContext: contextStartAnalysis,
+    stopAnalysisInContext: contextStopAnalysis,
+    t: (key, options) => String(t(key, options as any)),
+  });
 
   useEffect(() => {
     setSegmentAnimationOverrides({});
@@ -310,104 +281,6 @@ export default function MatchDetail() {
       setIsExporting(false);
     }
   };
-
-  // Sync with active analysis
-  useEffect(() => {
-    if (activeAnalysis) {
-      if (activeAnalysis.isAnalyzing) {
-        setStep('analyzing');
-      } else if (activeAnalysis.analysis) {
-        setStep('result');
-      } else {
-        setStep('selection');
-      }
-    }
-  }, [activeAnalysis]);
-
-  useEffect(() => {
-    if (!match) return;
-
-    const shouldLoadResume =
-      !activeAnalysis || (!activeAnalysis.isAnalyzing && !activeAnalysis.analysis);
-
-    if (historyRecord && !activeAnalysis) {
-      setStep('result');
-      setSavedResumeState(null);
-      return;
-    }
-
-    if (!shouldLoadResume) {
-      setSavedResumeState(null);
-      return;
-    }
-
-    let cancelled = false;
-    const resumeOptions = {
-      domainId: activeDomain.id,
-      subjectId: match.id,
-      subjectType: 'match' as const,
-    };
-
-    const loadResumeState = async () => {
-      const resumeState = await getResumeState(match.id, resumeOptions);
-      if (cancelled) return;
-
-      if (!isResumeStateRecoverable(resumeState)) {
-        setSavedResumeState(null);
-        if (resumeState) {
-          await clearResumeState(match.id, resumeOptions);
-        }
-        return;
-      }
-
-      setSavedResumeState(resumeState);
-    };
-
-    void loadResumeState();
-    return () => {
-      cancelled = true;
-    };
-  }, [match, activeAnalysis, historyRecord, activeDomain.id]);
-
-  const resumeStatusMeta = React.useMemo(() => {
-    if (!savedResumeState) return null;
-
-    const resumeState = savedResumeState.state;
-    const runtimeStatus = resumeState?.runtimeStatus;
-    const stage: PlannerStage = runtimeStatus?.stage || 'booting';
-    const stageLabel = t(getPlannerStageI18nKey(stage));
-
-    const completedSegments = Array.isArray(resumeState?.completedSegmentIndices)
-      ? resumeState.completedSegmentIndices.length
-      : Math.max(0, runtimeStatus?.segmentIndex || 0);
-    const totalSegments = Array.isArray(resumeState?.plan)
-      ? resumeState.plan.length
-      : Math.max(0, runtimeStatus?.totalSegments || 0);
-    const progressPercent =
-      typeof runtimeStatus?.progressPercent === 'number'
-        ? Math.max(0, Math.min(100, Math.round(runtimeStatus.progressPercent)))
-        : totalSegments > 0
-          ? Math.round((completedSegments / totalSegments) * 100)
-          : 0;
-
-    const locale = i18n.language.startsWith('zh') ? 'zh-CN' : 'en-US';
-    const lastSaved = new Date(savedResumeState.timestamp).toLocaleString(locale, {
-      hour12: false,
-    });
-    const activeSegmentTitle =
-      typeof runtimeStatus?.activeSegmentTitle === 'string' && runtimeStatus.activeSegmentTitle.trim().length > 0
-        ? runtimeStatus.activeSegmentTitle.trim()
-        : null;
-
-    return {
-      stageLabel,
-      completedSegments,
-      totalSegments,
-      progressPercent,
-      lastSaved,
-      activeSegmentTitle,
-    };
-  }, [savedResumeState, t, i18n.language]);
 
   const editableDataRef = React.useRef(editableData);
   useEffect(() => {
@@ -657,47 +530,6 @@ export default function MatchDetail() {
     );
   };
 
-  const startAnalysis = async (isResume: boolean = false) => {
-    if (!match) return;
-    let dataToAnalyze;
-    try {
-      dataToAnalyze = JSON.parse(editableData);
-    } catch (e) {
-      alert(t('match.invalid_json_preview'));
-      return;
-    }
-
-    try {
-      let serverConfig = null;
-      if (typeof match.id === 'string' && match.id.trim().length > 0 && !match.id.startsWith('custom_')) {
-        serverConfig = await fetchMatchAnalysisConfig(match.id.trim());
-      }
-
-      if (!serverConfig) {
-        serverConfig = await resolveAnalysisConfig(dataToAnalyze);
-      }
-
-      dataToAnalyze = mergeServerPlanningIntoMatchData(dataToAnalyze, serverConfig);
-
-      const currentSourceContext =
-        dataToAnalyze?.sourceContext && typeof dataToAnalyze.sourceContext === 'object'
-          ? dataToAnalyze.sourceContext
-          : {};
-      dataToAnalyze = {
-        ...dataToAnalyze,
-        sourceContext: {
-          ...currentSourceContext,
-          domainId: activeDomain.id,
-        },
-      };
-    } catch (error) {
-      console.warn('Failed to load server planning config; continue with local source context.', error);
-    }
-
-    setStep('analyzing');
-    contextStartAnalysis(match, dataToAnalyze, includeAnimations, isResume);
-  };
-
   const shareData = React.useMemo(() => {
     if (!editableData) return '';
     try {
@@ -730,57 +562,12 @@ export default function MatchDetail() {
     );
   }
 
-  // Determine what to render based on activeAnalysis or history
-  let displayData = {
-    analysis: null as MatchAnalysis | null,
-    analyzedMatch: match,
-    thoughts: '',
-    parsedStream: null as AgentResult | null,
-    collapsedSegments: {} as Record<string, boolean>,
-    isAnalyzing: false,
-    error: null as string | null,
-    planTotalSegments: 0,
-    planCompletedSegments: 0,
-    planSegments: [] as any[],
-    plannerDomainId: activeDomain.id as string,
-    runtimeStatus: null as PlannerRuntimeState | null,
-  };
-
-  if (activeAnalysis) {
-    const sourceContextDomainId =
-      typeof activeAnalysis.dataToAnalyze?.sourceContext?.domainId === 'string'
-        ? activeAnalysis.dataToAnalyze.sourceContext.domainId.trim()
-        : '';
-    displayData = {
-      analysis: activeAnalysis.analysis,
-      analyzedMatch: match,
-      thoughts: activeAnalysis.thoughts,
-      parsedStream: activeAnalysis.parsedStream,
-      collapsedSegments: activeAnalysis.collapsedSegments,
-      isAnalyzing: activeAnalysis.isAnalyzing,
-      error: activeAnalysis.error,
-      planTotalSegments: activeAnalysis.planTotalSegments,
-      planCompletedSegments: activeAnalysis.planCompletedSegments,
-      planSegments: Array.isArray(activeAnalysis.plan) ? activeAnalysis.plan : [],
-      plannerDomainId: sourceContextDomainId || activeDomain.id,
-      runtimeStatus: activeAnalysis.runtimeStatus,
-    };
-  } else if (historyRecord) {
-    displayData = {
-      analysis: historyRecord.analysis,
-      analyzedMatch: historyRecord.match,
-      thoughts: '[SYSTEM] Loaded from local history cache.\n\nAnalysis complete.',
-      parsedStream: historyRecord.parsedStream || null,
-      collapsedSegments: {},
-      isAnalyzing: false,
-      error: null,
-      planTotalSegments: 0,
-      planCompletedSegments: 0,
-      planSegments: [],
-      plannerDomainId: activeDomain.id,
-      runtimeStatus: null,
-    };
-  }
+  const displayData = buildMatchDetailDisplayData({
+    activeAnalysis,
+    historyRecord,
+    match,
+    activeDomainId: activeDomain.id,
+  });
 
   const {
     analysis,
@@ -796,29 +583,6 @@ export default function MatchDetail() {
     plannerDomainId,
     runtimeStatus,
   } = displayData;
-
-  useEffect(() => {
-    const shouldTrackPlannerScroll = isAnalyzing && (step === 'analyzing' || step === 'result');
-    if (!shouldTrackPlannerScroll) {
-      setIsPlannerCompact(false);
-      return;
-    }
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const collapseThreshold = 120;
-    const handleScroll = () => {
-      const nextCompact = window.scrollY > collapseThreshold;
-      setIsPlannerCompact((prev) => (prev === nextCompact ? prev : nextCompact));
-    };
-
-    handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, [isAnalyzing, step]);
 
   const retryMatchData = React.useMemo(() => {
     try {
@@ -885,7 +649,7 @@ export default function MatchDetail() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => contextStopAnalysis(match.id)}
+              onClick={stopAnalysis}
               title={t('match.stop_analysis')}
               aria-label={t('match.stop_analysis')}
               className="h-8 w-8 rounded-full border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors"
