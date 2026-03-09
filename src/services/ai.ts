@@ -84,8 +84,8 @@ export interface MatchAnalysis {
 }
 
 function createAbortError() {
-  const err = new Error("Analysis aborted");
-  (err as any).name = "AbortError";
+  const err = new Error("Analysis aborted") as Error & { name: string };
+  err.name = "AbortError";
   return err;
 }
 
@@ -94,8 +94,23 @@ function throwIfAborted(signal?: AbortSignal) {
   throw createAbortError();
 }
 
-export function isAbortError(error: any): boolean {
-  return error?.name === "AbortError";
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && typeof error.message === "string") {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  return "Analysis failed";
+}
+
+export function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: string }).name === "AbortError"
+  );
 }
 
 export async function generateAnalysisPlan(
@@ -529,7 +544,7 @@ export async function* streamAgentThoughts(
       progressPercent: 100,
       stageLabel: "Completed",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (isAbortError(error)) {
       emitRuntime({
         stage: "cancelled",
@@ -545,7 +560,7 @@ export async function* streamAgentThoughts(
       segmentIndex: completedSegmentIndices.length,
       totalSegments: plan.length,
       stageLabel: "Failed",
-      errorMessage: error?.message || "Analysis failed",
+      errorMessage: getErrorMessage(error),
     });
     throw error;
   }

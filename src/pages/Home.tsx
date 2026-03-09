@@ -5,6 +5,8 @@ import { MOCK_MATCHES, Match } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Activity, Calendar, ChevronRight, QrCode, History, Settings, Search, Trash2, ArrowUpDown, Loader2, RefreshCw } from 'lucide-react';
 import { getHistory, clearHistory, deleteHistoryRecord, HistoryRecord, clearResumeState } from '@/src/services/history';
+import type { MatchAnalysis } from '@/src/services/ai';
+import type { AgentResult } from '@/src/services/agentParser';
 import {
   getSavedSubjects,
   deleteSavedSubject,
@@ -28,6 +30,7 @@ import {
 } from '@/src/services/domains/ui/presenter';
 import { buildSubjectRoute } from '@/src/services/navigation/subjectRoute';
 import { cn } from '@/src/lib/utils';
+import type { PlannerRuntimeState } from '@/src/services/planner/runtime';
 
 function toneClassForMetric(tone?: 'neutral' | 'positive' | 'negative') {
   if (tone === 'positive') return 'text-emerald-400';
@@ -39,6 +42,24 @@ type PendingDeleteTarget =
   | { kind: 'history'; id: string; matchId: string; domainId: string }
   | { kind: 'saved'; id: string; domainId: string }
   | null;
+
+interface ActiveHomeRecord {
+  id: string;
+  matchId: string;
+  domainId: string;
+  subjectId: string;
+  match: Match;
+  subjectSnapshot?: unknown;
+  timestamp: number;
+  isActive: true;
+  analysis: MatchAnalysis | null;
+  parsedStream: AgentResult | null;
+  runtimeStatus: PlannerRuntimeState | null;
+  planTotalSegments: number;
+  planCompletedSegments: number;
+}
+
+type HomeListRecord = ActiveHomeRecord | (HistoryRecord & { isActive?: false });
 
 export default function Home() {
   const navigate = useNavigate();
@@ -61,6 +82,10 @@ export default function Home() {
   const prevAnalysesRef = React.useRef<Record<string, boolean>>({});
   const homeHistoryTheme = domainUiTheme.home.history;
   const summaryBarPalette = homeHistoryTheme.barPalette;
+  const translate = React.useCallback(
+    (key: string, options?: Record<string, unknown>) => String(t(key, options as never)),
+    [t],
+  );
 
   const presenterContext = useMemo<HomePresenterContext>(() => {
     const formatTime = (isoDate: string) => {
@@ -76,18 +101,18 @@ export default function Home() {
     };
 
     return {
-      t: (key, options) => String(t(key, options as any)),
+      t: translate,
       formatTime,
       formatDate,
     };
-  }, [t]);
+  }, [translate]);
 
   const historyPresenterContext = useMemo<HistoryPresenterContext>(
     () => ({
-      t: (key, options) => String(t(key, options as any)),
+      t: translate,
       language: i18n.language.startsWith('zh') ? 'zh' : 'en',
     }),
-    [t, i18n.language],
+    [translate, i18n.language],
   );
 
   const loadMatches = async () => {
@@ -200,8 +225,8 @@ export default function Home() {
   };
 
   // Combine history and active analyses
-  const allRecords = React.useMemo(() => {
-    const activeRecords = Object.values(activeAnalyses)
+  const allRecords = React.useMemo<HomeListRecord[]>(() => {
+    const activeRecords: ActiveHomeRecord[] = Object.values(activeAnalyses)
       .filter(active => active.isAnalyzing)
       .map(active => ({
         id: `active_${active.domainId}::${active.matchId}`,
@@ -540,7 +565,7 @@ export default function Home() {
 
             {filteredAndSortedHistory.length > 0 ? (
               <div className="flex overflow-x-auto gap-3 pb-4 snap-x snap-mandatory hide-scrollbar px-1">
-                {filteredAndSortedHistory.map((record: any) => {
+                {filteredAndSortedHistory.map((record) => {
                   const entityDisplay = resolveHomeEntityDisplay(
                     homePresenter,
                     record.match,
@@ -562,7 +587,7 @@ export default function Home() {
                       ? t(getPlannerStageI18nKey(runtimeStatus.stage))
                       : t('home.analyzing');
                     const completedFromSegments = parsedStream
-                      ? parsedStream.segments.filter((s: any) => s.isThoughtComplete).length
+                      ? parsedStream.segments.filter((s) => s.isThoughtComplete).length
                       : 0;
                     const totalFromSegments = parsedStream ? parsedStream.segments.length : 0;
                     const totalSegments = Math.max(

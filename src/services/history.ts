@@ -451,18 +451,29 @@ function matchHistoryQuery(record: HistoryRecord, options?: HistoryQueryOptions)
   return true;
 }
 
-function normalizeSqlHistoryRow(row: any): HistoryRecord | null {
+function normalizeSqlHistoryRow(row: unknown): HistoryRecord | null {
   try {
-    const domainId = normalizeDomainId(row?.domainId);
-    const subjectId = normalizeSubjectId(row?.subjectId ?? row?.matchId, row?.id);
-    const subjectType = normalizeSubjectType(row?.subjectType);
-    const subjectSnapshot = row?.subjectSnapshotData ? JSON.parse(row.subjectSnapshotData) : undefined;
-    const match = coerceMatch(row?.matchData ? JSON.parse(row.matchData) : subjectSnapshot, subjectId, domainId);
+    const rowValue = row as Record<string, unknown>;
+    const domainId = normalizeDomainId(rowValue?.domainId);
+    const subjectId = normalizeSubjectId(
+      rowValue?.subjectId ?? rowValue?.matchId,
+      typeof rowValue?.id === 'string' ? rowValue.id : '',
+    );
+    const subjectType = normalizeSubjectType(rowValue?.subjectType);
+    const subjectSnapshot =
+      typeof rowValue?.subjectSnapshotData === 'string'
+        ? JSON.parse(rowValue.subjectSnapshotData)
+        : undefined;
+    const match = coerceMatch(
+      typeof rowValue?.matchData === 'string' ? JSON.parse(rowValue.matchData) : subjectSnapshot,
+      subjectId,
+      domainId,
+    );
 
     return {
       id:
-        typeof row?.id === 'string' && row.id.trim().length > 0
-          ? row.id
+        typeof rowValue?.id === 'string' && rowValue.id.trim().length > 0
+          ? rowValue.id
           : buildSubjectKey(domainId, subjectId),
       matchId: subjectId,
       domainId,
@@ -470,10 +481,19 @@ function normalizeSqlHistoryRow(row: any): HistoryRecord | null {
       subjectType,
       subjectSnapshot,
       match,
-      analysis: row?.analysisData ? JSON.parse(row.analysisData) : ({} as MatchAnalysis),
-      parsedStream: row?.parsedStreamData ? JSON.parse(row.parsedStreamData) : undefined,
-      generatedCodes: row?.generatedCodesData ? JSON.parse(row.generatedCodesData) : undefined,
-      timestamp: typeof row?.timestamp === 'number' ? row.timestamp : Date.now(),
+      analysis:
+        typeof rowValue?.analysisData === 'string'
+          ? JSON.parse(rowValue.analysisData)
+          : ({} as MatchAnalysis),
+      parsedStream:
+        typeof rowValue?.parsedStreamData === 'string'
+          ? JSON.parse(rowValue.parsedStreamData)
+          : undefined,
+      generatedCodes:
+        typeof rowValue?.generatedCodesData === 'string'
+          ? JSON.parse(rowValue.generatedCodesData)
+          : undefined,
+      timestamp: typeof rowValue?.timestamp === 'number' ? rowValue.timestamp : Date.now(),
     };
   } catch {
     return null;
@@ -580,10 +600,14 @@ export async function saveResumeState(
 
   try {
     const timestamp = Date.now();
+    const stateWithSnapshots = state as AnalysisResumeState & {
+      subjectSnapshot?: unknown;
+      matchSnapshot?: unknown;
+    };
     const subjectSnapshot =
       options?.subjectSnapshot ??
-      (state as any).subjectSnapshot ??
-      (state as any).matchSnapshot ??
+      stateWithSnapshots.subjectSnapshot ??
+      stateWithSnapshots.matchSnapshot ??
       null;
     const stateToPersist: AnalysisResumeState = {
       ...state,

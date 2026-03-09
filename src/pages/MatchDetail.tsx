@@ -34,6 +34,7 @@ import { useEditableSourceForm } from '@/src/pages/matchDetail/useEditableSource
 import { SourceSelectionCards } from '@/src/pages/matchDetail/SourceSelectionCards';
 import { PromptPreviewPanel } from '@/src/pages/matchDetail/PromptPreviewPanel';
 import { AnalysisResultPanel } from '@/src/pages/matchDetail/AnalysisResultPanel';
+import type { EditableSubjectDataFormModel } from '@/src/pages/matchDetail/contracts';
 
 interface ExportSegmentOption {
   includeSegment: boolean;
@@ -57,7 +58,7 @@ export default function MatchDetail() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const location = useLocation();
-  const importedData = location.state?.importedData;
+  const importedData = (location.state?.importedData ?? null) as EditableSubjectDataFormModel | null;
   const {
     activeAnalyses,
     startAnalysis: contextStartAnalysis,
@@ -87,7 +88,9 @@ export default function MatchDetail() {
           logo: importedData.awayTeam?.logo || 'https://picsum.photos/seed/away/200/200', 
           form: importedData.awayTeam?.form || ['?', '?', '?', '?', '?'] 
         },
-        stats: importedData.stats || { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } },
+        stats:
+          (importedData.stats as Match['stats'] | undefined) ||
+          { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } },
         customInfo: importedData.customInfo
       } as Match;
     }
@@ -140,12 +143,16 @@ export default function MatchDetail() {
   const domainUiPresenter = getDomainUiPresenter(activeDomain);
   const domainUiTheme = getDomainUiTheme(activeDomain);
   const resultPresenter = domainUiPresenter.result;
+  const translate = React.useCallback(
+    (key: string, options?: Record<string, unknown>) => String(t(key, options as never)),
+    [t],
+  );
   const resultPresenterContext = React.useMemo<ResultPresenterContext>(
     () => ({
-      t: (key, options) => String(t(key, options as any)),
+      t: translate,
       language: i18n.language.startsWith('zh') ? 'zh' : 'en',
     }),
-    [t, i18n.language],
+    [translate, i18n.language],
   );
   const domainSourceCatalog = activeDomain.dataSources;
 
@@ -156,7 +163,7 @@ export default function MatchDetail() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportSegments, setExportSegments] = useState<Record<string, ExportSegmentOption>>({});
   const [includeSummaryInExport, setIncludeSummaryInExport] = useState(true);
-  const [segmentAnimationOverrides, setSegmentAnimationOverrides] = useState<Record<string, any>>({});
+  const [segmentAnimationOverrides, setSegmentAnimationOverrides] = useState<Record<string, unknown>>({});
 
   const { savedResumeState, resumeStatusMeta } = useResumeRecoveryState({
     match,
@@ -164,7 +171,7 @@ export default function MatchDetail() {
     historyRecord,
     activeDomainId: activeDomain.id,
     language: i18n.language,
-    t: (key, options) => String(t(key, options as any)),
+    t: translate,
   });
 
   const { step, setStep, startAnalysis, stopAnalysis, isPlannerCompact } = useAnalysisRuntime({
@@ -175,7 +182,7 @@ export default function MatchDetail() {
     activeAnalysis,
     startAnalysisInContext: contextStartAnalysis,
     stopAnalysisInContext: contextStopAnalysis,
-    t: (key, options) => String(t(key, options as any)),
+    t: translate,
   });
 
   useEffect(() => {
@@ -213,7 +220,7 @@ export default function MatchDetail() {
     domainSourceCatalog,
     resolvedSelectedSources,
     availableSources,
-    t: (key, options) => String(t(key, options as any)),
+    t: translate,
   });
 
   const renderSourceIcon = (icon: SourceIconKey) => {
@@ -222,7 +229,9 @@ export default function MatchDetail() {
     return <FileText className="w-5 h-5 text-zinc-400" />;
   };
 
-  const resolvePresenterSubjectSnapshot = (draftData: any | null): unknown => {
+  const resolvePresenterSubjectSnapshot = (
+    draftData: EditableSubjectDataFormModel | null,
+  ): unknown => {
     return (
       draftData ??
       historyRecord?.subjectSnapshot ??
@@ -250,7 +259,7 @@ export default function MatchDetail() {
   const handleExportPDF = async (stream: AgentResult | null, summary: MatchAnalysis | null) => {
     if (!match || isExporting) return;
 
-    let exportDraftData: any = null;
+    let exportDraftData: EditableSubjectDataFormModel | null = null;
     try {
       exportDraftData = editableData ? JSON.parse(editableData) : null;
     } catch (e) {
@@ -280,11 +289,15 @@ export default function MatchDetail() {
         resultPresenterContext,
         presenterSubjectSnapshot,
         language: i18n.language,
-        t: (key, options) => String(t(key, options as any)),
+        t: translate,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error && typeof error.message === 'string'
+          ? error.message
+          : t('match.export_unknown_error');
       console.error('Failed to export PDF:', error);
-      alert(`${t('match.export_failed')}: ${error?.message || t('match.export_unknown_error')}`);
+      alert(`${t('match.export_failed')}: ${errorMessage}`);
     } finally {
       setIsExporting(false);
     }
@@ -356,7 +369,7 @@ export default function MatchDetail() {
     return analyzedMatch;
   }, [editableData, analyzedMatch]);
 
-  let editablePreviewData: any = null;
+  let editablePreviewData: EditableSubjectDataFormModel | null = null;
   try {
     editablePreviewData = editableData ? JSON.parse(editableData) : null;
   } catch (e) {
@@ -468,7 +481,7 @@ export default function MatchDetail() {
               }))
             }
             renderSourceIcon={renderSourceIcon}
-            t={(key, options) => String(t(key, options as any))}
+            t={translate}
           />
 
           <PromptPreviewPanel
@@ -479,7 +492,7 @@ export default function MatchDetail() {
             editableData={editableData}
             onChangeEditableData={setEditableData}
             renderHumanReadableForm={renderHumanReadableForm}
-            t={(key, options) => String(t(key, options as any))}
+            t={translate}
           />
 
           <div className="flex items-center gap-3 mt-4 px-1">
@@ -581,7 +594,7 @@ export default function MatchDetail() {
           summaryBarPalette={summaryBarPalette}
           summaryIsZh={summaryIsZh}
           thoughts={thoughts}
-          t={(key, options) => String(t(key, options as any))}
+          t={translate}
         />
       )}
 

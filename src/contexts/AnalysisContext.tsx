@@ -124,9 +124,18 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   useAnalysisBackgroundNotification(activeAnalyses);
 
   const createAbortError = () => {
-    const err = new Error("Analysis aborted");
-    (err as any).name = "AbortError";
+    const err = new Error("Analysis aborted") as Error & { name: string };
+    err.name = "AbortError";
     return err;
+  };
+  const getErrorMessage = (error: unknown) => {
+    if (error instanceof Error && typeof error.message === 'string') {
+      return error.message;
+    }
+    if (typeof error === 'string') {
+      return error;
+    }
+    return "Analysis failed";
   };
   const updateAnalysis = useCallback((matchId: string, updates: Partial<ActiveAnalysis>) => {
     setActiveAnalyses(prev => {
@@ -476,14 +485,14 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         const finalAnalysis = finalParsed.summary as MatchAnalysis;
         
         // Update match object with edited names before saving
-        const finalMatch = { ...match };
+        const finalMatch: Match & { customInfo?: unknown } = { ...match };
         if (!finalMatch.homeTeam.id) finalMatch.homeTeam.id = 'home';
         if (!finalMatch.awayTeam.id) finalMatch.awayTeam.id = 'away';
         if (dataToAnalyze.homeTeam?.name) finalMatch.homeTeam.name = dataToAnalyze.homeTeam.name;
         if (dataToAnalyze.awayTeam?.name) finalMatch.awayTeam.name = dataToAnalyze.awayTeam.name;
         if (dataToAnalyze.league) finalMatch.league = dataToAnalyze.league;
         if (dataToAnalyze.odds) finalMatch.odds = dataToAnalyze.odds;
-        if (dataToAnalyze.customInfo) (finalMatch as any).customInfo = dataToAnalyze.customInfo;
+        if (dataToAnalyze.customInfo) finalMatch.customInfo = dataToAnalyze.customInfo;
         
         updateIfCurrentRun((target) => {
           saveHistory(finalMatch, finalAnalysis, finalParsed, undefined, {
@@ -556,7 +565,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         });
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (isAbortError(error) || abortController.signal.aborted) {
         const cancelledRuntimeStatus = buildPlannerRuntimeState({
           stage: 'cancelled',
@@ -614,13 +623,14 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       }
 
       console.error("Analysis failed:", error);
+      const errorMessage = getErrorMessage(error);
       const failedRuntimeStatus = buildPlannerRuntimeState({
         stage: 'failed',
         runId: latestRuntimeStatus?.runId || analysisRunId,
         segmentIndex: latestRuntimeStatus?.segmentIndex ?? latestResumeState.completedSegmentIndices.length,
         totalSegments: latestRuntimeStatus?.totalSegments ?? latestResumeState.plan.length,
         stageLabel: 'Failed',
-        errorMessage: error.message || "Analysis failed",
+        errorMessage,
         source: 'context',
         eventSeq: (latestRuntimeStatus?.eventSeq ?? 0) + 1,
         stageStartedAt: latestRuntimeStatus?.stageStartedAt,
@@ -633,7 +643,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       persistResumeSnapshot(true);
       updateIfCurrentRun((target) => ({
         ...target,
-        error: error.message || "Analysis failed",
+        error: errorMessage,
         isAnalyzing: false,
         thoughts: target.thoughts + "\n\n[ERROR] Analysis failed. Please try again.",
         runtimeStatus: buildPlannerRuntimeState({
@@ -642,7 +652,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           segmentIndex: target.runtimeStatus?.segmentIndex ?? target.planCompletedSegments,
           totalSegments: target.runtimeStatus?.totalSegments ?? target.planTotalSegments,
           stageLabel: 'Failed',
-          errorMessage: error.message || "Analysis failed",
+          errorMessage,
           source: 'context',
           eventSeq: (target.runtimeStatus?.eventSeq ?? 0) + 1,
           stageStartedAt: target.runtimeStatus?.stageStartedAt,
