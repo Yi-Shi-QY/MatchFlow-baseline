@@ -9,7 +9,10 @@ import {
   type ValidationResult,
   validateAndNormalizeAnimationPayload,
 } from "../remotion/templateParams";
-import { streamAIRequest } from "./streamRequest";
+import {
+  streamAIRequest,
+  type StreamRequestTelemetryHandler,
+} from "./streamRequest";
 
 function throwIfAborted(signal?: AbortSignal) {
   if (!signal?.aborted) return;
@@ -77,6 +80,7 @@ export async function* streamAnimationAgent(
   segmentPlan: any,
   analysisText: string,
   abortSignal?: AbortSignal,
+  onRequestTelemetry?: StreamRequestTelemetryHandler,
 ) {
   throwIfAborted(abortSignal);
   const domainId = resolveDomainId(matchData);
@@ -129,7 +133,15 @@ export async function* streamAnimationAgent(
     language: settings.language,
   });
 
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
+  yield* streamAIRequest(
+    prompt,
+    false,
+    agent.skills,
+    false,
+    agent.id,
+    abortSignal,
+    onRequestTelemetry,
+  );
 }
 
 export async function* streamFixAnimationParams(
@@ -139,6 +151,7 @@ export async function* streamFixAnimationParams(
   wrongOutput: string,
   errors: string[],
   abortSignal?: AbortSignal,
+  onRequestTelemetry?: StreamRequestTelemetryHandler,
 ) {
   throwIfAborted(abortSignal);
   const domainId = resolveDomainId(matchData);
@@ -189,7 +202,15 @@ export async function* streamFixAnimationParams(
   </animation>
   `;
 
-  yield* streamAIRequest(prompt, false, undefined, false, "animation", abortSignal);
+  yield* streamAIRequest(
+    prompt,
+    false,
+    undefined,
+    false,
+    "animation",
+    abortSignal,
+    onRequestTelemetry,
+  );
 }
 
 export async function retryAnimationPayloadWithModel(
@@ -199,6 +220,7 @@ export async function retryAnimationPayloadWithModel(
   wrongAnimation: any,
   validationErrors: string[],
   abortSignal?: AbortSignal,
+  onRequestTelemetry?: StreamRequestTelemetryHandler,
 ): Promise<ValidationResult> {
   throwIfAborted(abortSignal);
   const domainId = resolveDomainId(matchData);
@@ -219,6 +241,7 @@ export async function retryAnimationPayloadWithModel(
       wrongOutput,
       Array.isArray(validationErrors) ? validationErrors : [],
       abortSignal,
+      onRequestTelemetry,
     ),
     abortSignal,
   );
@@ -250,6 +273,7 @@ export async function generateValidatedAnimationBlock(
   segmentPlan: any,
   analysisText: string,
   abortSignal?: AbortSignal,
+  onRequestTelemetry?: StreamRequestTelemetryHandler,
 ): Promise<string> {
   throwIfAborted(abortSignal);
   const domainId = resolveDomainId(matchData);
@@ -258,7 +282,13 @@ export async function generateValidatedAnimationBlock(
   const maxFixAttempts = 2;
 
   let candidateText = await collectStreamText(
-    streamAnimationAgent(matchData, segmentPlan, analysisText, abortSignal),
+    streamAnimationAgent(
+      matchData,
+      segmentPlan,
+      analysisText,
+      abortSignal,
+      onRequestTelemetry,
+    ),
     abortSignal,
   );
 
@@ -289,6 +319,7 @@ export async function generateValidatedAnimationBlock(
           candidateText,
           validation.errors,
           abortSignal,
+          onRequestTelemetry,
         ),
         abortSignal,
       );

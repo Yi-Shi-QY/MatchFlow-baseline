@@ -3,6 +3,10 @@ import { executeSkill } from "../skills";
 import { getAgent } from "../agents";
 import { buildFallbackPlan, normalizePlan, resolvePlanningRoute } from "./ai/planning";
 import { streamAIRequest } from "./ai/streamRequest";
+import type {
+  StreamRequestTelemetryEvent,
+  StreamRequestTelemetryHandler,
+} from "./ai/streamRequest";
 import { generateValidatedAnimationBlock } from "./ai/animationPipeline";
 import type { Match } from "../data/matches";
 import { getAnalysisDomainById } from "./domains/registry";
@@ -49,6 +53,9 @@ export {
   streamTagAgent,
   streamSummaryAgent,
 } from "./ai/agentRuntime";
+
+export type AnalysisRunTelemetryEvent = StreamRequestTelemetryEvent;
+export type AnalysisRunTelemetryHandler = StreamRequestTelemetryHandler;
 
 export interface OutcomeDistributionEntry {
   label: string;
@@ -117,6 +124,7 @@ export async function generateAnalysisPlan(
   matchData: AnalysisRequestPayload,
   includeAnimations: boolean = true,
   abortSignal?: AbortSignal,
+  onRequestTelemetry?: StreamRequestTelemetryHandler,
 ): Promise<NormalizedPlanSegment[]> {
   const settings = getSettings();
   const route = resolvePlanningRoute(matchData, settings);
@@ -227,6 +235,7 @@ export async function generateAnalysisPlan(
       stopAfterToolCall,
       agent.id,
       abortSignal,
+      onRequestTelemetry,
     );
 
     for await (const chunk of stream) {
@@ -322,6 +331,7 @@ export async function* streamAgentThoughts(
   abortSignal?: AbortSignal,
   onRuntimeUpdate?: (state: PlannerRuntimeState) => void,
   runtimeRunId?: string,
+  onRequestTelemetry?: StreamRequestTelemetryHandler,
 ) {
   const runId = runtimeRunId || createPlannerRunId("analysis");
   const settings = getSettings();
@@ -395,7 +405,12 @@ export async function* streamAgentThoughts(
         stageLabel: "Planning",
       });
       try {
-        plan = await generateAnalysisPlan(effectiveMatchData, includeAnimations, abortSignal);
+        plan = await generateAnalysisPlan(
+          effectiveMatchData,
+          includeAnimations,
+          abortSignal,
+          onRequestTelemetry,
+        );
       } catch (e) {
         if (isAbortError(e)) {
           throw e;
@@ -451,6 +466,7 @@ export async function* streamAgentThoughts(
         segment,
         filteredContext,
         abortSignal,
+        onRequestTelemetry,
       );
       for await (const chunk of segmentStream) {
         throwIfAborted(abortSignal);
@@ -478,6 +494,7 @@ export async function* streamAgentThoughts(
           segment,
           segmentText,
           abortSignal,
+          onRequestTelemetry,
         );
         throwIfAborted(abortSignal);
         yield animationOutput;
@@ -499,7 +516,11 @@ export async function* streamAgentThoughts(
         stageLabel: segment.title || "Tag generation",
       });
       const cleanText = segmentText.replace(/<[^>]+>/g, " ").trim();
-      const validatedTags = await generateValidatedTagsBlock(cleanText, abortSignal);
+      const validatedTags = await generateValidatedTagsBlock(
+        cleanText,
+        abortSignal,
+        onRequestTelemetry,
+      );
       throwIfAborted(abortSignal);
       segmentText += validatedTags;
       yield validatedTags;
@@ -525,6 +546,7 @@ export async function* streamAgentThoughts(
       effectiveMatchData,
       fullAnalysisText,
       abortSignal,
+      onRequestTelemetry,
     );
     for await (const chunk of summaryStream) {
       throwIfAborted(abortSignal);

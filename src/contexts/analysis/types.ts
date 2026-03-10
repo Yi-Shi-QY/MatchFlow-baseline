@@ -7,6 +7,27 @@ import type {
 import type { AgentResult } from '@/src/services/agentParser';
 import type { PlannerRuntimeState } from '@/src/services/planner/runtime';
 
+export type AnalysisRunTokenSource = 'none' | 'provider' | 'estimated' | 'mixed';
+
+export interface AnalysisRunMetrics {
+  runId: string;
+  startedAt: number;
+  endedAt?: number;
+  elapsedMs: number;
+  currentProvider: string;
+  currentModel: string;
+  modelsUsed: string[];
+  requestCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  tokenSource: AnalysisRunTokenSource;
+  toolCallTotal: number;
+  toolCallSuccess: number;
+  toolCallFailed: number;
+  updatedAt: number;
+}
+
 export interface ActiveAnalysis {
   matchId: string;
   domainId: string;
@@ -24,4 +45,5 @@ export interface ActiveAnalysis {
   planTotalSegments: number;
   planCompletedSegments: number;
   runtimeStatus: PlannerRuntimeState | null;
+  runMetrics: AnalysisRunMetrics | null;
 }

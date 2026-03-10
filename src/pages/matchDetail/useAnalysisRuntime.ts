@@ -5,6 +5,7 @@ import type { MatchAnalysis } from '@/src/services/ai';
 import type { AgentResult } from '@/src/services/agentParser';
 import type { HistoryRecord } from '@/src/services/history';
 import type { PlannerRuntimeState } from '@/src/services/planner/runtime';
+import type { AnalysisRunMetrics } from '@/src/contexts/analysis/types';
 import {
   fetchMatchAnalysisConfig,
   mergeServerPlanningIntoMatchData,
@@ -35,6 +36,7 @@ export interface MatchDetailDisplayData {
   planSegments: any[];
   plannerDomainId: string;
   runtimeStatus: PlannerRuntimeState | null;
+  runMetrics: AnalysisRunMetrics | null;
 }
 
 interface BuildMatchDetailDisplayDataArgs {
@@ -106,6 +108,7 @@ export function buildMatchDetailDisplayData({
       planSegments: Array.isArray(activeAnalysis.plan) ? activeAnalysis.plan : [],
       plannerDomainId: sourceContextDomainId || activeDomainId,
       runtimeStatus: activeAnalysis.runtimeStatus,
+      runMetrics: activeAnalysis.runMetrics,
     };
   }
 
@@ -127,6 +130,7 @@ export function buildMatchDetailDisplayData({
       planSegments: [],
       plannerDomainId: activeDomainId,
       runtimeStatus: null,
+      runMetrics: null,
     };
   }
 
@@ -143,6 +147,7 @@ export function buildMatchDetailDisplayData({
     planSegments: [],
     plannerDomainId: activeDomainId,
     runtimeStatus: null,
+    runMetrics: null,
   };
 }
 
