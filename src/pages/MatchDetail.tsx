@@ -355,6 +355,7 @@ export default function MatchDetail() {
     planSegments,
     plannerDomainId,
     runtimeStatus,
+    runMetrics,
   } = displayData;
 
   const retryMatchData = React.useMemo(() => {
@@ -566,6 +567,7 @@ export default function MatchDetail() {
           plannerDomainId={plannerDomainId}
           planSegments={planSegments}
           runtimeStatus={runtimeStatus}
+          runMetrics={runMetrics}
           planTotalSegments={planTotalSegments}
           planCompletedSegments={planCompletedSegments}
           parsedStream={parsedStream}

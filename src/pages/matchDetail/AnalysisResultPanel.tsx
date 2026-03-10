@@ -19,6 +19,7 @@ import type { PlannerRuntimeState } from '@/src/services/planner/runtime';
 import type { DomainResultSummaryHero } from '@/src/services/domains/ui/types';
 import type { SummaryDistributionItem } from '@/src/services/analysisSummary';
 import { formatConclusionCardValue } from '@/src/services/analysisSummary';
+import type { AnalysisRunMetrics } from '@/src/contexts/analysis/types';
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 
@@ -27,6 +28,7 @@ interface AnalysisResultPanelProps {
   plannerDomainId: string;
   planSegments: any[];
   runtimeStatus: PlannerRuntimeState | null;
+  runMetrics: AnalysisRunMetrics | null;
   planTotalSegments: number;
   planCompletedSegments: number;
   parsedStream: AgentResult | null;
@@ -53,6 +55,7 @@ export function AnalysisResultPanel({
   plannerDomainId,
   planSegments,
   runtimeStatus,
+  runMetrics,
   planTotalSegments,
   planCompletedSegments,
   parsedStream,
@@ -73,8 +76,103 @@ export function AnalysisResultPanel({
   thoughts,
   t,
 }: AnalysisResultPanelProps) {
+  const [elapsedTick, setElapsedTick] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!isAnalyzing || !runMetrics) return;
+    const timerId = window.setInterval(() => {
+      setElapsedTick((prev) => prev + 1);
+    }, 1000);
+    return () => {
+      clearInterval(timerId);
+    };
+  }, [isAnalyzing, runMetrics?.runId]);
+
+  const formatElapsed = React.useCallback((elapsedMs: number): string => {
+    const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }, []);
+
+  const metricModel = React.useMemo(() => {
+    if (!runMetrics) return '--';
+    const currentProvider = (runMetrics.currentProvider || '').trim();
+    const currentModel = (runMetrics.currentModel || '').trim();
+    if (!currentProvider && !currentModel) return '--';
+    const currentLabel =
+      currentProvider && currentModel
+        ? `${currentProvider}:${currentModel}`
+        : currentModel || currentProvider;
+    const extraModelCount = Math.max(0, runMetrics.modelsUsed.length - 1);
+    if (extraModelCount > 0) {
+      return `${currentLabel} (+${extraModelCount})`;
+    }
+    return currentLabel;
+  }, [runMetrics]);
+
+  const metricTokens = React.useMemo(() => {
+    if (!runMetrics) return '--';
+    if (runMetrics.tokenSource === 'none' && runMetrics.totalTokens <= 0) {
+      return '--';
+    }
+    const display = runMetrics.totalTokens.toLocaleString();
+    if (runMetrics.tokenSource === 'estimated' || runMetrics.tokenSource === 'mixed') {
+      return `~${display}`;
+    }
+    return display;
+  }, [runMetrics]);
+
+  const metricTools = React.useMemo(() => {
+    if (!runMetrics) return '--';
+    return String(runMetrics.toolCallTotal);
+  }, [runMetrics]);
+
+  const metricElapsed = React.useMemo(() => {
+    if (!runMetrics) return '--';
+    const activeElapsed = Date.now() - runMetrics.startedAt;
+    const elapsedMs = isAnalyzing
+      ? Math.max(runMetrics.elapsedMs, activeElapsed)
+      : runMetrics.elapsedMs;
+    return formatElapsed(elapsedMs);
+  }, [runMetrics, isAnalyzing, elapsedTick, formatElapsed]);
+
+  const metricsLabelModel = t('match.runtime_metric_model', { defaultValue: 'Model' });
+  const metricsLabelTokens = t('match.runtime_metric_tokens', { defaultValue: 'Tokens' });
+  const metricsLabelTools = t('match.runtime_metric_tools', { defaultValue: 'Tools' });
+  const metricsLabelElapsed = t('match.runtime_metric_elapsed', { defaultValue: 'Elapsed' });
+
   return (
     <main id="analysis-content" className="flex-1 flex flex-col gap-4 p-4 max-w-md mx-auto w-full">
+      {runMetrics && (
+        <div className="rounded-xl border border-emerald-500/25 bg-zinc-950/80 px-3 py-2">
+          <div className="grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
+            <div className="rounded-lg border border-white/10 bg-zinc-900/70 px-2 py-1.5">
+              <div className="text-zinc-500 uppercase tracking-wider">{metricsLabelModel}</div>
+              <div className="mt-0.5 truncate text-zinc-100 font-medium" title={metricModel}>
+                {metricModel}
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-zinc-900/70 px-2 py-1.5">
+              <div className="text-zinc-500 uppercase tracking-wider">{metricsLabelTokens}</div>
+              <div className="mt-0.5 text-zinc-100 font-medium">{metricTokens}</div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-zinc-900/70 px-2 py-1.5">
+              <div className="text-zinc-500 uppercase tracking-wider">{metricsLabelTools}</div>
+              <div className="mt-0.5 text-zinc-100 font-medium">{metricTools}</div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-zinc-900/70 px-2 py-1.5">
+              <div className="text-zinc-500 uppercase tracking-wider">{metricsLabelElapsed}</div>
+              <div className="mt-0.5 text-zinc-100 font-medium">{metricElapsed}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isAnalyzing && (
         <AnalysisPlannerRuntimeBridge
           domainId={plannerDomainId}

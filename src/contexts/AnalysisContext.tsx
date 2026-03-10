@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react';
 import { Match } from '@/src/data/matches';
-import { streamAgentThoughts, MatchAnalysis, AnalysisResumeState, isAbortError } from '@/src/services/ai';
+import {
+  streamAgentThoughts,
+  MatchAnalysis,
+  AnalysisResumeState,
+  isAbortError,
+  type AnalysisRunTelemetryEvent,
+} from '@/src/services/ai';
 import {
   saveHistory,
   clearResumeState,
@@ -16,11 +22,12 @@ import {
 } from '@/src/services/planner/runtime';
 import { buildAnalysisOutputEnvelope } from '@/src/services/ai/multimodalCompatibility';
 import { useAnalysisBackgroundNotification } from '@/src/contexts/analysis/notificationAdapter';
+import { useAndroidForegroundExecution } from '@/src/contexts/analysis/androidForegroundAdapter';
 import {
   bootstrapResumeState,
   createResumeSnapshotPersister,
 } from '@/src/contexts/analysis/resumePersistenceAdapter';
-import type { ActiveAnalysis } from '@/src/contexts/analysis/types';
+import type { ActiveAnalysis, AnalysisRunMetrics } from '@/src/contexts/analysis/types';
 
 export type { ActiveAnalysis };
 
@@ -38,6 +45,101 @@ interface AnalysisContextType {
 }
 
 const STREAM_UI_UPDATE_INTERVAL_MS = 80;
+
+function sanitizeModelLabel(provider: string, model: string): string {
+  const normalizedProvider = typeof provider === 'string' ? provider.trim() : '';
+  const normalizedModel = typeof model === 'string' ? model.trim() : '';
+  if (normalizedProvider && normalizedModel) {
+    return `${normalizedProvider}:${normalizedModel}`;
+  }
+  if (normalizedModel) return normalizedModel;
+  if (normalizedProvider) return normalizedProvider;
+  return 'unknown';
+}
+
+function combineTokenSource(
+  prev: AnalysisRunMetrics['tokenSource'],
+  next: AnalysisRunMetrics['tokenSource'],
+): AnalysisRunMetrics['tokenSource'] {
+  if (next === 'none') return prev;
+  if (prev === 'none') return next;
+  if (prev === next) return prev;
+  return 'mixed';
+}
+
+function buildInitialRunMetrics(runId: string): AnalysisRunMetrics {
+  const startedAt = Date.now();
+  return {
+    runId,
+    startedAt,
+    elapsedMs: 0,
+    currentProvider: '',
+    currentModel: '',
+    modelsUsed: [],
+    requestCount: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    tokenSource: 'none',
+    toolCallTotal: 0,
+    toolCallSuccess: 0,
+    toolCallFailed: 0,
+    updatedAt: startedAt,
+  };
+}
+
+function applyRunTelemetryEvent(
+  previous: AnalysisRunMetrics,
+  event: AnalysisRunTelemetryEvent,
+): AnalysisRunMetrics {
+  const updatedAt = Date.now();
+  const next: AnalysisRunMetrics = {
+    ...previous,
+    updatedAt,
+  };
+
+  const modelLabel = sanitizeModelLabel(event.provider, event.model);
+  if (!next.modelsUsed.includes(modelLabel)) {
+    next.modelsUsed = [...next.modelsUsed, modelLabel];
+  }
+  next.currentProvider = event.provider;
+  next.currentModel = event.model;
+
+  if (event.type === 'request_start') {
+    next.requestCount += 1;
+    return next;
+  }
+
+  if (event.type === 'request_end') {
+    next.inputTokens += Math.max(0, event.inputTokens);
+    next.outputTokens += Math.max(0, event.outputTokens);
+    next.totalTokens += Math.max(0, event.totalTokens);
+    next.tokenSource = combineTokenSource(next.tokenSource, event.tokenSource);
+    return next;
+  }
+
+  if (event.type === 'tool_call') {
+    next.toolCallTotal += 1;
+    if (event.success) {
+      next.toolCallSuccess += 1;
+    } else {
+      next.toolCallFailed += 1;
+    }
+  }
+
+  return next;
+}
+
+function finalizeRunMetrics(metrics: AnalysisRunMetrics | null): AnalysisRunMetrics | null {
+  if (!metrics) return null;
+  const endedAt = Date.now();
+  return {
+    ...metrics,
+    endedAt,
+    elapsedMs: Math.max(metrics.elapsedMs, endedAt - metrics.startedAt),
+    updatedAt: endedAt,
+  };
+}
 
 function areTagsEqual(a: AgentSegment['tags'], b: AgentSegment['tags']): boolean {
   if (a === b) return true;
@@ -123,6 +225,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [activeAnalyses, setActiveAnalyses] = useState<Record<string, ActiveAnalysis>>({});
   const analysisAbortControllersRef = useRef<Record<string, AbortController>>({});
   useAnalysisBackgroundNotification(activeAnalyses);
+  useAndroidForegroundExecution(activeAnalyses);
 
   const createAbortError = () => {
     const err = new Error("Analysis aborted") as Error & { name: string };
@@ -188,6 +291,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           thoughts: nextThoughts,
           isAnalyzing: false,
           error: null,
+          runMetrics: finalizeRunMetrics(target.runMetrics),
           runtimeStatus: buildPlannerRuntimeState({
             stage: 'cancelled',
             runId: target.runtimeStatus?.runId || createPlannerRunId(`analysis_${matchId}`),
@@ -269,6 +373,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       : null;
 
     const analysisRunId = persistedRuntimeStatus?.runId || createPlannerRunId(`analysis_${matchId}`);
+    const initialRunMetrics = buildInitialRunMetrics(analysisRunId);
     const initialRuntimeStatus = persistedRuntimeStatus
       ? persistedRuntimeStatus
       : buildPlannerRuntimeState({
@@ -297,6 +402,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       planTotalSegments: initialPlanTotalSegments,
       planCompletedSegments: initialPlanCompletedSegments,
       runtimeStatus: initialRuntimeStatus,
+      runMetrics: initialRunMetrics,
     };
 
     setActiveAnalyses(prev => ({ ...prev, [matchId]: newAnalysis }));
@@ -326,6 +432,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       runtimeStatus: initialRuntimeStatus,
     };
     let latestRuntimeStatus: PlannerRuntimeState = initialRuntimeStatus;
+    let latestRunMetrics: AnalysisRunMetrics = initialRunMetrics;
     let lastUiRenderAt = 0;
     let dropStaleDraftOnFirstChunk =
       shouldResume && (!resumeStateData?.segmentResults || resumeStateData.segmentResults.length === 0);
@@ -349,6 +456,22 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         },
         force,
       );
+    };
+
+    const onRunTelemetry = (event: AnalysisRunTelemetryEvent) => {
+      latestRunMetrics = applyRunTelemetryEvent(latestRunMetrics, event);
+      updateIfCurrentRun((target) => ({
+        ...target,
+        runMetrics: latestRunMetrics,
+      }));
+    };
+
+    const finalizeLatestRunMetrics = (): AnalysisRunMetrics => {
+      const finalized = finalizeRunMetrics(latestRunMetrics);
+      if (finalized) {
+        latestRunMetrics = finalized;
+      }
+      return latestRunMetrics;
     };
 
     const commitLivePreview = (
@@ -429,6 +552,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           persistResumeSnapshot(true);
         },
         analysisRunId,
+        onRunTelemetry,
       );
       
       for await (const chunk of stream) {
@@ -538,6 +662,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         if (dataToAnalyze.league) finalMatch.league = dataToAnalyze.league;
         if (dataToAnalyze.odds) finalMatch.odds = dataToAnalyze.odds;
         if (dataToAnalyze.customInfo) finalMatch.customInfo = dataToAnalyze.customInfo;
+        const finalizedRunMetrics = finalizeLatestRunMetrics();
         
         updateIfCurrentRun((target) => {
           saveHistory(finalMatch, finalAnalysis, finalParsed, undefined, {
@@ -566,6 +691,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
             ...target,
             analysis: finalAnalysis,
             isAnalyzing: false,
+            runMetrics: finalizedRunMetrics,
             planTotalSegments: totalSegments,
             planCompletedSegments: completedSegments,
             runtimeStatus: buildPlannerRuntimeState({
@@ -585,6 +711,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           ...resumeOptions,
         });
       } else {
+        const finalizedRunMetrics = finalizeLatestRunMetrics();
         updateIfCurrentRun((target) => {
           const totalSegments = Math.max(
             target.planTotalSegments,
@@ -595,6 +722,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           return {
             ...target,
             isAnalyzing: false,
+            runMetrics: finalizedRunMetrics,
             planTotalSegments: totalSegments,
             planCompletedSegments: completedSegments,
             runtimeStatus: buildPlannerRuntimeState({
@@ -629,10 +757,12 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           runtimeStatus: cancelledRuntimeStatus,
         };
         persistResumeSnapshot(true);
+        const finalizedRunMetrics = finalizeLatestRunMetrics();
         updateIfCurrentRun((target) => ({
           ...target,
           isAnalyzing: false,
           error: null,
+          runMetrics: finalizedRunMetrics,
           runtimeStatus: buildPlannerRuntimeState({
             stage: 'cancelled',
             runId: target.runtimeStatus?.runId || analysisRunId,
@@ -652,6 +782,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       if (shouldFallbackToFreshRun) {
         console.warn('Resume snapshot is incompatible, fallback to fresh analysis run.', error);
         await clearResumeState(matchId, resumeOptions);
+        const finalizedRunMetrics = finalizeLatestRunMetrics();
         updateIfCurrentRun((target) => ({
           ...target,
           thoughts: '',
@@ -662,6 +793,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           planCompletedSegments: 0,
           isAnalyzing: false,
           error: null,
+          runMetrics: finalizedRunMetrics,
           runtimeStatus: null,
         }));
         void startAnalysis(match, dataToAnalyze, includeAnimations, false);
@@ -687,10 +819,12 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         runtimeStatus: failedRuntimeStatus,
       };
       persistResumeSnapshot(true);
+      const finalizedRunMetrics = finalizeLatestRunMetrics();
       updateIfCurrentRun((target) => ({
         ...target,
         error: errorMessage,
         isAnalyzing: false,
+        runMetrics: finalizedRunMetrics,
         thoughts: target.thoughts + "\n\n[ERROR] Analysis failed. Please try again.",
         runtimeStatus: buildPlannerRuntimeState({
           stage: 'failed',

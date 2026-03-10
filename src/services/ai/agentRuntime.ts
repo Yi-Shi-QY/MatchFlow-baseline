@@ -1,6 +1,9 @@
 import { getSettings } from "../settings";
 import { getAgent } from "../../agents";
-import { streamAIRequest } from "./streamRequest";
+import {
+  streamAIRequest,
+  type StreamRequestTelemetryHandler,
+} from "./streamRequest";
 import { extractJson } from "../../utils/json";
 import { resolvePlanningHubHint } from "./planningCapabilities";
 import { ensureAgentAvailable } from "../extensions/runtime";
@@ -103,6 +106,7 @@ function buildTagsBlock(tags: NormalizedTag[]): string {
 export async function generateValidatedTagsBlock(
   analysisText: string,
   abortSignal?: AbortSignal,
+  onRequestTelemetry?: StreamRequestTelemetryHandler,
 ): Promise<string> {
   const settings = getSettings();
   const language = settings.language === "zh" ? "zh" : "en";
@@ -116,7 +120,10 @@ export async function generateValidatedTagsBlock(
   for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     throwIfAborted(abortSignal);
     const promptText = attempt === 0 ? analysisText : `${analysisText}\n\n${retryInstruction}`;
-    const raw = await collectStreamText(streamTagAgent(promptText, abortSignal), abortSignal);
+    const raw = await collectStreamText(
+      streamTagAgent(promptText, abortSignal, onRequestTelemetry),
+      abortSignal,
+    );
     const normalized = extractTagsFromModelOutput(raw);
     if (normalized.length > 0) {
       return buildTagsBlock(normalized);
@@ -131,6 +138,7 @@ export async function* streamAnalysisAgent(
   segmentPlan: NormalizedPlanSegment,
   previousAnalysis: string = "",
   abortSignal?: AbortSignal,
+  onRequestTelemetry?: StreamRequestTelemetryHandler,
 ) {
   throwIfAborted(abortSignal);
   const settings = getSettings();
@@ -145,22 +153,43 @@ export async function* streamAnalysisAgent(
     previousAnalysis,
   });
 
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
+  yield* streamAIRequest(
+    prompt,
+    false,
+    agent.skills,
+    false,
+    agent.id,
+    abortSignal,
+    onRequestTelemetry,
+  );
 }
 
-export async function* streamTagAgent(analysisText: string, abortSignal?: AbortSignal) {
+export async function* streamTagAgent(
+  analysisText: string,
+  abortSignal?: AbortSignal,
+  onRequestTelemetry?: StreamRequestTelemetryHandler,
+) {
   throwIfAborted(abortSignal);
   const settings = getSettings();
   const agent = getAgent("tag");
   const prompt = agent.systemPrompt({ analysisText, language: settings.language });
 
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
+  yield* streamAIRequest(
+    prompt,
+    false,
+    agent.skills,
+    false,
+    agent.id,
+    abortSignal,
+    onRequestTelemetry,
+  );
 }
 
 export async function* streamSummaryAgent(
   matchData: AnalysisRequestPayload,
   previousAnalysis: string,
   abortSignal?: AbortSignal,
+  onRequestTelemetry?: StreamRequestTelemetryHandler,
 ) {
   throwIfAborted(abortSignal);
   const settings = getSettings();
@@ -171,5 +200,13 @@ export async function* streamSummaryAgent(
     language: settings.language,
   });
 
-  yield* streamAIRequest(prompt, false, agent.skills, false, agent.id, abortSignal);
+  yield* streamAIRequest(
+    prompt,
+    false,
+    agent.skills,
+    false,
+    agent.id,
+    abortSignal,
+    onRequestTelemetry,
+  );
 }
