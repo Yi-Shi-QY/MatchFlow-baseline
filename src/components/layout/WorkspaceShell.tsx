@@ -1,8 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
+  Brain,
   Bot,
   Database,
+  History as HistoryIcon,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -10,12 +13,14 @@ import {
 } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { cn } from '@/src/lib/utils';
-
-type WorkspaceSection = 'chat' | 'tasks' | 'sources';
+import {
+  getPrimaryWorkspaceNav,
+  type WorkspaceNavId,
+} from '@/src/services/navigation/workspaceNav';
 
 interface WorkspaceShellProps {
   language: 'zh' | 'en';
-  section: WorkspaceSection;
+  section: WorkspaceNavId;
   title: string;
   subtitle: string;
   children: React.ReactNode;
@@ -24,54 +29,47 @@ interface WorkspaceShellProps {
   hideHeader?: boolean;
 }
 
-interface WorkspaceNavItem {
-  id: WorkspaceSection | 'settings';
-  route: string;
-  icon: React.ComponentType<{ className?: string }>;
-  zhLabel: string;
-  enLabel: string;
-  zhHint: string;
-  enHint: string;
-}
+const navIconMap = {
+  chat: Bot,
+  tasks: SquareKanban,
+  sources: Database,
+  history: HistoryIcon,
+  memory: Brain,
+  settings: Settings,
+} satisfies Record<string, React.ComponentType<{ className?: string }>>;
 
-const navItems: WorkspaceNavItem[] = [
-  {
-    id: 'chat',
-    route: '/',
-    icon: Bot,
-    zhLabel: '对话',
-    enLabel: 'Chat',
-    zhHint: '总管 Agent',
-    enHint: 'Manager Agent',
+const navFallbackCopy = {
+  chat: {
+    title: { zh: '对话中心', en: 'Chat Center' },
+    hint: { zh: '继续协作与新输入', en: 'Continue flows and new input' },
   },
-  {
-    id: 'tasks',
-    route: '/tasks',
-    icon: SquareKanban,
-    zhLabel: '任务',
-    enLabel: 'Tasks',
-    zhHint: '任务中心',
-    enHint: 'Task Center',
+  tasks: {
+    title: { zh: '任务中心', en: 'Task Center' },
+    hint: { zh: '待办、执行中与最近完成', en: 'Waiting, running, and recent completions' },
   },
-  {
-    id: 'sources',
-    route: '/sources',
-    icon: Database,
-    zhLabel: '数据源',
-    enLabel: 'Sources',
-    zhHint: '数据卡片',
-    enHint: 'Source Cards',
+  sources: {
+    title: { zh: '分析与数据', en: 'Analysis & Data' },
+    hint: { zh: '可分析对象与数据状态', en: 'Analyzable objects and data status' },
   },
-  {
-    id: 'settings',
-    route: '/settings',
-    icon: Settings,
-    zhLabel: '设置',
-    enLabel: 'Settings',
-    zhHint: '系统配置',
-    enHint: 'System Config',
+  history: {
+    title: { zh: '历史', en: 'History' },
+    hint: { zh: '最近结果与可恢复主题', en: 'Recent results and resumable topics' },
   },
-];
+  memory: {
+    title: { zh: '记忆', en: 'Memory' },
+    hint: { zh: '长期上下文与摘要', en: 'Long-term context and summaries' },
+  },
+  settings: {
+    title: { zh: '设置', en: 'Settings' },
+    hint: { zh: '系统行为与连接入口', en: 'System behavior and connection entry' },
+  },
+} satisfies Record<
+  WorkspaceNavId,
+  {
+    title: Record<'zh' | 'en', string>;
+    hint: Record<'zh' | 'en', string>;
+  }
+>;
 
 export function WorkspaceShell({
   language,
@@ -84,7 +82,9 @@ export function WorkspaceShell({
   hideHeader = false,
 }: WorkspaceShellProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [navOpen, setNavOpen] = React.useState(false);
+  const navItems = React.useMemo(() => getPrimaryWorkspaceNav(), []);
   const copy =
     language === 'zh'
       ? {
@@ -142,8 +142,9 @@ export function WorkspaceShell({
 
         <nav className="mt-4 space-y-2">
           {navItems.map((item) => {
-            const Icon = item.icon;
+            const Icon = navIconMap[item.iconKey] ?? Settings;
             const active = item.id === section;
+            const fallbackCopy = navFallbackCopy[item.id];
             return (
               <button
                 key={item.id}
@@ -164,10 +165,14 @@ export function WorkspaceShell({
                 </div>
                 <div className="min-w-0">
                   <div className="text-sm font-medium">
-                    {language === 'zh' ? item.zhLabel : item.enLabel}
+                    {t(item.titleKey, {
+                      defaultValue: fallbackCopy.title[language],
+                    })}
                   </div>
                   <div className="text-[11px] text-[var(--mf-text-muted)]">
-                    {language === 'zh' ? item.zhHint : item.enHint}
+                    {t(item.hintKey, {
+                      defaultValue: fallbackCopy.hint[language],
+                    })}
                   </div>
                 </div>
               </button>

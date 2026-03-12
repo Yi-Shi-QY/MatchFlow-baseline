@@ -32,6 +32,10 @@ const ExtensionsHub = lazy(() => import('./pages/ExtensionsHub'));
 const CommandCenter = lazy(() => import('./pages/CommandCenter'));
 const Automation = lazy(() => import('./pages/Automation'));
 const DataSources = lazy(() => import('./pages/DataSources'));
+const History = lazy(() => import('./pages/History'));
+const Memory = lazy(() => import('./pages/Memory'));
+const ConnectionDataSettings = lazy(() => import('./pages/settings/ConnectionDataSettings'));
+const AdvancedDiagnostics = lazy(() => import('./pages/settings/AdvancedDiagnostics'));
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -175,10 +179,15 @@ function AppRoutes() {
         <Route path="/" element={<CommandCenter />} />
         <Route path="/sources" element={<DataSources />} />
         <Route path="/tasks" element={<Automation />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/memory" element={<Memory />} />
+        <Route path="/memory/:memoryId" element={<Memory />} />
         <Route path="/subject/:domainId/:subjectId" element={<MatchDetail />} />
         <Route path="/share" element={<Share />} />
         <Route path="/scan" element={<Scan />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/settings/connections" element={<ConnectionDataSettings />} />
+        <Route path="/settings/diagnostics" element={<AdvancedDiagnostics />} />
         <Route path="/extensions" element={<ExtensionsHub />} />
         <Route path="/automation" element={<Automation />} />
       </Routes>
