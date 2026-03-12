@@ -28,10 +28,25 @@ export interface AnalysisRunMetrics {
   updatedAt: number;
 }
 
-export interface ActiveAnalysis {
-  matchId: string;
+export interface AnalysisSubjectRef {
   domainId: string;
   subjectId: string;
+  subjectType: string;
+}
+
+export function buildAnalysisSubjectKey(
+  subjectRef: Pick<AnalysisSubjectRef, 'domainId' | 'subjectId'>,
+): string {
+  return `${subjectRef.domainId}::${subjectRef.subjectId}`;
+}
+
+export interface ActiveAnalysis {
+  subjectRef: AnalysisSubjectRef;
+  domainId: string;
+  subjectId: string;
+  subjectType: string;
+  subjectSnapshot?: unknown;
+  subjectDisplay?: Match;
   match: Match;
   dataToAnalyze: AnalysisRequestPayload;
   plan: NormalizedPlanSegment[];

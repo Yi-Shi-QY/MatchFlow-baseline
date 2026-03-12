@@ -16,7 +16,6 @@ const basePlan: NormalizedPlanSegment[] = [
 
 function buildBaseSavedState(overrides?: Partial<SavedResumeState>): SavedResumeState {
   return {
-    matchId: "match_1",
     domainId: "football",
     subjectId: "match_1",
     subjectType: "match",
@@ -34,6 +33,14 @@ function buildBaseSavedState(overrides?: Partial<SavedResumeState>): SavedResume
 describe("history resume recoverability", () => {
   it("returns true for unfinished analysis artifacts", () => {
     const state = buildBaseSavedState();
+    expect(isResumeStateRecoverable(state)).toBe(true);
+  });
+
+  it("remains recoverable for unfinished subject-route artifacts beyond match-first subject types", () => {
+    const state = buildBaseSavedState({
+      subjectId: "subject_42",
+      subjectType: "team_report",
+    });
     expect(isResumeStateRecoverable(state)).toBe(true);
   });
 

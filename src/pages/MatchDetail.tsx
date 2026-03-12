@@ -10,6 +10,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AgentResult } from '@/src/services/agentParser';
 import { useAnalysis } from '@/src/contexts/AnalysisContext';
+import { buildAnalysisSubjectKey } from '@/src/contexts/analysis/types';
 import { compressToEncodedURIComponent } from 'lz-string';
 import {
   SourceIconKey,
@@ -17,23 +18,24 @@ import {
 } from '@/src/services/dataSources';
 import { getActiveAnalysisDomain, getAnalysisDomainById } from '@/src/services/domains/registry';
 import { getAnalysisConclusionCards } from '@/src/services/analysisSummary';
-import { findBuiltinDomainLocalTestCaseById } from '@/src/services/domains/builtinModules';
+import { findBuiltinDomainLocalSubjectSnapshotById } from '@/src/services/domains/builtinModules';
 import {
   getDomainUiTheme,
   getDomainUiPresenter,
   type ResultPresenterContext,
 } from '@/src/services/domains/ui/presenter';
-import { exportMatchReportPdf } from '@/src/pages/matchDetail/exportReportPdf';
-import { useMatchRecordContext } from '@/src/pages/matchDetail/useMatchRecordContext';
+import { exportSubjectReportPdf } from '@/src/pages/matchDetail/exportReportPdf';
+import { useSubjectRecordContext } from '@/src/pages/matchDetail/useSubjectRecordContext';
 import { useResumeRecoveryState } from '@/src/pages/matchDetail/useResumeRecoveryState';
 import {
-  buildMatchDetailDisplayData,
+  buildAnalysisDisplayData,
   useAnalysisRuntime,
 } from '@/src/pages/matchDetail/useAnalysisRuntime';
 import { useEditableSourceForm } from '@/src/pages/matchDetail/useEditableSourceForm';
 import { SourceSelectionCards } from '@/src/pages/matchDetail/SourceSelectionCards';
 import { PromptPreviewPanel } from '@/src/pages/matchDetail/PromptPreviewPanel';
 import { AnalysisResultPanel } from '@/src/pages/matchDetail/AnalysisResultPanel';
+import type { SubjectDisplayMatch } from '@/src/services/subjectDisplayMatch';
 import type { EditableSubjectDataFormModel } from '@/src/pages/matchDetail/contracts';
 
 interface ExportSegmentOption {
@@ -50,15 +52,17 @@ export default function MatchDetail() {
     typeof params.subjectId === 'string' && params.subjectId.trim().length > 0
       ? decodeURIComponent(params.subjectId)
       : '';
-  const legacyId =
-    typeof params.id === 'string' && params.id.trim().length > 0
-      ? decodeURIComponent(params.id)
-      : '';
-  const id = routeSubjectId || legacyId;
+  const id = routeSubjectId;
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const location = useLocation();
   const importedData = (location.state?.importedData ?? null) as EditableSubjectDataFormModel | null;
+  const autoStartAnalysis = Boolean(location.state?.autoStartAnalysis);
+  const autoStartSourceText =
+    typeof location.state?.autoStartSourceText === 'string'
+      ? location.state.autoStartSourceText
+      : '';
+  const autoStartConsumedRef = React.useRef<string>('');
   const {
     activeAnalyses,
     startAnalysis: contextStartAnalysis,
@@ -107,10 +111,10 @@ export default function MatchDetail() {
   
   const {
     historyRecord,
-    savedMatchRecord,
-    resumeMatch,
+    savedSubjectRecord,
+    resumeSubjectDisplay,
     isLoadingRecordContext,
-  } = useMatchRecordContext({
+  } = useSubjectRecordContext({
     id,
     domainId: activeDomain.id,
   });
@@ -122,20 +126,32 @@ export default function MatchDetail() {
     : null;
   const routeBuiltinCase = React.useMemo(() => {
     if (!id || id === 'custom') return null;
-    return findBuiltinDomainLocalTestCaseById(id);
-  }, [id]);
+    return findBuiltinDomainLocalSubjectSnapshotById({
+      domainId: activeDomain.id,
+      subjectId: id,
+    });
+  }, [activeDomain.id, id]);
   const match =
     (importedData ? customMatch : null) ||
     (isCustom
       ? customMatch
       : (routeActiveAnalysis?.match ||
-        historyRecord?.match ||
-        savedMatchRecord?.match ||
-        resumeMatch ||
+        historyRecord?.subjectDisplay ||
+        savedSubjectRecord?.subjectDisplay ||
+        resumeSubjectDisplay ||
         routeBuiltinCase ||
         MOCK_MATCHES.find(m => m.id === id)));
 
-  const activeAnalysis = routeActiveAnalysis || (match ? activeAnalyses[match.id] : null);
+  const activeAnalysis =
+    routeActiveAnalysis ||
+    (match
+      ? activeAnalyses[
+          buildAnalysisSubjectKey({
+            domainId: activeDomain.id,
+            subjectId: match.id,
+          })
+        ]
+      : null);
 
   // Local state for UI
   const [includeAnimations, setIncludeAnimations] = useState(true);
@@ -175,11 +191,12 @@ export default function MatchDetail() {
   });
 
   const { step, setStep, startAnalysis, stopAnalysis, isPlannerCompact } = useAnalysisRuntime({
-    match,
+    subjectDisplay: match,
     editableData,
     includeAnimations,
     activeDomainId: activeDomain.id,
     activeAnalysis,
+    historyRecord,
     startAnalysisInContext: contextStartAnalysis,
     stopAnalysisInContext: contextStopAnalysis,
     t: translate,
@@ -193,6 +210,31 @@ export default function MatchDetail() {
     setSelectedSources({});
   }, [match?.id]);
 
+  useEffect(() => {
+    if (!autoStartAnalysis || !match || !editableData.trim() || isLoadingRecordContext) {
+      return;
+    }
+    if (step !== 'selection') {
+      return;
+    }
+
+    const consumeKey = `${match.id}:${autoStartSourceText || 'auto_start'}`;
+    if (autoStartConsumedRef.current === consumeKey) {
+      return;
+    }
+
+    autoStartConsumedRef.current = consumeKey;
+    void startAnalysis(false);
+  }, [
+    autoStartAnalysis,
+    autoStartSourceText,
+    editableData,
+    isLoadingRecordContext,
+    match,
+    startAnalysis,
+    step,
+  ]);
+
   const resolvedSelectedSources = React.useMemo<SourceSelection>(() => {
     if (!match) {
       const emptySelection: SourceSelection = {};
@@ -201,12 +243,16 @@ export default function MatchDetail() {
       });
       return emptySelection;
     }
-    return activeDomain.resolveSourceSelection(match as Match, importedData, selectedSources);
+    return activeDomain.resolveSourceSelection(
+      match as SubjectDisplayMatch,
+      importedData,
+      selectedSources,
+    );
   }, [match, importedData, selectedSources, activeDomain, domainSourceCatalog]);
 
   const availableSources = React.useMemo(() => {
     if (!match) return domainSourceCatalog;
-    const ctx = { match: match as Match, importedData };
+    const ctx = { subjectDisplay: match as SubjectDisplayMatch, importedData };
     return activeDomain.getAvailableDataSources(ctx);
   }, [match, importedData, activeDomain, domainSourceCatalog]);
 
@@ -214,7 +260,7 @@ export default function MatchDetail() {
     editableData,
     setEditableData,
     step,
-    match,
+    subjectDisplay: match,
     importedData,
     activeDomain,
     domainSourceCatalog,
@@ -235,7 +281,7 @@ export default function MatchDetail() {
     return (
       draftData ??
       historyRecord?.subjectSnapshot ??
-      savedMatchRecord?.subjectSnapshot ??
+      savedSubjectRecord?.subjectSnapshot ??
       savedResumeState?.state?.subjectSnapshot ??
       importedData ??
       match
@@ -279,8 +325,8 @@ export default function MatchDetail() {
     setShowExportModal(false);
 
     try {
-      await exportMatchReportPdf({
-        match,
+      await exportSubjectReportPdf({
+        subjectDisplay: match,
         selectedSegments,
         includeSummaryInExport,
         summary,
@@ -335,16 +381,16 @@ export default function MatchDetail() {
     );
   }
 
-  const displayData = buildMatchDetailDisplayData({
+  const displayData = buildAnalysisDisplayData({
     activeAnalysis,
     historyRecord,
-    match,
+    subjectDisplay: match,
     activeDomainId: activeDomain.id,
   });
 
   const {
     analysis,
-    analyzedMatch,
+    subjectDisplay: analyzedSubjectDisplay,
     thoughts,
     parsedStream,
     collapsedSegments,
@@ -358,7 +404,7 @@ export default function MatchDetail() {
     runMetrics,
   } = displayData;
 
-  const retryMatchData = React.useMemo(() => {
+  const retryMatchData = (() => {
     try {
       const parsed = editableData ? JSON.parse(editableData) : null;
       if (parsed && typeof parsed === 'object') {
@@ -367,8 +413,8 @@ export default function MatchDetail() {
     } catch (e) {
       // Ignore parse failure and fallback to analyzed match object.
     }
-    return analyzedMatch;
-  }, [editableData, analyzedMatch]);
+    return analyzedSubjectDisplay;
+  })();
 
   let editablePreviewData: EditableSubjectDataFormModel | null = null;
   try {
@@ -575,10 +621,16 @@ export default function MatchDetail() {
           isPlannerCompact={isPlannerCompact}
           collapsedSegments={collapsedSegments}
           onToggleCollapsedSegment={(segmentId, nextCollapsed) =>
-            contextSetCollapsedSegments(match.id, {
-              ...collapsedSegments,
-              [segmentId]: nextCollapsed,
-            })
+            contextSetCollapsedSegments(
+              buildAnalysisSubjectKey({
+                domainId: activeDomain.id,
+                subjectId: match.id,
+              }),
+              {
+                ...collapsedSegments,
+                [segmentId]: nextCollapsed,
+              },
+            )
           }
           retryMatchData={retryMatchData}
           segmentAnimationOverrides={segmentAnimationOverrides}

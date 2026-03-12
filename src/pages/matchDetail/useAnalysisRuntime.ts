@@ -1,31 +1,34 @@
 import React from 'react';
 import type { Match } from '@/src/data/matches';
 import type { ActiveAnalysis } from '@/src/contexts/AnalysisContext';
+import { buildAnalysisSubjectKey } from '@/src/contexts/analysis/types';
 import type { MatchAnalysis } from '@/src/services/ai';
 import type { AgentResult } from '@/src/services/agentParser';
 import type { HistoryRecord } from '@/src/services/history';
 import type { PlannerRuntimeState } from '@/src/services/planner/runtime';
 import type { AnalysisRunMetrics } from '@/src/contexts/analysis/types';
 import {
-  fetchMatchAnalysisConfig,
-  mergeServerPlanningIntoMatchData,
-  resolveAnalysisConfig,
+  fetchSubjectAnalysisConfig,
+  mergeServerPlanningIntoAnalysisPayload,
+  resolveSubjectAnalysisConfig,
 } from '@/src/services/analysisConfig';
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
+type AnalysisSubjectDisplay = Match;
 type ContextStartAnalysis = (
-  match: Match,
+  subjectDisplay: AnalysisSubjectDisplay,
   dataToAnalyze: any,
   includeAnimations: boolean,
   isResume?: boolean,
 ) => void;
-type ContextStopAnalysis = (matchId: string) => void;
+type ContextStopAnalysis = (subjectKey: string) => void;
 
-export type MatchAnalysisStep = 'selection' | 'analyzing' | 'result';
+export type AnalysisPageStep = 'selection' | 'analyzing' | 'result';
+export type MatchAnalysisStep = AnalysisPageStep;
 
-export interface MatchDetailDisplayData {
+export interface AnalysisDisplayData {
   analysis: MatchAnalysis | null;
-  analyzedMatch: Match;
+  subjectDisplay: AnalysisSubjectDisplay;
   thoughts: string;
   parsedStream: AgentResult | null;
   collapsedSegments: Record<string, boolean>;
@@ -39,10 +42,12 @@ export interface MatchDetailDisplayData {
   runMetrics: AnalysisRunMetrics | null;
 }
 
-interface BuildMatchDetailDisplayDataArgs {
+export type MatchDetailDisplayData = AnalysisDisplayData;
+
+interface BuildAnalysisDisplayDataArgs {
   activeAnalysis: ActiveAnalysis | null;
   historyRecord: HistoryRecord | undefined;
-  match: Match;
+  subjectDisplay: AnalysisSubjectDisplay;
   activeDomainId: string;
 }
 
@@ -84,12 +89,12 @@ function buildParsedStreamFromHistory(historyRecord: HistoryRecord): AgentResult
   };
 }
 
-export function buildMatchDetailDisplayData({
+export function buildAnalysisDisplayData({
   activeAnalysis,
   historyRecord,
-  match,
+  subjectDisplay,
   activeDomainId,
-}: BuildMatchDetailDisplayDataArgs): MatchDetailDisplayData {
+}: BuildAnalysisDisplayDataArgs): AnalysisDisplayData {
   if (activeAnalysis) {
     const sourceContextDomainId =
       typeof activeAnalysis.dataToAnalyze?.sourceContext?.domainId === 'string'
@@ -97,7 +102,7 @@ export function buildMatchDetailDisplayData({
         : '';
     return {
       analysis: activeAnalysis.analysis,
-      analyzedMatch: match,
+      subjectDisplay: activeAnalysis.subjectDisplay ?? activeAnalysis.match ?? subjectDisplay,
       thoughts: activeAnalysis.thoughts,
       parsedStream: activeAnalysis.parsedStream,
       collapsedSegments: activeAnalysis.collapsedSegments,
@@ -117,7 +122,7 @@ export function buildMatchDetailDisplayData({
     const restoredSummary = historyRecord.analysisOutputEnvelope?.summaryMarkdown?.trim() || '';
     return {
       analysis: historyRecord.analysis,
-      analyzedMatch: historyRecord.match,
+      subjectDisplay: historyRecord.subjectDisplay,
       thoughts: restoredSummary
         ? `[SYSTEM] Loaded from local history cache.\n\n${restoredSummary}`
         : '[SYSTEM] Loaded from local history cache.\n\nAnalysis complete.',
@@ -136,7 +141,7 @@ export function buildMatchDetailDisplayData({
 
   return {
     analysis: null,
-    analyzedMatch: match,
+    subjectDisplay,
     thoughts: '',
     parsedStream: null,
     collapsedSegments: {},
@@ -151,56 +156,69 @@ export function buildMatchDetailDisplayData({
   };
 }
 
+export const buildMatchDetailDisplayData = buildAnalysisDisplayData;
+
 interface UseAnalysisRuntimeArgs {
-  match: Match | undefined;
+  subjectDisplay: AnalysisSubjectDisplay | undefined;
   editableData: string;
   includeAnimations: boolean;
   activeDomainId: string;
   activeAnalysis: ActiveAnalysis | null;
+  historyRecord?: HistoryRecord;
   startAnalysisInContext: ContextStartAnalysis;
   stopAnalysisInContext: ContextStopAnalysis;
   t: TranslateFn;
 }
 
+export function resolveAnalysisPageStep(input: {
+  activeAnalysis: ActiveAnalysis | null;
+  historyRecord?: HistoryRecord;
+}): AnalysisPageStep {
+  if (input.activeAnalysis?.isAnalyzing) {
+    return 'analyzing';
+  }
+  if (input.activeAnalysis?.analysis || input.historyRecord) {
+    return 'result';
+  }
+  return 'selection';
+}
+
+export const resolveMatchDetailStep = resolveAnalysisPageStep;
+
 export function useAnalysisRuntime({
-  match,
+  subjectDisplay,
   editableData,
   includeAnimations,
   activeDomainId,
   activeAnalysis,
+  historyRecord,
   startAnalysisInContext,
   stopAnalysisInContext,
   t,
 }: UseAnalysisRuntimeArgs): {
-  step: MatchAnalysisStep;
-  setStep: React.Dispatch<React.SetStateAction<MatchAnalysisStep>>;
+  step: AnalysisPageStep;
+  setStep: React.Dispatch<React.SetStateAction<AnalysisPageStep>>;
   startAnalysis: (isResume?: boolean) => Promise<void>;
   stopAnalysis: () => void;
   isPlannerCompact: boolean;
 } {
-  const [step, setStep] = React.useState<MatchAnalysisStep>('selection');
+  const [step, setStep] = React.useState<AnalysisPageStep>('selection');
   const [isPlannerCompact, setIsPlannerCompact] = React.useState(false);
 
   React.useEffect(() => {
-    if (!activeAnalysis) return;
-    if (activeAnalysis.isAnalyzing) {
-      setStep('analyzing');
-      return;
-    }
-    if (activeAnalysis.analysis) {
-      setStep('result');
-      return;
-    }
-    setStep('selection');
-  }, [activeAnalysis]);
+    setStep(resolveAnalysisPageStep({
+      activeAnalysis,
+      historyRecord,
+    }));
+  }, [activeAnalysis, historyRecord]);
 
   const startAnalysis = React.useCallback(
     async (isResume: boolean = false) => {
-      if (!match) return;
+      if (!subjectDisplay) return;
       let dataToAnalyze: any;
       try {
         dataToAnalyze = JSON.parse(editableData);
-      } catch (e) {
+      } catch {
         alert(t('match.invalid_json_preview'));
         return;
       }
@@ -208,18 +226,22 @@ export function useAnalysisRuntime({
       try {
         let serverConfig = null;
         if (
-          typeof match.id === 'string' &&
-          match.id.trim().length > 0 &&
-          !match.id.startsWith('custom_')
+          typeof subjectDisplay.id === 'string' &&
+          subjectDisplay.id.trim().length > 0 &&
+          !subjectDisplay.id.startsWith('custom_')
         ) {
-          serverConfig = await fetchMatchAnalysisConfig(match.id.trim());
+          serverConfig = await fetchSubjectAnalysisConfig({
+            domainId: activeDomainId,
+            subjectId: subjectDisplay.id.trim(),
+            subjectType: 'match',
+          });
         }
 
         if (!serverConfig) {
-          serverConfig = await resolveAnalysisConfig(dataToAnalyze);
+          serverConfig = await resolveSubjectAnalysisConfig(dataToAnalyze);
         }
 
-        dataToAnalyze = mergeServerPlanningIntoMatchData(dataToAnalyze, serverConfig);
+        dataToAnalyze = mergeServerPlanningIntoAnalysisPayload(dataToAnalyze, serverConfig);
 
         const currentSourceContext =
           dataToAnalyze?.sourceContext && typeof dataToAnalyze.sourceContext === 'object'
@@ -240,10 +262,10 @@ export function useAnalysisRuntime({
       }
 
       setStep('analyzing');
-      startAnalysisInContext(match, dataToAnalyze, includeAnimations, isResume);
+      startAnalysisInContext(subjectDisplay, dataToAnalyze, includeAnimations, isResume);
     },
     [
-      match,
+      subjectDisplay,
       editableData,
       includeAnimations,
       activeDomainId,
@@ -253,9 +275,14 @@ export function useAnalysisRuntime({
   );
 
   const stopAnalysis = React.useCallback(() => {
-    if (!match) return;
-    stopAnalysisInContext(match.id);
-  }, [match, stopAnalysisInContext]);
+    if (!subjectDisplay) return;
+    stopAnalysisInContext(
+      buildAnalysisSubjectKey({
+        domainId: activeDomainId,
+        subjectId: subjectDisplay.id,
+      }),
+    );
+  }, [activeDomainId, stopAnalysisInContext, subjectDisplay]);
 
   React.useEffect(() => {
     const shouldTrackPlannerScroll =
