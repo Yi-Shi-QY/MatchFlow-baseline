@@ -149,25 +149,25 @@ export function AnalysisResultPanel({
   return (
     <main id="analysis-content" className="flex-1 flex flex-col gap-4 p-4 max-w-md mx-auto w-full">
       {runMetrics && (
-        <div className="rounded-xl border border-emerald-500/25 bg-zinc-950/80 px-3 py-2">
+        <div className="rounded-xl border border-[var(--mf-border)] bg-[var(--mf-surface-strong)] px-3 py-2">
           <div className="grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
-            <div className="rounded-lg border border-white/10 bg-zinc-900/70 px-2 py-1.5">
-              <div className="text-zinc-500 uppercase tracking-wider">{metricsLabelModel}</div>
-              <div className="mt-0.5 truncate text-zinc-100 font-medium" title={metricModel}>
+            <div className="rounded-lg border border-[var(--mf-border)] bg-[var(--mf-surface)] px-2 py-1.5">
+              <div className="text-[var(--mf-text-muted)] uppercase tracking-wider">{metricsLabelModel}</div>
+              <div className="mt-0.5 truncate text-[var(--mf-text)] font-medium" title={metricModel}>
                 {metricModel}
               </div>
             </div>
-            <div className="rounded-lg border border-white/10 bg-zinc-900/70 px-2 py-1.5">
-              <div className="text-zinc-500 uppercase tracking-wider">{metricsLabelTokens}</div>
-              <div className="mt-0.5 text-zinc-100 font-medium">{metricTokens}</div>
+            <div className="rounded-lg border border-[var(--mf-border)] bg-[var(--mf-surface)] px-2 py-1.5">
+              <div className="text-[var(--mf-text-muted)] uppercase tracking-wider">{metricsLabelTokens}</div>
+              <div className="mt-0.5 text-[var(--mf-text)] font-medium">{metricTokens}</div>
             </div>
-            <div className="rounded-lg border border-white/10 bg-zinc-900/70 px-2 py-1.5">
-              <div className="text-zinc-500 uppercase tracking-wider">{metricsLabelTools}</div>
-              <div className="mt-0.5 text-zinc-100 font-medium">{metricTools}</div>
+            <div className="rounded-lg border border-[var(--mf-border)] bg-[var(--mf-surface)] px-2 py-1.5">
+              <div className="text-[var(--mf-text-muted)] uppercase tracking-wider">{metricsLabelTools}</div>
+              <div className="mt-0.5 text-[var(--mf-text)] font-medium">{metricTools}</div>
             </div>
-            <div className="rounded-lg border border-white/10 bg-zinc-900/70 px-2 py-1.5">
-              <div className="text-zinc-500 uppercase tracking-wider">{metricsLabelElapsed}</div>
-              <div className="mt-0.5 text-zinc-100 font-medium">{metricElapsed}</div>
+            <div className="rounded-lg border border-[var(--mf-border)] bg-[var(--mf-surface)] px-2 py-1.5">
+              <div className="text-[var(--mf-text-muted)] uppercase tracking-wider">{metricsLabelElapsed}</div>
+              <div className="mt-0.5 text-[var(--mf-text)] font-medium">{metricElapsed}</div>
             </div>
           </div>
         </div>
@@ -347,11 +347,11 @@ export function AnalysisResultPanel({
                         className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5"
                       />
                     ) : (
-                      <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xl font-bold text-zinc-300">
+                      <div className="w-16 h-16 rounded-full bg-[var(--mf-surface)] border border-[var(--mf-border)] flex items-center justify-center text-xl font-bold text-[var(--mf-text)]">
                         {(summaryHero.primary.name || '?').slice(0, 1).toUpperCase()}
                       </div>
                     )}
-                    <div className="text-xl font-bold font-mono text-zinc-500">{summaryHero.connector}</div>
+                    <div className="text-xl font-bold font-mono text-[var(--mf-text-muted)]">{summaryHero.connector}</div>
                     {summaryHero.secondary.logo ? (
                       <img
                         src={summaryHero.secondary.logo}
@@ -359,7 +359,7 @@ export function AnalysisResultPanel({
                         className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5"
                       />
                     ) : (
-                      <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xl font-bold text-zinc-300">
+                      <div className="w-16 h-16 rounded-full bg-[var(--mf-surface)] border border-[var(--mf-border)] flex items-center justify-center text-xl font-bold text-[var(--mf-text)]">
                         {(summaryHero.secondary.name || '?').slice(0, 1).toUpperCase()}
                       </div>
                     )}
@@ -375,7 +375,7 @@ export function AnalysisResultPanel({
                         className="w-16 h-16 object-contain drop-shadow-2xl rounded-full bg-white/5"
                       />
                     ) : (
-                      <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xl font-bold text-zinc-300">
+                      <div className="w-16 h-16 rounded-full bg-[var(--mf-surface)] border border-[var(--mf-border)] flex items-center justify-center text-xl font-bold text-[var(--mf-text)]">
                         {(summaryHero.entity.name || '?').slice(0, 1).toUpperCase()}
                       </div>
                     )}
@@ -391,7 +391,7 @@ export function AnalysisResultPanel({
                     {summaryHero.entities.map((entity, index) => (
                       <div
                         key={`${entity.id}_${index}`}
-                        className="px-2.5 py-1.5 rounded-full bg-zinc-800/70 border border-white/10 text-[10px] text-zinc-200 flex items-center gap-1.5"
+                        className="px-2.5 py-1.5 rounded-full bg-[var(--mf-surface)] border border-[var(--mf-border)] text-[10px] text-[var(--mf-text)] flex items-center gap-1.5"
                       >
                         {entity.logo ? (
                           <img
@@ -434,8 +434,8 @@ export function AnalysisResultPanel({
                   <div className="mt-5 w-full grid grid-cols-2 gap-2">
                     {summaryCards.map((card, index) => (
                       <div key={`${card.label}_${index}`} className={summaryTheme.conclusionCardClassName}>
-                        <div className="text-[10px] uppercase tracking-wider text-zinc-500">{card.label}</div>
-                        <div className="text-sm font-semibold text-zinc-100">{formatConclusionCardValue(card)}</div>
+                        <div className="text-[10px] uppercase tracking-wider text-[var(--mf-text-muted)]">{card.label}</div>
+                        <div className="text-sm font-semibold text-[var(--mf-text)]">{formatConclusionCardValue(card)}</div>
                         {(typeof card.confidence === 'number' || card.trend) && (
                           <div className={summaryTheme.conclusionMetaClassName}>
                             {typeof card.confidence === 'number'
@@ -445,7 +445,7 @@ export function AnalysisResultPanel({
                             {card.trend ? `${summaryIsZh ? '趋势' : 'Trend'} ${card.trend}` : ''}
                           </div>
                         )}
-                        {card.note && <div className="text-[10px] text-zinc-500 line-clamp-2">{card.note}</div>}
+                        {card.note && <div className="text-[10px] text-[var(--mf-text-muted)] line-clamp-2">{card.note}</div>}
                       </div>
                     ))}
                   </div>
@@ -453,7 +453,7 @@ export function AnalysisResultPanel({
 
                 {analysis.prediction && (
                   <div className={summaryTheme.quoteCardClassName}>
-                    <p className="text-xs text-zinc-300 leading-relaxed italic text-center">
+                    <p className="text-xs text-[var(--mf-text)] leading-relaxed italic text-center">
                       "{analysis.prediction}"
                     </p>
                   </div>

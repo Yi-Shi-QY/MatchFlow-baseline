@@ -37,6 +37,9 @@ If you are new to client work, read in this order:
 13. [34-domain-extension-go-live-standard-v1-2026-03-03.md](./34-domain-extension-go-live-standard-v1-2026-03-03.md)
 14. [35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md](./35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md)
 15. [37-client-performance-and-maintainability-optimization-plan-v1-2026-03-09.md](./37-client-performance-and-maintainability-optimization-plan-v1-2026-03-09.md)
+16. [40-client-2.0-architecture-review-core-transition-and-next-phase-2026-03-12.md](./40-client-2.0-architecture-review-core-transition-and-next-phase-2026-03-12.md)
+17. [41-client-2.0-next-phase-roadmap-bridge-subject-runtime-automation-2026-03-12.md](./41-client-2.0-next-phase-roadmap-bridge-subject-runtime-automation-2026-03-12.md)
+18. [42-client-product-conversation-first-mobile-design-handoff-2026-03-13.md](./42-client-product-conversation-first-mobile-design-handoff-2026-03-13.md)
 
 ## 4. Related Shared Docs
 
@@ -81,6 +84,9 @@ If you are new to client work, read in this order:
 13. [34-domain-extension-go-live-standard-v1-2026-03-03.md](./34-domain-extension-go-live-standard-v1-2026-03-03.md)
 14. [35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md](./35-domain-scaffold-and-compliance-tooling-v1-2026-03-03.md)
 15. [37-client-performance-and-maintainability-optimization-plan-v1-2026-03-09.md](./37-client-performance-and-maintainability-optimization-plan-v1-2026-03-09.md)
+16. [40-client-2.0-architecture-review-core-transition-and-next-phase-2026-03-12.md](./40-client-2.0-architecture-review-core-transition-and-next-phase-2026-03-12.md)
+17. [41-client-2.0-next-phase-roadmap-bridge-subject-runtime-automation-2026-03-12.md](./41-client-2.0-next-phase-roadmap-bridge-subject-runtime-automation-2026-03-12.md)
+18. [42-client-product-conversation-first-mobile-design-handoff-2026-03-13.md](./42-client-product-conversation-first-mobile-design-handoff-2026-03-13.md)
 
 ## 4. 关联公共文档
 

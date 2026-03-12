@@ -30,7 +30,7 @@ export const footballDomain: AnalysisDomain = {
   dataSources: ANALYSIS_DATA_SOURCES,
   getAvailableDataSources: (context) =>
     ANALYSIS_DATA_SOURCES.filter((source) => source.isAvailable(context)),
-  resolveSourceSelection: (match, importedData, previousSelection) =>
-    resolveSourceSelection(match, importedData, previousSelection),
+  resolveSourceSelection: (subjectDisplay, importedData, previousSelection) =>
+    resolveSourceSelection(subjectDisplay, importedData, previousSelection),
   buildSourceCapabilities,
 };

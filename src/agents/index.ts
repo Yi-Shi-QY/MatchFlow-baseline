@@ -3,6 +3,7 @@ import { plannerAutonomousAgent } from './planner_autonomous';
 import { tagAgent } from './tag';
 import { summaryAgent } from './summary';
 import { animationAgent } from './animation';
+import { managerCommandCenterAgent } from './manager_command_center';
 import { AgentConfig } from './types';
 import { buildAnalysisPrompt } from './utils';
 import { getInstalledAgentManifest, listInstalledAgentManifests } from '@/src/services/extensions/store';
@@ -61,7 +62,14 @@ function collectBuiltinDomainAgentEntries() {
       }
     });
 
-  const sharedAgentIds = ['planner_template', 'planner_autonomous', 'tag', 'summary', 'animation'];
+  const sharedAgentIds = [
+    'planner_template',
+    'planner_autonomous',
+    'tag',
+    'summary',
+    'animation',
+    'manager_command_center',
+  ];
   sharedAgentIds.forEach((agentId) => {
     if (agents[agentId]) {
       throw new Error(
@@ -88,6 +96,7 @@ export const BUILTIN_AGENTS: Record<string, AgentConfig> = {
   tag: tagAgent,
   summary: summaryAgent,
   animation: animationAgent,
+  manager_command_center: managerCommandCenterAgent,
   ...domainAgentEntries.agents,
 };
 
@@ -97,6 +106,7 @@ export const BUILTIN_AGENT_VERSIONS: Record<string, string> = {
   tag: '1.0.0',
   summary: '1.0.0',
   animation: '1.0.0',
+  manager_command_center: '1.0.0',
   ...domainAgentEntries.versions,
 };
 

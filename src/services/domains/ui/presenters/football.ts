@@ -1,16 +1,16 @@
-import type { Match } from "@/src/data/matches";
 import {
   getAnalysisOutcomeDistribution,
   type SummaryDistributionLabels,
 } from "@/src/services/analysisSummary";
 import type {
+  DomainSubjectDisplay,
   DomainHistoryPresenter,
   DomainHomePresenter,
   DomainResultPresenter,
   DomainUiPresenter,
-  MatchStatus,
   TranslateFn,
 } from "../types";
+import type { SubjectDisplayStatus } from "@/src/services/subjectDisplayMatch";
 
 function hasNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -20,20 +20,23 @@ function resolveString(input: unknown, fallback: string): string {
   return typeof input === "string" && input.trim().length > 0 ? input.trim() : fallback;
 }
 
-function resolveFootballPair(match: Match, draftData: any | null) {
+function resolveFootballPair(subjectDisplay: DomainSubjectDisplay, draftData: any | null) {
   return {
-    homeName: resolveString(draftData?.homeTeam?.name, match.homeTeam.name),
-    awayName: resolveString(draftData?.awayTeam?.name, match.awayTeam.name),
-    homeLogo: resolveString(draftData?.homeTeam?.logo, match.homeTeam.logo),
-    awayLogo: resolveString(draftData?.awayTeam?.logo, match.awayTeam.logo),
+    homeName: resolveString(draftData?.homeTeam?.name, subjectDisplay.homeTeam.name),
+    awayName: resolveString(draftData?.awayTeam?.name, subjectDisplay.awayTeam.name),
+    homeLogo: resolveString(draftData?.homeTeam?.logo, subjectDisplay.homeTeam.logo),
+    awayLogo: resolveString(draftData?.awayTeam?.logo, subjectDisplay.awayTeam.logo),
   };
 }
 
-function resolveFootballLeague(match: Match, draftData: any | null) {
-  return resolveString(draftData?.league, match.league);
+function resolveFootballLeague(subjectDisplay: DomainSubjectDisplay, draftData: any | null) {
+  return resolveString(draftData?.league, subjectDisplay.league);
 }
 
-export function resolveFootballStatusLabel(status: MatchStatus, t: TranslateFn): string {
+export function resolveFootballStatusLabel(
+  status: SubjectDisplayStatus,
+  t: TranslateFn,
+): string {
   if (status === "live") return t("home.live");
   if (status === "finished") return t("home.finished");
   return t("home.upcoming");
@@ -48,69 +51,75 @@ export const footballHomePresenter: DomainHomePresenter = {
   openActionKey: "home.click_to_analyze",
   noDataKey: "home.no_match_data",
   searchPlaceholderKey: "home.search_placeholder",
-  getEntityDisplay: (match) => ({
+  getEntityDisplay: (subjectDisplay) => ({
     kind: "pair",
     primary: {
-      id: match.homeTeam.id || `${match.id}_home`,
-      name: match.homeTeam.name,
-      logo: match.homeTeam.logo,
+      id: subjectDisplay.homeTeam.id || `${subjectDisplay.id}_home`,
+      name: subjectDisplay.homeTeam.name,
+      logo: subjectDisplay.homeTeam.logo,
     },
     secondary: {
-      id: match.awayTeam.id || `${match.id}_away`,
-      name: match.awayTeam.name,
-      logo: match.awayTeam.logo,
+      id: subjectDisplay.awayTeam.id || `${subjectDisplay.id}_away`,
+      name: subjectDisplay.awayTeam.name,
+      logo: subjectDisplay.awayTeam.logo,
     },
     connector: "VS",
   }),
-  getDisplayPair: (match) => ({
-    primaryName: match.homeTeam.name,
-    secondaryName: match.awayTeam.name,
-    primaryLogo: match.homeTeam.logo,
-    secondaryLogo: match.awayTeam.logo,
+  getDisplayPair: (subjectDisplay) => ({
+    primaryName: subjectDisplay.homeTeam.name,
+    secondaryName: subjectDisplay.awayTeam.name,
+    primaryLogo: subjectDisplay.homeTeam.logo,
+    secondaryLogo: subjectDisplay.awayTeam.logo,
     connector: "VS",
   }),
-  getSearchTokens: (match) => [match.homeTeam.name, match.awayTeam.name, match.league],
+  getSearchTokens: (subjectDisplay) => [
+    subjectDisplay.homeTeam.name,
+    subjectDisplay.awayTeam.name,
+    subjectDisplay.league,
+  ],
   getStatusLabel: (status, ctx) => resolveFootballStatusLabel(status, ctx.t),
   getStatusClassName: (status) => {
     if (status === "live") return "bg-red-500/20 text-red-500 animate-pulse";
-    if (status === "finished") return "bg-zinc-800 text-zinc-400";
-    return "bg-emerald-500/20 text-emerald-500";
+    if (status === "finished") {
+      return "bg-[var(--mf-surface)] border border-[var(--mf-border)] text-[var(--mf-text-muted)]";
+    }
+    return "bg-[var(--mf-accent-soft)] text-[var(--mf-accent)]";
   },
-  getOutcomeLabels: (match, ctx) => ({
-    homeLabel: match.homeTeam.name,
+  getOutcomeLabels: (subjectDisplay, ctx) => ({
+    homeLabel: subjectDisplay.homeTeam.name,
     drawLabel: ctx.t("match.draw"),
-    awayLabel: match.awayTeam.name,
+    awayLabel: subjectDisplay.awayTeam.name,
   }),
-  getCenterDisplay: (match, ctx) => {
-    if (hasNumber(match.score?.home) && hasNumber(match.score?.away)) {
+  getCenterDisplay: (subjectDisplay, ctx) => {
+    if (hasNumber(subjectDisplay.score?.home) && hasNumber(subjectDisplay.score?.away)) {
       return {
         kind: "score",
-        home: match.score.home,
-        away: match.score.away,
+        home: subjectDisplay.score.home,
+        away: subjectDisplay.score.away,
       };
     }
 
-    if (match.status === "upcoming" || match.status === "live") {
+    if (subjectDisplay.status === "upcoming" || subjectDisplay.status === "live") {
       return {
         kind: "text",
-        value: ctx.formatTime(match.date),
+        value: ctx.formatTime(subjectDisplay.date),
       };
     }
 
     return {
       kind: "text",
-      value: ctx.formatDate(match.date),
+      value: ctx.formatDate(subjectDisplay.date),
     };
   },
 };
 
 export const footballHistoryPresenter: DomainHistoryPresenter = {
   id: "football_history",
-  getOutcomeDistribution: (analysis, match, ctx) => {
+  getOutcomeDistribution: (analysis, subjectDisplay, ctx) => {
     const labels: SummaryDistributionLabels = {
-      homeLabel: match.homeTeam.name,
+      homeLabel: subjectDisplay.homeTeam.name,
       drawLabel: ctx.t("match.draw"),
-      awayLabel: match.awayTeam.name,
+      awayLabel: subjectDisplay.awayTeam.name,
     };
     return getAnalysisOutcomeDistribution(analysis, labels);
   },
@@ -120,32 +129,32 @@ export const footballResultPresenter: DomainResultPresenter = {
   id: "football_result",
   getLoadingContextText: () => "Loading analysis context...",
   getNotFoundText: () => "Analysis target not found",
-  getHeader: (match, draftData) => {
-    const pair = resolveFootballPair(match, draftData);
+  getHeader: (subjectDisplay, draftData) => {
+    const pair = resolveFootballPair(subjectDisplay, draftData);
     return {
-      subtitle: resolveFootballLeague(match, draftData),
+      subtitle: resolveFootballLeague(subjectDisplay, draftData),
       title: `${pair.homeName} vs ${pair.awayName}`,
     };
   },
-  getSummaryHero: (match, draftData) => {
-    const pair = resolveFootballPair(match, draftData);
+  getSummaryHero: (subjectDisplay, draftData) => {
+    const pair = resolveFootballPair(subjectDisplay, draftData);
     return {
       kind: "pair",
       primary: {
-        id: match.homeTeam.id || "home",
+        id: subjectDisplay.homeTeam.id || "home",
         name: pair.homeName,
         logo: pair.homeLogo,
       },
       secondary: {
-        id: match.awayTeam.id || "away",
+        id: subjectDisplay.awayTeam.id || "away",
         name: pair.awayName,
         logo: pair.awayLogo,
       },
       connector: "VS",
     };
   },
-  getSummaryDistribution: (analysis, match, draftData, ctx) => {
-    const pair = resolveFootballPair(match, draftData);
+  getSummaryDistribution: (analysis, subjectDisplay, draftData, ctx) => {
+    const pair = resolveFootballPair(subjectDisplay, draftData);
     const labels: SummaryDistributionLabels = {
       homeLabel: pair.homeName,
       drawLabel: ctx.t("match.draw"),
@@ -153,13 +162,13 @@ export const footballResultPresenter: DomainResultPresenter = {
     };
     return getAnalysisOutcomeDistribution(analysis, labels);
   },
-  getExportMeta: (match, draftData, ctx) => {
-    const pair = resolveFootballPair(match, draftData);
+  getExportMeta: (subjectDisplay, draftData, ctx) => {
+    const pair = resolveFootballPair(subjectDisplay, draftData);
     return {
       reportTitle: `${pair.homeName} vs ${pair.awayName}`,
       primaryEntityName: pair.homeName,
       secondaryEntityName: pair.awayName,
-      statusLabel: resolveFootballStatusLabel(match.status, ctx.t),
+      statusLabel: resolveFootballStatusLabel(subjectDisplay.status, ctx.t),
     };
   },
 };

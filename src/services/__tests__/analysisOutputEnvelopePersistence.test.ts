@@ -93,12 +93,15 @@ describe("history output envelope persistence", () => {
       { provider: "test-provider" },
     );
 
-    await saveHistory(sampleMatch, sampleAnalysis, undefined, { diagnostics: "ok" }, {
+    await saveHistory({
       domainId: "football",
       subjectId: sampleMatch.id,
       subjectType: "match",
       subjectSnapshot: sampleMatch,
       analysisOutputEnvelope: envelope,
+      subjectDisplay: sampleMatch,
+      analysis: sampleAnalysis,
+      generatedCodes: { diagnostics: "ok" },
     });
 
     const records = await getHistory({
@@ -117,19 +120,16 @@ describe("history output envelope persistence", () => {
   });
 
   it("keeps backward compatibility when envelope metadata is malformed", async () => {
-    await saveHistory(
-      sampleMatch,
-      sampleAnalysis,
-      undefined,
-      {
+    await saveHistory({
+      subjectDisplay: sampleMatch,
+      analysis: sampleAnalysis,
+      generatedCodes: {
         [ANALYSIS_OUTPUT_ENVELOPE_CODE_KEY]: "not-json",
       },
-      {
-        domainId: "football",
-        subjectId: sampleMatch.id,
-        subjectType: "match",
-      },
-    );
+      domainId: "football",
+      subjectId: sampleMatch.id,
+      subjectType: "match",
+    });
 
     const records = await getHistory({
       domainId: "football",

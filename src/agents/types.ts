@@ -3,6 +3,7 @@ export interface AgentContext {
   segmentPlan?: any;
   previousAnalysis?: string;
   analysisText?: string;
+  userInput?: string;
   narrationText?: string;
   language?: 'en' | 'zh';
   enableAutonomousPlanning?: boolean;
@@ -15,9 +16,24 @@ export interface AgentContext {
   allowedSourceIds?: string[];
   requiredAgentIds?: string[];
   domainId?: string;
+  domainName?: string;
+  managerPendingTask?: {
+    sourceText: string;
+    stage: 'await_factors' | 'await_sequence';
+    selectedSourceIds?: string[];
+    sequencePreference?: string[];
+  } | null;
   planningAgentCatalog?: PlanningAgentCapability[];
   planningAnimationCatalog?: PlanningAnimationCapability[];
   planningSourceCatalog?: PlanningSourceCapability[];
+  conversationHistory?: Array<{
+    role: 'user' | 'agent';
+    text: string;
+  }>;
+  managerContextFragments?: Array<{
+    category: string;
+    text: string;
+  }>;
 }
 
 export interface PlanningAgentCapability {

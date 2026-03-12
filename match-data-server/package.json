@@ -6,9 +6,12 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "local:football": "node scripts/runLocalFootballServer.js",
+    "seed:football:test": "node scripts/seedFootballTestData.js",
     "test": "node test/runAuthzIntegration.js",
     "test:db-phase": "node test/runDbPhaseGate.js",
     "test:phase-e": "node test/runPhaseEHardening.js",
+    "test:football:smoke": "node test/runFootballDatasourceSmoke.js",
     "test:joint-smoke": "node test/runClientServerJointSmoke.js",
     "test:web-joint-smoke": "node test/runAdminStudioWebJointSmoke.js",
     "test:prod-ready": "node test/runProductionReadiness.js",

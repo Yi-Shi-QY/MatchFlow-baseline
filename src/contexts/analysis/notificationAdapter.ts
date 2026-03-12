@@ -63,7 +63,7 @@ export function useAnalysisBackgroundNotification(
         ].filter(Boolean);
         const body = bodyLines.join('\n');
 
-        const notificationKey = `${firstMatch.matchId}|${completedSegments}|${totalSegments}|${status}|${additionalCount}|${language}`;
+        const notificationKey = `${firstMatch.domainId}::${firstMatch.subjectId}|${completedSegments}|${totalSegments}|${status}|${additionalCount}|${language}`;
         const now = Date.now();
         if (
           notificationKey === lastNotificationKeyRef.current &&
@@ -84,7 +84,7 @@ export function useAnalysisBackgroundNotification(
               autoCancel: false,
               schedule: { at: new Date(Date.now() + 100) },
               extra: {
-                matchId: firstMatch.matchId,
+                subjectId: firstMatch.subjectId,
                 domainId: firstMatch.domainId,
                 route: buildSubjectRoute(firstMatch.domainId, firstMatch.subjectId),
               } as any,

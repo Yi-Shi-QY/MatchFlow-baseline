@@ -26,4 +26,5 @@ export const AGENT_MODEL_CONFIG: Partial<Record<AgentId, AgentModelConfigEntry>>
   summary: { provider: "gemini", model: "gemini-3-flash-preview" },
   odds: { provider: "gemini", model: "gemini-3-flash-preview" },
   animation: { provider: "gemini", model: "gemini-3-flash-preview" },
+  manager_command_center: { provider: "gemini", model: "gemini-3-flash-preview" },
 };

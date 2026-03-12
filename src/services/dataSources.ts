@@ -1,4 +1,4 @@
-import { Match } from "@/src/data/matches";
+import type { SubjectDisplayMatch } from "@/src/services/subjectDisplayMatch";
 
 // Source ids are intentionally open-ended so each domain can define its own set.
 export type SourceId = string;
@@ -9,7 +9,7 @@ export type SourceIconKey = "layout" | "trending" | "file";
 type Path = string[];
 
 export interface SourceContext {
-  match: Match;
+  subjectDisplay: SubjectDisplayMatch;
   importedData?: any;
 }
 
@@ -126,17 +126,17 @@ export const ANALYSIS_DATA_SOURCES: DataSourceDefinition[] = [
     isAvailable: () => true,
     defaultSelected: () => true,
     applyToData: (data, ctx) => {
-      const { match } = ctx;
-      if (data.id === undefined) data.id = match.id;
-      if (data.league === undefined) data.league = match.league;
-      if (data.status === undefined) data.status = match.status;
-      if (data.date === undefined) data.date = match.date;
+      const { subjectDisplay } = ctx;
+      if (data.id === undefined) data.id = subjectDisplay.id;
+      if (data.league === undefined) data.league = subjectDisplay.league;
+      if (data.status === undefined) data.status = subjectDisplay.status;
+      if (data.date === undefined) data.date = subjectDisplay.date;
 
-      data.homeTeam = copyTeam(data.homeTeam, match.homeTeam);
-      data.awayTeam = copyTeam(data.awayTeam, match.awayTeam);
+      data.homeTeam = copyTeam(data.homeTeam, subjectDisplay.homeTeam);
+      data.awayTeam = copyTeam(data.awayTeam, subjectDisplay.awayTeam);
 
-      if (data.stats === undefined && match.stats) {
-        data.stats = { ...match.stats };
+      if (data.stats === undefined && subjectDisplay.stats) {
+        data.stats = { ...subjectDisplay.stats };
       }
     },
     removeFromData: (data) => {
@@ -227,11 +227,12 @@ export const ANALYSIS_DATA_SOURCES: DataSourceDefinition[] = [
     cardSpan: 1,
     isAvailable: () => true,
     defaultSelected: (ctx) =>
-      !!ctx.match.capabilities?.hasOdds || hasNonEmptyObject(ctx.match.odds),
+      !!ctx.subjectDisplay.capabilities?.hasOdds ||
+      hasNonEmptyObject(ctx.subjectDisplay.odds),
     applyToData: (data, ctx) => {
-      const { match } = ctx;
+      const { subjectDisplay } = ctx;
       if (!hasNonEmptyObject(data.odds)) {
-        data.odds = match.odds || {
+        data.odds = subjectDisplay.odds || {
           had: { h: 0, d: 0, a: 0 },
           hhad: { h: 0, d: 0, a: 0, goalline: 0 },
         };
@@ -285,12 +286,13 @@ export const ANALYSIS_DATA_SOURCES: DataSourceDefinition[] = [
     cardSpan: 2,
     isAvailable: () => true,
     defaultSelected: (ctx) =>
-      !!ctx.match.capabilities?.hasCustom ||
-      hasCustomInfo((ctx.match as any).customInfo) ||
+      !!ctx.subjectDisplay.capabilities?.hasCustom ||
+      hasCustomInfo((ctx.subjectDisplay as any).customInfo) ||
       hasCustomInfo(ctx.importedData?.customInfo),
     applyToData: (data, ctx) => {
       if (data.customInfo === undefined) {
-        data.customInfo = (ctx.match as any).customInfo || ctx.importedData?.customInfo || "";
+        data.customInfo =
+          (ctx.subjectDisplay as any).customInfo || ctx.importedData?.customInfo || "";
       }
     },
     removeFromData: (data) => {
@@ -315,11 +317,11 @@ export const ANALYSIS_DATA_SOURCES: DataSourceDefinition[] = [
 ];
 
 export function resolveSourceSelection(
-  match: Match,
+  subjectDisplay: SubjectDisplayMatch,
   importedData: any,
   previousSelection?: Partial<SourceSelection>,
 ): SourceSelection {
-  const ctx: SourceContext = { match, importedData };
+  const ctx: SourceContext = { subjectDisplay, importedData };
   const defaults = ANALYSIS_DATA_SOURCES.reduce((acc, source) => {
     if (!source.isAvailable(ctx)) {
       acc[source.id] = false;

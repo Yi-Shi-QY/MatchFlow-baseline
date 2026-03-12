@@ -4,8 +4,11 @@ import App from './App.tsx';
 import './index.css';
 import './i18n/config';
 import { bootstrapExtensionRegistryValidation } from './services/extensions/bootstrap';
+import { getSettings } from './services/settings';
+import { applyTheme } from './services/theme';
 
 bootstrapExtensionRegistryValidation();
+applyTheme(getSettings().theme);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

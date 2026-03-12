@@ -32,7 +32,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./schema.sql:/bootstrap/schema.sql:ro
       - ./migrations:/bootstrap/migrations:ro
-      - ./docker/init/00-bootstrap.sh:/docker-entrypoint-initdb.d/00-bootstrap.sh:ro
+      - ./docker/init/00-bootstrap.sql:/docker-entrypoint-initdb.d/00-bootstrap.sql:ro
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:

@@ -156,28 +156,28 @@ function validateBuiltinModules() {
       );
     }
 
-    const caseCount = Array.isArray(moduleItem.localTestCases)
-      ? moduleItem.localTestCases.length
+    const caseCount = Array.isArray(moduleItem.localSubjectSnapshots)
+      ? moduleItem.localSubjectSnapshots.length
       : 0;
     if (caseCount < LOCAL_DOMAIN_CASE_MINIMUM) {
       throw new Error(
-        `Domain ${domainId} must provide at least ${LOCAL_DOMAIN_CASE_MINIMUM} local test cases, received ${caseCount}.`,
+        `Domain ${domainId} must provide at least ${LOCAL_DOMAIN_CASE_MINIMUM} local subject snapshots, received ${caseCount}.`,
       );
     }
 
-    const caseIds = moduleItem.localTestCases
+    const caseIds = moduleItem.localSubjectSnapshots
       .map((match) => (typeof match?.id === "string" ? match.id.trim() : ""))
       .filter((id) => id.length > 0);
     if (caseIds.length < LOCAL_DOMAIN_CASE_MINIMUM) {
       throw new Error(
-        `Domain ${domainId} has invalid local test cases: at least ${LOCAL_DOMAIN_CASE_MINIMUM} non-empty case ids are required.`,
+        `Domain ${domainId} has invalid local subject snapshots: at least ${LOCAL_DOMAIN_CASE_MINIMUM} non-empty subject ids are required.`,
       );
     }
 
     const duplicateCaseIds = caseIds.filter((id, index) => caseIds.indexOf(id) !== index);
     if (duplicateCaseIds.length > 0) {
       throw new Error(
-        `Domain ${domainId} local test case ids must be unique. Duplicates: ${Array.from(new Set(duplicateCaseIds)).join(", ")}`,
+        `Domain ${domainId} local subject ids must be unique. Duplicates: ${Array.from(new Set(duplicateCaseIds)).join(", ")}`,
       );
     }
   });
@@ -196,16 +196,23 @@ export function listBuiltinPlanningStrategies(): DomainPlanningStrategy[] {
   return listBuiltinDomainModules().map((moduleItem) => moduleItem.planningStrategy);
 }
 
-export function getBuiltinDomainLocalTestCases(domainId: string): Match[] {
+export function getBuiltinDomainLocalSubjectSnapshots(domainId: string): Match[] {
   const moduleItem = listBuiltinDomainModules().find((item) => item.domain.id === domainId);
   if (!moduleItem) return [];
-  return moduleItem.localTestCases.map(cloneMatch);
+  return moduleItem.localSubjectSnapshots.map(cloneMatch);
 }
 
-export function findBuiltinDomainLocalTestCaseById(matchId: string): Match | null {
-  if (!matchId) return null;
-  for (const moduleItem of listBuiltinDomainModules()) {
-    const found = moduleItem.localTestCases.find((match) => match?.id === matchId);
+export function findBuiltinDomainLocalSubjectSnapshotById(input: {
+  subjectId: string;
+  domainId?: string;
+}): Match | null {
+  const subjectId = typeof input.subjectId === 'string' ? input.subjectId.trim() : '';
+  if (!subjectId) return null;
+  const modules = input.domainId
+    ? listBuiltinDomainModules().filter((moduleItem) => moduleItem.domain.id === input.domainId)
+    : listBuiltinDomainModules();
+  for (const moduleItem of modules) {
+    const found = moduleItem.localSubjectSnapshots.find((match) => match?.id === subjectId);
     if (found) return cloneMatch(found);
   }
   return null;

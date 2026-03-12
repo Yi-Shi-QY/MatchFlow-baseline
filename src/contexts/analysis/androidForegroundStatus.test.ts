@@ -4,9 +4,15 @@ import { buildAndroidForegroundServicePayload } from './androidForegroundStatus'
 
 function createActiveAnalysis(overrides: Partial<ActiveAnalysis>): ActiveAnalysis {
   const base = {
-    matchId: 'match-1',
+    subjectRef: {
+      domainId: 'football',
+      subjectId: 'match-1',
+      subjectType: 'match',
+    },
     domainId: 'football',
     subjectId: 'match-1',
+    subjectType: 'match',
+    subjectSnapshot: undefined,
     match: {
       id: 'match-1',
       league: 'EPL',

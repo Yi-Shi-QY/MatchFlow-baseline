@@ -1,8 +1,11 @@
-import type { Match } from "@/src/data/matches";
 import type { SummaryDistributionItem } from "@/src/services/analysisSummary";
 import type { MatchAnalysis } from "@/src/services/ai";
+import type {
+  SubjectDisplayMatch,
+  SubjectDisplayStatus,
+} from "@/src/services/subjectDisplayMatch";
 
-export type MatchStatus = Match["status"];
+export type DomainSubjectDisplay = SubjectDisplayMatch;
 export type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 
 export interface HomePresenterContext {
@@ -82,25 +85,25 @@ export interface DomainHomePresenter {
   noDataKey: string;
   searchPlaceholderKey: string;
   getEntityDisplay?: (
-    match: Match,
+    subjectDisplay: DomainSubjectDisplay,
     ctx: HomePresenterContext,
     subjectSnapshot?: unknown,
   ) => HomeEntityDisplay;
   getDisplayPair?: (
-    match: Match,
+    subjectDisplay: DomainSubjectDisplay,
     ctx: HomePresenterContext,
     subjectSnapshot?: unknown,
   ) => HomeEntityPair;
-  getSearchTokens: (match: Match, subjectSnapshot?: unknown) => string[];
-  getStatusLabel: (status: MatchStatus, ctx: HomePresenterContext) => string;
-  getStatusClassName: (status: MatchStatus) => string;
+  getSearchTokens: (subjectDisplay: DomainSubjectDisplay, subjectSnapshot?: unknown) => string[];
+  getStatusLabel: (status: SubjectDisplayStatus, ctx: HomePresenterContext) => string;
+  getStatusClassName: (status: SubjectDisplayStatus) => string;
   getOutcomeLabels: (
-    match: Match,
+    subjectDisplay: DomainSubjectDisplay,
     ctx: HomePresenterContext,
     subjectSnapshot?: unknown,
   ) => HomeOutcomeLabels;
   getCenterDisplay: (
-    match: Match,
+    subjectDisplay: DomainSubjectDisplay,
     ctx: HomePresenterContext,
     subjectSnapshot?: unknown,
   ) => HomeCenterDisplay;
@@ -115,7 +118,7 @@ export interface DomainHistoryPresenter {
   id: string;
   getOutcomeDistribution: (
     analysis: MatchAnalysis | null | undefined,
-    match: Match,
+    subjectDisplay: DomainSubjectDisplay,
     ctx: HistoryPresenterContext,
   ) => SummaryDistributionItem[];
 }
@@ -168,26 +171,26 @@ export interface DomainResultPresenter {
   getLoadingContextText: (ctx: ResultPresenterContext) => string;
   getNotFoundText: (ctx: ResultPresenterContext) => string;
   getHeader: (
-    match: Match,
+    subjectDisplay: DomainSubjectDisplay,
     draftData: any | null,
     ctx: ResultPresenterContext,
     subjectSnapshot?: unknown,
   ) => DomainResultHeader;
   getSummaryHero: (
-    match: Match,
+    subjectDisplay: DomainSubjectDisplay,
     draftData: any | null,
     ctx: ResultPresenterContext,
     subjectSnapshot?: unknown,
   ) => DomainResultSummaryHero;
   getSummaryDistribution: (
     analysis: MatchAnalysis | null | undefined,
-    match: Match,
+    subjectDisplay: DomainSubjectDisplay,
     draftData: any | null,
     ctx: ResultPresenterContext,
     subjectSnapshot?: unknown,
   ) => SummaryDistributionItem[];
   getExportMeta: (
-    match: Match,
+    subjectDisplay: DomainSubjectDisplay,
     draftData: any | null,
     ctx: ResultPresenterContext,
     subjectSnapshot?: unknown,
@@ -201,18 +204,20 @@ export interface DomainUiPresenter {
   result: DomainResultPresenter;
 }
 
-function buildFallbackHomeEntityDisplay(match: Match): HomeEntityDisplay {
+function buildFallbackHomeEntityDisplay(
+  subjectDisplay: DomainSubjectDisplay,
+): HomeEntityDisplay {
   return {
     kind: "pair",
     primary: {
-      id: match.homeTeam.id || `${match.id}_primary`,
-      name: match.homeTeam.name,
-      logo: match.homeTeam.logo,
+      id: subjectDisplay.homeTeam.id || `${subjectDisplay.id}_primary`,
+      name: subjectDisplay.homeTeam.name,
+      logo: subjectDisplay.homeTeam.logo,
     },
     secondary: {
-      id: match.awayTeam.id || `${match.id}_secondary`,
-      name: match.awayTeam.name,
-      logo: match.awayTeam.logo,
+      id: subjectDisplay.awayTeam.id || `${subjectDisplay.id}_secondary`,
+      name: subjectDisplay.awayTeam.name,
+      logo: subjectDisplay.awayTeam.logo,
     },
     connector: "VS",
   };
@@ -237,17 +242,17 @@ export function buildHomeEntityDisplayFromPair(pair: HomeEntityPair): HomeEntity
 
 export function resolveHomeEntityDisplay(
   presenter: DomainHomePresenter,
-  match: Match,
+  subjectDisplay: DomainSubjectDisplay,
   ctx: HomePresenterContext,
   subjectSnapshot?: unknown,
 ): HomeEntityDisplay {
   if (typeof presenter.getEntityDisplay === "function") {
-    return presenter.getEntityDisplay(match, ctx, subjectSnapshot);
+    return presenter.getEntityDisplay(subjectDisplay, ctx, subjectSnapshot);
   }
   if (typeof presenter.getDisplayPair === "function") {
     return buildHomeEntityDisplayFromPair(
-      presenter.getDisplayPair(match, ctx, subjectSnapshot),
+      presenter.getDisplayPair(subjectDisplay, ctx, subjectSnapshot),
     );
   }
-  return buildFallbackHomeEntityDisplay(match);
+  return buildFallbackHomeEntityDisplay(subjectDisplay);
 }

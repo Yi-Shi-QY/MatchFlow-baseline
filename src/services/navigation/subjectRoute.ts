@@ -8,8 +8,3 @@ export function buildSubjectRoute(domainId: string, subjectId: string): string {
   const normalizedSubjectId = normalizeRouteSegment(subjectId, 'unknown_subject');
   return `/subject/${encodeURIComponent(normalizedDomainId)}/${encodeURIComponent(normalizedSubjectId)}`;
 }
-
-export function buildLegacyMatchRoute(subjectId: string): string {
-  const normalizedSubjectId = normalizeRouteSegment(subjectId, 'unknown_subject');
-  return `/match/${encodeURIComponent(normalizedSubjectId)}`;
-}

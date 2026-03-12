@@ -5,8 +5,10 @@ interface AndroidForegroundExecutionPlugin {
     title: string;
     text: string;
     useWakeLock?: boolean;
+    scope?: 'analysis' | 'automation';
+    ttlMs?: number;
   }): Promise<{ running: boolean }>;
-  stop(): Promise<{ running: boolean }>;
+  stop(options?: { scope?: 'analysis' | 'automation' }): Promise<{ running: boolean }>;
   isRunning(): Promise<{ running: boolean }>;
 }
 
@@ -26,6 +28,7 @@ export interface AndroidForegroundExecutionStatusInput {
 
 export async function startOrUpdateAndroidForegroundExecution(
   input: AndroidForegroundExecutionStatusInput,
+  options?: { scope?: 'analysis' | 'automation'; ttlMs?: number },
 ): Promise<boolean> {
   if (!isNativeAndroid()) return false;
   try {
@@ -33,6 +36,8 @@ export async function startOrUpdateAndroidForegroundExecution(
       title: input.title,
       text: input.text,
       useWakeLock: input.useWakeLock,
+      scope: options?.scope || 'analysis',
+      ttlMs: options?.ttlMs,
     });
     return true;
   } catch (error) {
@@ -41,10 +46,12 @@ export async function startOrUpdateAndroidForegroundExecution(
   }
 }
 
-export async function stopAndroidForegroundExecution(): Promise<boolean> {
+export async function stopAndroidForegroundExecution(
+  scope: 'analysis' | 'automation' = 'analysis',
+): Promise<boolean> {
   if (!isNativeAndroid()) return false;
   try {
-    await AndroidForegroundExecution.stop();
+    await AndroidForegroundExecution.stop({ scope });
     return true;
   } catch (error) {
     console.warn('Failed to stop Android foreground execution service', error);

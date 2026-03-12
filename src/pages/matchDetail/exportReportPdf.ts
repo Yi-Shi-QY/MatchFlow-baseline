@@ -1,5 +1,4 @@
 import { Capacitor } from '@capacitor/core';
-import type { Match } from '@/src/data/matches';
 import type { AgentSegment } from '@/src/services/agentParser';
 import type { MatchAnalysis } from '@/src/services/ai';
 import {
@@ -10,11 +9,12 @@ import type {
   DomainResultPresenter,
   ResultPresenterContext,
 } from '@/src/services/domains/ui/presenter';
+import type { SubjectDisplayMatch } from '@/src/services/subjectDisplayMatch';
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 
-export interface ExportMatchReportPdfInput {
-  match: Match;
+export interface ExportSubjectReportPdfInput {
+  subjectDisplay: SubjectDisplayMatch;
   selectedSegments: AgentSegment[];
   includeSummaryInExport: boolean;
   summary: MatchAnalysis | null;
@@ -38,12 +38,14 @@ function normalizeTextForPdf(input: string): string {
 }
 
 function safeFilePart(value: string): string {
-  return value.replace(/[\\/:*?"<>|]/g, '_').trim() || 'match';
+  return value.replace(/[\\/:*?"<>|]/g, '_').trim() || 'subject';
 }
 
-export async function exportMatchReportPdf(input: ExportMatchReportPdfInput): Promise<void> {
+export async function exportSubjectReportPdf(
+  input: ExportSubjectReportPdfInput,
+): Promise<void> {
   const {
-    match,
+    subjectDisplay,
     selectedSegments,
     includeSummaryInExport,
     summary,
@@ -94,13 +96,13 @@ export async function exportMatchReportPdf(input: ExportMatchReportPdfInput): Pr
   };
 
   const exportMeta = resultPresenter.getExportMeta(
-    match,
+    subjectDisplay,
     draftData,
     resultPresenterContext,
     presenterSubjectSnapshot,
   );
   const exportHeader = resultPresenter.getHeader(
-    match,
+    subjectDisplay,
     draftData,
     resultPresenterContext,
     presenterSubjectSnapshot,
@@ -115,9 +117,12 @@ export async function exportMatchReportPdf(input: ExportMatchReportPdfInput): Pr
   const timestamp = new Date().toLocaleString(locale);
 
   writeParagraph(exportMeta.reportTitle, { fontSize: 16, bold: true, spacingAfter: 2 });
-  writeParagraph(`${exportHeader.subtitle || match.league} | ${match.date} | ${exportMeta.statusLabel}`, {
-    fontSize: 10,
-  });
+  writeParagraph(
+    `${exportHeader.subtitle || subjectDisplay.league} | ${subjectDisplay.date} | ${exportMeta.statusLabel}`,
+    {
+      fontSize: 10,
+    },
+  );
   writeParagraph(t('match.generated_by', { time: timestamp }), { fontSize: 9, spacingAfter: 3 });
 
   selectedSegments.forEach((segment, index) => {
@@ -158,7 +163,7 @@ export async function exportMatchReportPdf(input: ExportMatchReportPdfInput): Pr
     const isZh = language.startsWith('zh');
     const summaryDistribution = resultPresenter.getSummaryDistribution(
       summary,
-      match,
+      subjectDisplay,
       draftData,
       resultPresenterContext,
       presenterSubjectSnapshot,

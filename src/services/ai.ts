@@ -10,6 +10,7 @@ import type {
 import { generateValidatedAnimationBlock } from "./ai/animationPipeline";
 import type { Match } from "../data/matches";
 import { getAnalysisDomainById } from "./domains/registry";
+import type { SubjectDisplayMatch } from "./subjectDisplayMatch";
 import type {
   AnalysisRequestPayload,
   NormalizedPlanSegment,
@@ -78,7 +79,7 @@ export interface MatchAnalysis {
   // Generic summary payload for non-versus domains (macro, operations, etc.)
   outcomeDistribution?: OutcomeDistributionEntry[];
   conclusionCards?: ConclusionCardEntry[];
-  // Backward-compatible fields for versus-match domains.
+  // Versus-domain fields.
   winProbability?: {
     home: number;
     draw: number;
@@ -320,7 +321,7 @@ export interface AnalysisResumeState {
   segmentResults?: SegmentResult[];
   runtimeStatus?: PlannerRuntimeState;
   subjectSnapshot?: unknown;
-  matchSnapshot?: Match;
+  subjectDisplaySnapshot?: SubjectDisplayMatch;
 }
 
 export async function* streamAgentThoughts(

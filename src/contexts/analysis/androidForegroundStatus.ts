@@ -73,7 +73,8 @@ export function buildAndroidForegroundServicePayload(
   const text = lines.join('\n');
   const title = `MatchFlow analysis running (${analyzing.length})`;
   const dedupeKey = [
-    primary.matchId,
+    primary.domainId,
+    primary.subjectId,
     progress.completed,
     progress.total,
     currentStage,

@@ -1,11 +1,11 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell, Send, Package, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Save, Activity, CheckCircle2, XCircle, Database, Cpu, Globe, Layers, ChevronDown, ChevronUp, Bell, Send, Package, RefreshCw, Trash2, Sun, Moon } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Select } from '@/src/components/ui/Select';
-import { getSettings, saveSettings, AppSettings, AIProvider, DEFAULT_SETTINGS } from '@/src/services/settings';
+import { getSettings, saveSettings, AppSettings, AIProvider, DEFAULT_SETTINGS, ThemeMode } from '@/src/services/settings';
 import { testConnection } from '@/src/services/ai';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
@@ -14,6 +14,18 @@ import { syncRecommendedExtensions } from '@/src/services/extensions/recommended
 import { listAnalysisDomains } from '@/src/services/domains/registry';
 import { clearHistoryByDomain, clearResumeStateByDomain } from '@/src/services/history';
 import { clearSavedSubjectsByDomain } from '@/src/services/savedSubjects';
+import {
+  getConfiguredLocalFootballTestServerPreset,
+  getLocalFootballTestServerPreset,
+} from '@/src/services/localFootballTestServer';
+import { applyTheme } from '@/src/services/theme';
+import {
+  getAutomationRuntimeSnapshot,
+  scheduleNativeAutomationSync,
+  subscribeAutomationRuntime,
+  kickAutomationRuntime,
+  type AutomationRuntimeSnapshot,
+} from '@/src/services/automation';
 
 function formatHostAllowlist(hosts: string[]): string {
   if (!Array.isArray(hosts) || hosts.length === 0) return '';
@@ -49,6 +61,9 @@ export default function Settings() {
   const [healthCheckMessage, setHealthCheckMessage] = useState('');
   const [storageClearStatus, setStorageClearStatus] = useState<'idle' | 'clearing' | 'success' | 'error'>('idle');
   const [storageClearMessage, setStorageClearMessage] = useState('');
+  const [automationRuntime, setAutomationRuntime] = useState<AutomationRuntimeSnapshot>(
+    getAutomationRuntimeSnapshot(),
+  );
 
   useEffect(() => {
     const checkPermission = async () => {
@@ -68,6 +83,8 @@ export default function Settings() {
     }
   }, [i18n]);
 
+  useEffect(() => subscribeAutomationRuntime(setAutomationRuntime), []);
+
   const normalizeServerBaseUrl = (rawUrl: string): string => {
     const trimmed = String(rawUrl || '').trim();
     if (!trimmed) return '';
@@ -85,21 +102,88 @@ export default function Settings() {
     advanced: isZh ? '高级模式' : 'Advanced Mode',
   } as const;
 
-  const handleSave = () => {
-    const normalizedMatchDataServerUrl = normalizeServerBaseUrl(settings.matchDataServerUrl);
-    const nextSettings = {
-      ...settings,
+  const persistSettings = (nextSettings: AppSettings) => {
+    const normalizedMatchDataServerUrl = normalizeServerBaseUrl(nextSettings.matchDataServerUrl);
+    const normalizedSettings = {
+      ...nextSettings,
       matchDataServerUrl: normalizedMatchDataServerUrl,
     };
 
-    saveSettings(nextSettings);
-    setLocalSettings(nextSettings);
+    saveSettings(normalizedSettings);
+    setLocalSettings(normalizedSettings);
     // Apply language change immediately
-    if (nextSettings.language !== i18n.language) {
-      i18n.changeLanguage(nextSettings.language);
+    if (normalizedSettings.language !== i18n.language) {
+      i18n.changeLanguage(normalizedSettings.language);
     }
+    applyTheme(normalizedSettings.theme);
+    kickAutomationRuntime('settings_saved');
+    scheduleNativeAutomationSync('settings_saved');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleSave = () => {
+    persistSettings(settings);
+  };
+
+  const formatAutomationRuntimeTime = (value: number | null): string => {
+    if (!value) {
+      return isZh ? '暂无' : 'Not yet';
+    }
+    return new Date(value).toLocaleString(isZh ? 'zh-CN' : 'en-US', {
+      hour12: false,
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
+  const automationHostLabel =
+    automationRuntime.hostType === 'android_native'
+      ? (isZh ? 'Android 原生' : 'Android Native')
+      : automationRuntime.hostType === 'desktop_shell'
+        ? (isZh ? '桌面壳' : 'Desktop Shell')
+        : (isZh ? '浏览器 Web' : 'Browser Web');
+
+  const automationStatusLabel = !settings.enableAutomation
+    ? (isZh ? '关闭' : 'Off')
+    : automationRuntime.status === 'running'
+      ? (isZh ? '扫描中' : 'Running')
+      : automationRuntime.status === 'paused'
+        ? (isZh ? '暂停' : 'Paused')
+        : automationRuntime.status === 'error'
+          ? (isZh ? '异常' : 'Error')
+          : (isZh ? '待机' : 'Idle');
+
+  const handleThemeChange = (nextTheme: ThemeMode) => {
+    if (settings.theme === nextTheme) return;
+
+    setLocalSettings((prev) => ({ ...prev, theme: nextTheme }));
+    const persistedSettings = getSettings();
+    saveSettings({ ...persistedSettings, theme: nextTheme });
+    applyTheme(nextTheme);
+  };
+
+  const localTestServerPreset = React.useMemo(() => getLocalFootballTestServerPreset(), []);
+  const configuredLocalTestServerPreset = React.useMemo(
+    () => getConfiguredLocalFootballTestServerPreset(),
+    [],
+  );
+
+  const handleApplyLocalTestServerPreset = () => {
+    const nextSettings = {
+      ...settings,
+      matchDataServerUrl: localTestServerPreset.matchDataServerUrl,
+      matchDataApiKey: localTestServerPreset.matchDataApiKey,
+    };
+
+    persistSettings(nextSettings);
+    setDataTestStatus('idle');
+    setDataTestMessage('');
+    setExtensionSyncStatus('idle');
+    setExtensionSyncMessage('');
   };
 
   const handleProviderChange = (provider: string) => {
@@ -528,6 +612,23 @@ export default function Settings() {
                     : (isZh ? '关闭' : 'Off')}
                 </div>
               </div>
+
+              <div className="rounded-lg border border-white/10 bg-zinc-900 p-2.5">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 flex items-center gap-1">
+                  <Activity className="w-3 h-3" /> Automation
+                </div>
+                <div className={`text-xs mt-1 font-medium ${
+                  settings.enableAutomation
+                    ? automationRuntime.status === 'error'
+                      ? 'text-red-400'
+                      : automationRuntime.status === 'running'
+                        ? 'text-emerald-300'
+                        : 'text-emerald-400'
+                    : 'text-zinc-300'
+                }`}>
+                  {automationStatusLabel}
+                </div>
+              </div>
             </div>
 
             {healthCheckStatus !== 'idle' && (
@@ -611,6 +712,35 @@ export default function Settings() {
                   ]}
                 />
               </div>
+
+              <div className="pt-4 border-t border-white/10 space-y-2">
+                <label className="text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  {t('settings.theme')}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant={settings.theme === 'dark' ? 'default' : 'outline'}
+                    className="h-9 gap-2 text-xs"
+                    onClick={() => handleThemeChange('dark')}
+                  >
+                    <Moon className="w-3.5 h-3.5" />
+                    {isZh ? '暗色' : 'Dark'}
+                  </Button>
+                  <Button
+                    variant={settings.theme === 'light' ? 'default' : 'outline'}
+                    className="h-9 gap-2 text-xs"
+                    onClick={() => handleThemeChange('light')}
+                  >
+                    <Sun className="w-3.5 h-3.5" />
+                    {isZh ? '亮色' : 'Light'}
+                  </Button>
+                </div>
+                <p className="text-[10px] text-zinc-500">
+                  {isZh
+                    ? '切换后立即生效，亮色主题采用白橙配色。'
+                    : 'Switch applies immediately. Light theme uses a white and orange palette.'}
+                </p>
+              </div>
             </div>
 
             <div className="pt-6 border-t border-white/10 space-y-4">
@@ -628,6 +758,34 @@ export default function Settings() {
 
               {!isBehaviorCollapsed && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border border-white/5">
+                    <div className="space-y-0.5 pr-4">
+                      <label className="text-xs font-medium text-zinc-200 block">
+                        {settings.language === 'zh' ? '自动化执行' : 'Automation Execution'}
+                      </label>
+                      <p className="text-[10px] text-zinc-500">
+                        {settings.language === 'zh'
+                          ? '开启后，应用活跃时会周期性展开规则、执行心跳扫描并启动本地队列。'
+                          : 'When enabled, the app expands rules, runs heartbeat scans, and starts the local queue while active.'}
+                      </p>
+                    </div>
+                    <div
+                      className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors shrink-0 ${settings.enableAutomation ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+                      onClick={() => {
+                        const newSettings = {
+                          ...settings,
+                          enableAutomation: !settings.enableAutomation,
+                        };
+                        setLocalSettings(newSettings);
+                        saveSettings(newSettings);
+                        kickAutomationRuntime('automation_toggle');
+                        scheduleNativeAutomationSync('automation_toggle');
+                      }}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${settings.enableAutomation ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border border-white/5">
                     <div className="space-y-0.5 pr-4">
                       <label className="text-xs font-medium text-zinc-200 block">{t('settings.background_mode')}</label>
@@ -653,11 +811,64 @@ export default function Settings() {
                         const newSettings = {...settings, enableBackgroundMode: newValue};
                         setLocalSettings(newSettings);
                         saveSettings(newSettings); // Make it live
+                        kickAutomationRuntime('background_mode_toggle');
+                        scheduleNativeAutomationSync('background_mode_toggle');
                       }}
                     >
                       <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${settings.enableBackgroundMode ? 'translate-x-4' : 'translate-x-0'}`} />
                     </div>
                   </div>
+
+                  {(showAdvanced || settings.enableAutomation) && (
+                    <div className="rounded-lg border border-white/5 bg-zinc-900/60 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[11px] font-semibold text-zinc-200">
+                          {settings.language === 'zh' ? '自动化诊断' : 'Automation Diagnostics'}
+                        </div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                          automationRuntime.status === 'error'
+                            ? 'text-red-400 bg-red-500/10'
+                            : settings.enableAutomation
+                              ? 'text-emerald-400 bg-emerald-500/10'
+                              : 'text-zinc-400 bg-zinc-500/10'
+                        }`}>
+                          {automationStatusLabel}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[10px] text-zinc-500">
+                        <div>
+                          {settings.language === 'zh' ? '宿主' : 'Host'}: {automationHostLabel}
+                        </div>
+                        <div>
+                          {settings.language === 'zh' ? '持续后台' : 'Durable'}:{' '}
+                          {automationRuntime.isDurableHost
+                            ? (settings.language === 'zh' ? '可用' : 'Yes')
+                            : (settings.language === 'zh' ? '不可用' : 'No')}
+                        </div>
+                        <div>
+                          {settings.language === 'zh' ? '最近心跳' : 'Last heartbeat'}:{' '}
+                          {formatAutomationRuntimeTime(automationRuntime.lastCompletedAt)}
+                        </div>
+                        <div>
+                          {settings.language === 'zh' ? '队列' : 'Queue'}:{' '}
+                          {automationRuntime.queue.queuedJobIds.length}/
+                          {automationRuntime.queue.runningJobIds.length}
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-zinc-500">
+                        {settings.language === 'zh' ? '本轮创建' : 'Created'}:{' '}
+                        {automationRuntime.heartbeat?.createdJobCount || 0}
+                        {' · '}
+                        {settings.language === 'zh' ? '本轮执行' : 'Executed'}:{' '}
+                        {automationRuntime.heartbeat?.executedJobCount || 0}
+                      </div>
+                      {automationRuntime.lastError ? (
+                        <div className="text-[10px] text-red-400 break-words">
+                          {automationRuntime.lastError}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
 
                   {settings.enableBackgroundMode && showAdvanced && (
                     <div className="pt-2 space-y-2">
@@ -920,6 +1131,44 @@ export default function Settings() {
               
               {!isDataSourceCollapsed && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="text-[11px] font-semibold text-white">
+                          {t('settings.local_test_server_title')}
+                        </div>
+                        <p className="text-[10px] text-zinc-400">
+                          {t('settings.local_test_server_desc')}
+                        </p>
+                      </div>
+                      <Button
+                        onClick={handleApplyLocalTestServerPreset}
+                        size="sm"
+                        className="shrink-0 h-8 px-3 text-[11px] bg-amber-500 text-black hover:bg-amber-400"
+                      >
+                        {t('settings.local_test_server_apply')}
+                      </Button>
+                    </div>
+
+                    <div className="space-y-1 text-[10px] text-zinc-500 break-all">
+                      <div>
+                        {t('settings.local_test_server_target', {
+                          url: localTestServerPreset.matchDataServerUrl,
+                        })}
+                      </div>
+                      <div>
+                        {t('settings.local_test_server_key', {
+                          apiKey: localTestServerPreset.matchDataApiKey,
+                        })}
+                      </div>
+                      {configuredLocalTestServerPreset ? (
+                        <div className="text-amber-300">
+                          {t('settings.local_test_server_build_preset')}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('settings.server_url')}</label>
                     <input 

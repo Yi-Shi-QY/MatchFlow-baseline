@@ -9,9 +9,15 @@ interface SourceContextPayload {
   planning?: Record<string, any>;
 }
 
-interface AnalysisConfigPayload {
-  matchId?: string;
+export interface SubjectAnalysisConfigPayload {
+  subjectId?: string;
   sourceContext?: SourceContextPayload;
+}
+
+export interface AnalysisConfigSubjectRef {
+  subjectId: string;
+  domainId?: string;
+  subjectType?: string;
 }
 
 function normalizeDomainId(input: unknown): string | null {
@@ -41,11 +47,17 @@ function buildServerUrl(path: string): string | null {
   return new URL(path, baseUrl).toString();
 }
 
-function normalizeAnalysisConfigResponse(payload: any): AnalysisConfigPayload | null {
+function normalizeAnalysisConfigResponse(payload: any): SubjectAnalysisConfigPayload | null {
   const data = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
   if (!data || typeof data !== 'object') return null;
   if (!data.sourceContext || typeof data.sourceContext !== 'object') return null;
-  return data as AnalysisConfigPayload;
+  return {
+    ...data,
+    subjectId:
+      typeof data.subjectId === 'string' && data.subjectId.trim().length > 0
+        ? data.subjectId.trim()
+        : undefined,
+  } as SubjectAnalysisConfigPayload;
 }
 
 async function fetchJson(url: string, options: RequestInit): Promise<any | null> {
@@ -58,13 +70,19 @@ async function fetchJson(url: string, options: RequestInit): Promise<any | null>
   }
 }
 
-export async function fetchMatchAnalysisConfig(matchId: string): Promise<AnalysisConfigPayload | null> {
+export async function fetchSubjectAnalysisConfig(
+  subjectRef: AnalysisConfigSubjectRef,
+): Promise<SubjectAnalysisConfigPayload | null> {
   const settings = getSettings();
-  if (!String(settings.matchDataServerUrl || '').trim() || !matchId) {
+  if (
+    !String(settings.matchDataServerUrl || '').trim() ||
+    !subjectRef.subjectId ||
+    (subjectRef.subjectType && subjectRef.subjectType !== 'match')
+  ) {
     return null;
   }
 
-  const encodedId = encodeURIComponent(matchId);
+  const encodedId = encodeURIComponent(subjectRef.subjectId);
   const url = buildServerUrl(`/analysis/config/match/${encodedId}`);
   if (!url) return null;
 
@@ -76,7 +94,9 @@ export async function fetchMatchAnalysisConfig(matchId: string): Promise<Analysi
   return normalizeAnalysisConfigResponse(payload);
 }
 
-export async function resolveAnalysisConfig(matchData: any): Promise<AnalysisConfigPayload | null> {
+export async function resolveSubjectAnalysisConfig(
+  subjectSnapshot: any,
+): Promise<SubjectAnalysisConfigPayload | null> {
   const settings = getSettings();
   if (!String(settings.matchDataServerUrl || '').trim()) {
     return null;
@@ -88,20 +108,26 @@ export async function resolveAnalysisConfig(matchData: any): Promise<AnalysisCon
   const payload = await fetchJson(url, {
     method: 'POST',
     headers: getRequestHeaders(String(settings.matchDataApiKey || '').trim()),
-    body: JSON.stringify({ match: matchData }),
+    body: JSON.stringify({
+      subject: subjectSnapshot,
+      match: subjectSnapshot,
+    }),
   });
 
   return normalizeAnalysisConfigResponse(payload);
 }
 
-export function mergeServerPlanningIntoMatchData(matchData: any, config: AnalysisConfigPayload | null): any {
-  if (!config?.sourceContext?.planning || typeof matchData !== 'object' || !matchData) {
-    return matchData;
+export function mergeServerPlanningIntoAnalysisPayload(
+  subjectPayload: any,
+  config: SubjectAnalysisConfigPayload | null,
+): any {
+  if (!config?.sourceContext?.planning || typeof subjectPayload !== 'object' || !subjectPayload) {
+    return subjectPayload;
   }
 
   const localSourceContext =
-    matchData.sourceContext && typeof matchData.sourceContext === 'object'
-      ? matchData.sourceContext
+    subjectPayload.sourceContext && typeof subjectPayload.sourceContext === 'object'
+      ? subjectPayload.sourceContext
       : {};
   const serverSourceContext =
     config.sourceContext && typeof config.sourceContext === 'object'
@@ -137,7 +163,7 @@ export function mergeServerPlanningIntoMatchData(matchData: any, config: Analysi
         : localPlanning;
 
   return {
-    ...matchData,
+    ...subjectPayload,
     sourceContext: {
       ...localSourceContext,
       ...(hasDomainMismatch ? {} : serverSourceContext),

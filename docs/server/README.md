@@ -29,6 +29,7 @@ Recommended reading order for backend onboarding:
 5. [21-server2-phase-e-rollout-runbook.md](./21-server2-phase-e-rollout-runbook.md)
 6. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
 7. [24-cn-jczq-collection-interface-and-script.md](./24-cn-jczq-collection-interface-and-script.md)
+8. [25-local-football-test-server.md](./25-local-football-test-server.md)
 
 ## 4. Related Shared Docs
 
@@ -65,6 +66,7 @@ Recommended reading order for backend onboarding:
 5. [21-server2-phase-e-rollout-runbook.md](./21-server2-phase-e-rollout-runbook.md)
 6. [22-server2-production-readiness-checklist.md](./22-server2-production-readiness-checklist.md)
 7. [24-cn-jczq-collection-interface-and-script.md](./24-cn-jczq-collection-interface-and-script.md)
+8. [25-local-football-test-server.md](./25-local-football-test-server.md)
 
 ## 4. 关联公共文档
 

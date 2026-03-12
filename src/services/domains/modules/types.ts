@@ -5,7 +5,7 @@ import type { AnalysisDomain } from "../types";
 export interface BuiltinDomainModule {
   domain: AnalysisDomain;
   planningStrategy: DomainPlanningStrategy;
-  localTestCases: Match[];
+  localSubjectSnapshots: Match[];
 }
 
 export type BuiltinDomainModuleFactory = (caseMinimum: number) => BuiltinDomainModule;

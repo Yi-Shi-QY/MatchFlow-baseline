@@ -1,9 +1,12 @@
 import type { MatchAnalysis, AnalysisResumeState } from './ai';
-import { Match } from '../data/matches';
 import { AgentResult, parseAgentStream } from './agentParser';
 import { getDB, HISTORY_TABLE, RESUME_STATE_TABLE } from './db';
 import { Capacitor } from '@capacitor/core';
 import type { AnalysisOutputEnvelope } from './ai/contracts';
+import {
+  coerceSubjectSnapshotToDisplayMatch,
+  type SubjectDisplayMatch,
+} from './subjectDisplayMatch';
 
 export interface SubjectRefInput {
   domainId?: string | null;
@@ -16,6 +19,13 @@ export interface HistoryQueryOptions extends SubjectRefInput {}
 export interface HistorySaveOptions extends SubjectRefInput {
   subjectSnapshot?: unknown;
   analysisOutputEnvelope?: AnalysisOutputEnvelope;
+}
+
+export interface SaveHistoryInput extends HistorySaveOptions {
+  subjectDisplay?: SubjectDisplayMatch;
+  analysis: MatchAnalysis;
+  parsedStream?: AgentResult;
+  generatedCodes?: Record<string, string>;
 }
 
 export interface ResumeStateOptions extends SubjectRefInput {
@@ -31,12 +41,11 @@ interface NormalizedSubjectRef {
 
 export interface HistoryRecord {
   id: string;
-  matchId: string; // legacy alias of subjectId
   domainId: string;
   subjectId: string;
   subjectType: string;
   subjectSnapshot?: unknown;
-  match: Match;
+  subjectDisplay: SubjectDisplayMatch;
   analysis: MatchAnalysis;
   parsedStream?: AgentResult;
   generatedCodes?: Record<string, string>;
@@ -44,8 +53,8 @@ export interface HistoryRecord {
   timestamp: number;
 }
 
-const HISTORY_KEY = 'matchflow_history_v3';
-const RESUME_STATE_KEY = 'matchflow_resume_state_v3';
+const HISTORY_KEY = 'matchflow_history_v4';
+const RESUME_STATE_KEY = 'matchflow_resume_state_v4';
 const RESUME_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_RESUME_STATE_COUNT = 20;
 const MAX_HISTORY_RECORD_COUNT = 20;
@@ -55,7 +64,6 @@ const SUBJECT_KEY_SEPARATOR = '::';
 export const ANALYSIS_OUTPUT_ENVELOPE_CODE_KEY = 'analysisOutputEnvelope';
 
 export interface SavedResumeState {
-  matchId: string; // legacy alias of subjectId
   domainId: string;
   subjectId: string;
   subjectType: string;
@@ -103,6 +111,12 @@ export function isResumeStateRecoverable(
 }
 
 type ResumeStateMap = Record<string, SavedResumeState>;
+
+function resolveResumeStateSubjectDisplaySnapshot(
+  state: AnalysisResumeState | undefined,
+): AnalysisResumeState['subjectDisplaySnapshot'] {
+  return state?.subjectDisplaySnapshot;
+}
 
 function prefersNativeDB(): boolean {
   return Capacitor.isNativePlatform();
@@ -238,128 +252,6 @@ function mergeAnalysisOutputEnvelopeIntoGeneratedCodes(
   return merged;
 }
 
-function buildFallbackMatch(subjectId: string, domainId: string): Match {
-  return {
-    id: subjectId,
-    league: domainId.toUpperCase(),
-    date: new Date().toISOString(),
-    status: 'upcoming',
-    homeTeam: {
-      id: `${subjectId}_home`,
-      name: 'Subject A',
-      logo: 'https://picsum.photos/seed/subject-a/200/200',
-      form: ['?', '?', '?', '?', '?'],
-    },
-    awayTeam: {
-      id: `${subjectId}_away`,
-      name: 'Subject B',
-      logo: 'https://picsum.photos/seed/subject-b/200/200',
-      form: ['?', '?', '?', '?', '?'],
-    },
-    stats: {
-      possession: { home: 50, away: 50 },
-      shots: { home: 0, away: 0 },
-      shotsOnTarget: { home: 0, away: 0 },
-    },
-  };
-}
-
-function coerceMatch(raw: unknown, subjectId: string, domainId: string): Match {
-  if (!isRecordObject(raw)) {
-    return buildFallbackMatch(subjectId, domainId);
-  }
-
-  const homeTeamRaw = isRecordObject(raw.homeTeam) ? raw.homeTeam : {};
-  const awayTeamRaw = isRecordObject(raw.awayTeam) ? raw.awayTeam : {};
-  const statusRaw = raw.status;
-  const status: Match['status'] =
-    statusRaw === 'live' || statusRaw === 'finished' || statusRaw === 'upcoming'
-      ? statusRaw
-      : 'upcoming';
-
-  return {
-    id: typeof raw.id === 'string' && raw.id.trim().length > 0 ? raw.id : subjectId,
-    league: typeof raw.league === 'string' && raw.league.trim().length > 0 ? raw.league : domainId,
-    date:
-      typeof raw.date === 'string' && raw.date.trim().length > 0
-        ? raw.date
-        : new Date().toISOString(),
-    status,
-    homeTeam: {
-      id:
-        typeof homeTeamRaw.id === 'string' && homeTeamRaw.id.trim().length > 0
-          ? homeTeamRaw.id
-          : `${subjectId}_home`,
-      name:
-        typeof homeTeamRaw.name === 'string' && homeTeamRaw.name.trim().length > 0
-          ? homeTeamRaw.name
-          : 'Subject A',
-      logo:
-        typeof homeTeamRaw.logo === 'string' && homeTeamRaw.logo.trim().length > 0
-          ? homeTeamRaw.logo
-          : 'https://picsum.photos/seed/subject-a/200/200',
-      form: Array.isArray(homeTeamRaw.form)
-        ? homeTeamRaw.form.filter((entry): entry is string => typeof entry === 'string')
-        : ['?', '?', '?', '?', '?'],
-    },
-    awayTeam: {
-      id:
-        typeof awayTeamRaw.id === 'string' && awayTeamRaw.id.trim().length > 0
-          ? awayTeamRaw.id
-          : `${subjectId}_away`,
-      name:
-        typeof awayTeamRaw.name === 'string' && awayTeamRaw.name.trim().length > 0
-          ? awayTeamRaw.name
-          : 'Subject B',
-      logo:
-        typeof awayTeamRaw.logo === 'string' && awayTeamRaw.logo.trim().length > 0
-          ? awayTeamRaw.logo
-          : 'https://picsum.photos/seed/subject-b/200/200',
-      form: Array.isArray(awayTeamRaw.form)
-        ? awayTeamRaw.form.filter((entry): entry is string => typeof entry === 'string')
-        : ['?', '?', '?', '?', '?'],
-    },
-    score: isRecordObject(raw.score)
-      ? {
-          home: Number.isFinite(raw.score.home) ? Number(raw.score.home) : 0,
-          away: Number.isFinite(raw.score.away) ? Number(raw.score.away) : 0,
-        }
-      : undefined,
-    stats: isRecordObject(raw.stats) &&
-      isRecordObject(raw.stats.possession) &&
-      isRecordObject(raw.stats.shots) &&
-      isRecordObject(raw.stats.shotsOnTarget)
-      ? {
-          possession: {
-            home: Number.isFinite(raw.stats.possession.home) ? Number(raw.stats.possession.home) : 50,
-            away: Number.isFinite(raw.stats.possession.away) ? Number(raw.stats.possession.away) : 50,
-          },
-          shots: {
-            home: Number.isFinite(raw.stats.shots.home) ? Number(raw.stats.shots.home) : 0,
-            away: Number.isFinite(raw.stats.shots.away) ? Number(raw.stats.shots.away) : 0,
-          },
-          shotsOnTarget: {
-            home: Number.isFinite(raw.stats.shotsOnTarget.home)
-              ? Number(raw.stats.shotsOnTarget.home)
-              : 0,
-            away: Number.isFinite(raw.stats.shotsOnTarget.away)
-              ? Number(raw.stats.shotsOnTarget.away)
-              : 0,
-          },
-        }
-      : undefined,
-    odds: isRecordObject(raw.odds) ? (raw.odds as Match['odds']) : undefined,
-    source: typeof raw.source === 'string' ? raw.source : undefined,
-    capabilities: isRecordObject(raw.capabilities)
-      ? {
-          hasStats: Boolean(raw.capabilities.hasStats),
-          hasOdds: Boolean(raw.capabilities.hasOdds),
-          hasCustom: Boolean(raw.capabilities.hasCustom),
-        }
-      : undefined,
-  };
-}
-
 function isResumeFresh(timestamp: number): boolean {
   return Date.now() - timestamp < RESUME_TTL_MS;
 }
@@ -370,13 +262,17 @@ function normalizeResumeRecord(raw: unknown, keyHint?: string): SavedResumeState
   if (typeof raw.timestamp !== 'number' || !Number.isFinite(raw.timestamp)) return null;
   if (typeof raw.thoughts !== 'string') return null;
 
-  const keyParsed = parseSubjectKey(keyHint);
+  const rawId = typeof raw.id === 'string' ? raw.id : undefined;
+  const keyParsed = parseSubjectKey(keyHint) ?? parseSubjectKey(rawId);
+  const subjectIdInput = raw.subjectId ?? keyParsed?.subjectId;
+  if (typeof subjectIdInput !== 'string' || subjectIdInput.trim().length === 0) {
+    return null;
+  }
   const domainId = normalizeDomainId(raw.domainId ?? keyParsed?.domainId);
-  const subjectId = normalizeSubjectId(raw.subjectId ?? raw.matchId ?? keyParsed?.subjectId, 'unknown_subject');
+  const subjectId = normalizeSubjectId(subjectIdInput, 'unknown_subject');
   const subjectType = normalizeSubjectType(raw.subjectType);
 
   return {
-    matchId: subjectId,
     domainId,
     subjectId,
     subjectType,
@@ -388,14 +284,6 @@ function normalizeResumeRecord(raw: unknown, keyHint?: string): SavedResumeState
 
 function normalizeResumeStateMap(raw: unknown): ResumeStateMap {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-
-  // Backward compatibility: pre-v3 schema could store one record directly.
-  const directRecord = normalizeResumeRecord(raw);
-  if (directRecord) {
-    return {
-      [buildSubjectKey(directRecord.domainId, directRecord.subjectId)]: directRecord,
-    };
-  }
 
   const map: ResumeStateMap = {};
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
@@ -442,14 +330,14 @@ async function pruneNativeResumeState(): Promise<void> {
   const cutoff = Date.now() - RESUME_TTL_MS;
   await db.run(`DELETE FROM ${RESUME_STATE_TABLE} WHERE timestamp < ?`, [cutoff]);
 
-  const res = await db.query(`SELECT matchId FROM ${RESUME_STATE_TABLE} ORDER BY timestamp DESC`);
+  const res = await db.query(`SELECT id FROM ${RESUME_STATE_TABLE} ORDER BY timestamp DESC`);
   const rows = Array.isArray(res.values) ? res.values : [];
   if (rows.length <= MAX_RESUME_STATE_COUNT) return;
 
   const staleRows = rows.slice(MAX_RESUME_STATE_COUNT);
   for (const row of staleRows) {
-    if (row?.matchId) {
-      await db.run(`DELETE FROM ${RESUME_STATE_TABLE} WHERE matchId = ?`, [row.matchId]);
+    if (row?.id) {
+      await db.run(`DELETE FROM ${RESUME_STATE_TABLE} WHERE id = ?`, [row.id]);
     }
   }
 }
@@ -459,11 +347,20 @@ function normalizeHistoryRecord(raw: unknown): HistoryRecord | null {
   if (!raw.analysis) return null;
   if (typeof raw.timestamp !== 'number' || !Number.isFinite(raw.timestamp)) return null;
 
-  const domainId = normalizeDomainId(raw.domainId);
-  const subjectId = normalizeSubjectId(raw.subjectId ?? raw.matchId ?? raw.id, 'unknown_subject');
+  const parsedFromId = parseSubjectKey(typeof raw.id === 'string' ? raw.id : undefined);
+  const subjectIdInput = raw.subjectId ?? parsedFromId?.subjectId;
+  if (typeof subjectIdInput !== 'string' || subjectIdInput.trim().length === 0) {
+    return null;
+  }
+  const domainId = normalizeDomainId(raw.domainId ?? parsedFromId?.domainId);
+  const subjectId = normalizeSubjectId(subjectIdInput, 'unknown_subject');
   const subjectType = normalizeSubjectType(raw.subjectType);
-  const subjectSnapshot = raw.subjectSnapshot ?? raw.subjectSnapshotData ?? raw.match;
-  const match = coerceMatch(raw.match ?? subjectSnapshot, subjectId, domainId);
+  const subjectSnapshot = raw.subjectSnapshot ?? raw.subjectSnapshotData;
+  const subjectDisplay = coerceSubjectSnapshotToDisplayMatch(
+    raw.subjectDisplay ?? raw.subjectDisplayData ?? subjectSnapshot,
+    subjectId,
+    domainId,
+  );
   const generatedCodes = normalizeGeneratedCodes(raw.generatedCodes);
   const analysisOutputEnvelope =
     normalizeAnalysisOutputEnvelope(raw.analysisOutputEnvelope) ??
@@ -476,12 +373,11 @@ function normalizeHistoryRecord(raw: unknown): HistoryRecord | null {
 
   return {
     id,
-    matchId: subjectId,
     domainId,
     subjectId,
     subjectType,
     subjectSnapshot,
-    match,
+    subjectDisplay,
     analysis: raw.analysis as MatchAnalysis,
     parsedStream: raw.parsedStream as AgentResult | undefined,
     generatedCodes,
@@ -543,18 +439,24 @@ function matchHistoryQuery(record: HistoryRecord, options?: HistoryQueryOptions)
 function normalizeSqlHistoryRow(row: unknown): HistoryRecord | null {
   try {
     const rowValue = row as Record<string, unknown>;
-    const domainId = normalizeDomainId(rowValue?.domainId);
-    const subjectId = normalizeSubjectId(
-      rowValue?.subjectId ?? rowValue?.matchId,
-      typeof rowValue?.id === 'string' ? rowValue.id : '',
+    const parsedFromId = parseSubjectKey(
+      typeof rowValue?.id === 'string' ? rowValue.id : undefined,
     );
+    const subjectIdInput = rowValue?.subjectId ?? parsedFromId?.subjectId;
+    if (typeof subjectIdInput !== 'string' || subjectIdInput.trim().length === 0) {
+      return null;
+    }
+    const domainId = normalizeDomainId(rowValue?.domainId ?? parsedFromId?.domainId);
+    const subjectId = normalizeSubjectId(subjectIdInput, 'unknown_subject');
     const subjectType = normalizeSubjectType(rowValue?.subjectType);
     const subjectSnapshot =
       typeof rowValue?.subjectSnapshotData === 'string'
         ? JSON.parse(rowValue.subjectSnapshotData)
         : undefined;
-    const match = coerceMatch(
-      typeof rowValue?.matchData === 'string' ? JSON.parse(rowValue.matchData) : subjectSnapshot,
+    const subjectDisplay = coerceSubjectSnapshotToDisplayMatch(
+      typeof rowValue?.subjectDisplayData === 'string'
+        ? JSON.parse(rowValue.subjectDisplayData)
+        : subjectSnapshot,
       subjectId,
       domainId,
     );
@@ -570,12 +472,11 @@ function normalizeSqlHistoryRow(row: unknown): HistoryRecord | null {
         typeof rowValue?.id === 'string' && rowValue.id.trim().length > 0
           ? rowValue.id
           : buildSubjectKey(domainId, subjectId),
-      matchId: subjectId,
       domainId,
       subjectId,
       subjectType,
       subjectSnapshot,
-      match,
+      subjectDisplay,
       analysis:
         typeof rowValue?.analysisData === 'string'
           ? JSON.parse(rowValue.analysisData)
@@ -594,55 +495,39 @@ function normalizeSqlHistoryRow(row: unknown): HistoryRecord | null {
 }
 
 export async function getResumeState(
-  matchId: string,
+  subjectId: string,
   options?: ResumeStateOptions,
 ): Promise<SavedResumeState | null> {
-  const subjectRef = buildSubjectRef(matchId, {
+  const subjectRef = buildSubjectRef(subjectId, {
     domainId: options?.domainId,
     subjectId: options?.subjectId,
     subjectType: options?.subjectType,
   });
-  const hasExplicitDomain =
-    typeof options?.domainId === 'string' && options.domainId.trim().length > 0;
-
   try {
     if (prefersNativeDB()) {
       const db = await getDB();
       if (db) {
         await pruneNativeResumeState();
-        const res = hasExplicitDomain
-          ? await db.query(
-              `
-              SELECT *
-              FROM ${RESUME_STATE_TABLE}
-              WHERE (domainId = ? AND subjectId = ?)
-                 OR (domainId = ? AND matchId = ?)
-              ORDER BY timestamp DESC
-              LIMIT 1
-            `,
-              [subjectRef.domainId, subjectRef.subjectId, subjectRef.domainId, subjectRef.subjectKey],
-            )
-          : await db.query(
-              `
-              SELECT *
-              FROM ${RESUME_STATE_TABLE}
-              WHERE (domainId = ? AND subjectId = ?) OR matchId = ? OR matchId = ?
-              ORDER BY timestamp DESC
-              LIMIT 1
-            `,
-              [subjectRef.domainId, subjectRef.subjectId, subjectRef.subjectKey, subjectRef.subjectId],
-            );
+        const res = await db.query(
+          `
+            SELECT *
+            FROM ${RESUME_STATE_TABLE}
+            WHERE id = ?
+            LIMIT 1
+          `,
+          [subjectRef.subjectKey],
+        );
 
         const row = res.values?.[0];
         if (!row) return null;
         if (!isResumeFresh(row.timestamp)) {
-          await db.run(`DELETE FROM ${RESUME_STATE_TABLE} WHERE matchId = ?`, [row.matchId]);
+          await db.run(`DELETE FROM ${RESUME_STATE_TABLE} WHERE id = ?`, [row.id]);
           return null;
         }
 
         return normalizeResumeRecord(
           {
-            matchId: row.subjectId || row.matchId,
+            id: row.id,
             domainId: row.domainId,
             subjectId: row.subjectId,
             subjectType: row.subjectType,
@@ -650,7 +535,7 @@ export async function getResumeState(
             thoughts: typeof row.thoughts === 'string' ? row.thoughts : '',
             timestamp: row.timestamp,
           },
-          row.matchId,
+          row.id,
         );
       }
     }
@@ -662,17 +547,7 @@ export async function getResumeState(
     }
 
     const direct = prunedMap[subjectRef.subjectKey];
-    if (direct) return direct;
-
-    if (hasExplicitDomain) {
-      return null;
-    }
-
-    // Backward-compatible fallback: pick newest record by subjectId across domains.
-    const fallbackRecords = Object.values(prunedMap)
-      .filter((record) => record.subjectId === subjectRef.subjectId)
-      .sort((a, b) => b.timestamp - a.timestamp);
-    return fallbackRecords[0] ?? null;
+    return direct ?? null;
   } catch (e) {
     console.error('Failed to load resume state', e);
   }
@@ -680,12 +555,12 @@ export async function getResumeState(
 }
 
 export async function saveResumeState(
-  matchId: string,
+  subjectId: string,
   state: AnalysisResumeState,
   thoughts: string,
   options?: ResumeStateOptions,
 ) {
-  const subjectRef = buildSubjectRef(matchId, {
+  const subjectRef = buildSubjectRef(subjectId, {
     domainId: options?.domainId,
     subjectId: options?.subjectId,
     subjectType: options?.subjectType,
@@ -695,20 +570,23 @@ export async function saveResumeState(
     const timestamp = Date.now();
     const stateWithSnapshots = state as AnalysisResumeState & {
       subjectSnapshot?: unknown;
-      matchSnapshot?: unknown;
     };
     const subjectSnapshot =
       options?.subjectSnapshot ??
       stateWithSnapshots.subjectSnapshot ??
-      stateWithSnapshots.matchSnapshot ??
+      resolveResumeStateSubjectDisplaySnapshot(stateWithSnapshots) ??
       null;
     const stateToPersist: AnalysisResumeState = {
       ...state,
       subjectSnapshot: subjectSnapshot ?? undefined,
-      matchSnapshot:
+      subjectDisplaySnapshot:
         subjectRef.subjectType === 'match'
-          ? (coerceMatch(subjectSnapshot, subjectRef.subjectId, subjectRef.domainId) as Match)
-          : state.matchSnapshot,
+          ? coerceSubjectSnapshotToDisplayMatch(
+              subjectSnapshot,
+              subjectRef.subjectId,
+              subjectRef.domainId,
+            )
+          : resolveResumeStateSubjectDisplaySnapshot(stateWithSnapshots),
     };
 
     if (prefersNativeDB()) {
@@ -717,7 +595,7 @@ export async function saveResumeState(
         await db.run(
           `
           INSERT OR REPLACE INTO ${RESUME_STATE_TABLE}
-          (matchId, domainId, subjectId, subjectType, stateData, thoughts, timestamp)
+          (id, domainId, subjectId, subjectType, stateData, thoughts, timestamp)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `,
           [
@@ -737,7 +615,6 @@ export async function saveResumeState(
 
     const map = pruneResumeStateMap(readResumeStateMap());
     map[subjectRef.subjectKey] = {
-      matchId: subjectRef.subjectId,
       domainId: subjectRef.domainId,
       subjectId: subjectRef.subjectId,
       subjectType: subjectRef.subjectType,
@@ -751,18 +628,18 @@ export async function saveResumeState(
   }
 }
 
-export async function clearResumeState(matchId?: string, options?: ResumeStateOptions) {
+export async function clearResumeState(subjectId?: string, options?: ResumeStateOptions) {
   try {
     if (prefersNativeDB()) {
       const db = await getDB();
       if (db) {
-        if (!matchId) {
+        if (!subjectId) {
           await db.run(`DELETE FROM ${RESUME_STATE_TABLE}`);
           return;
         }
 
         if (options?.domainId || options?.subjectId) {
-          const subjectRef = buildSubjectRef(matchId, {
+          const subjectRef = buildSubjectRef(subjectId, {
             domainId: options?.domainId,
             subjectId: options?.subjectId,
             subjectType: options?.subjectType,
@@ -770,9 +647,21 @@ export async function clearResumeState(matchId?: string, options?: ResumeStateOp
           await db.run(
             `
             DELETE FROM ${RESUME_STATE_TABLE}
-            WHERE (domainId = ? AND subjectId = ?) OR matchId = ?
+            WHERE id = ? OR (domainId = ? AND subjectId = ?)
           `,
-            [subjectRef.domainId, subjectRef.subjectId, subjectRef.subjectKey],
+            [subjectRef.subjectKey, subjectRef.domainId, subjectRef.subjectId],
+          );
+          return;
+        }
+
+        const parsedFromId = parseSubjectKey(subjectId);
+        if (parsedFromId) {
+          await db.run(
+            `
+            DELETE FROM ${RESUME_STATE_TABLE}
+            WHERE id = ? OR (domainId = ? AND subjectId = ?)
+          `,
+            [subjectId, parsedFromId.domainId, parsedFromId.subjectId],
           );
           return;
         }
@@ -780,24 +669,25 @@ export async function clearResumeState(matchId?: string, options?: ResumeStateOp
         await db.run(
           `
           DELETE FROM ${RESUME_STATE_TABLE}
-          WHERE subjectId = ? OR matchId = ?
+          WHERE subjectId = ?
         `,
-          [matchId, matchId],
+          [subjectId],
         );
         return;
       }
     }
 
-    if (!matchId) {
+    if (!subjectId) {
       localStorage.removeItem(RESUME_STATE_KEY);
       return;
     }
 
     const map = readResumeStateMap();
     const next: ResumeStateMap = {};
+    const parsedFromId = parseSubjectKey(subjectId);
     Object.entries(map).forEach(([key, value]) => {
       if (options?.domainId || options?.subjectId) {
-        const subjectRef = buildSubjectRef(matchId, options);
+        const subjectRef = buildSubjectRef(subjectId, options);
         if (key === subjectRef.subjectKey) {
           return;
         }
@@ -805,7 +695,15 @@ export async function clearResumeState(matchId?: string, options?: ResumeStateOp
         return;
       }
 
-      if (value.subjectId === matchId || value.matchId === matchId) {
+      if (
+        parsedFromId &&
+        value.domainId === parsedFromId.domainId &&
+        value.subjectId === parsedFromId.subjectId
+      ) {
+        return;
+      }
+
+      if (value.subjectId === subjectId) {
         return;
       }
       next[key] = value;
@@ -838,8 +736,8 @@ export async function getHistory(options?: HistoryQueryOptions): Promise<History
           params.push(domainId);
         }
         if (subjectId) {
-          conditions.push('(subjectId = ? OR matchId = ?)');
-          params.push(subjectId, subjectId);
+          conditions.push('subjectId = ?');
+          params.push(subjectId);
         }
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -862,39 +760,42 @@ export async function getHistory(options?: HistoryQueryOptions): Promise<History
   return [];
 }
 
-export async function saveHistory(
-  match: Match,
-  analysis: MatchAnalysis,
-  parsedStream?: AgentResult,
-  generatedCodes?: Record<string, string>,
-  options?: HistorySaveOptions,
-) {
-  const subjectRef = buildSubjectRef(match.id, {
-    domainId: options?.domainId,
-    subjectId: options?.subjectId,
-    subjectType: options?.subjectType,
+export async function saveHistory(input: SaveHistoryInput) {
+  const fallbackSubjectId =
+    typeof input.subjectId === 'string' && input.subjectId.trim().length > 0
+      ? input.subjectId.trim()
+      : typeof input.subjectDisplay?.id === 'string' && input.subjectDisplay.id.trim().length > 0
+        ? input.subjectDisplay.id.trim()
+        : 'unknown_subject';
+  const subjectRef = buildSubjectRef(fallbackSubjectId, {
+    domainId: input.domainId,
+    subjectId: input.subjectId,
+    subjectType: input.subjectType,
   });
 
   try {
     const timestamp = Date.now();
-    const subjectSnapshot = options?.subjectSnapshot ?? match;
+    const subjectSnapshot = input.subjectSnapshot ?? input.subjectDisplay;
     const mergedGeneratedCodes = mergeAnalysisOutputEnvelopeIntoGeneratedCodes(
-      generatedCodes,
-      options?.analysisOutputEnvelope,
+      input.generatedCodes,
+      input.analysisOutputEnvelope,
     );
     const analysisOutputEnvelope =
-      normalizeAnalysisOutputEnvelope(options?.analysisOutputEnvelope) ??
+      normalizeAnalysisOutputEnvelope(input.analysisOutputEnvelope) ??
       parseAnalysisOutputEnvelopeFromGeneratedCodes(mergedGeneratedCodes);
     const record: HistoryRecord = {
       id: subjectRef.subjectKey,
-      matchId: subjectRef.subjectId,
       domainId: subjectRef.domainId,
       subjectId: subjectRef.subjectId,
       subjectType: subjectRef.subjectType,
       subjectSnapshot,
-      match: coerceMatch(match, subjectRef.subjectId, subjectRef.domainId),
-      analysis,
-      parsedStream,
+      subjectDisplay: coerceSubjectSnapshotToDisplayMatch(
+        input.subjectDisplay ?? subjectSnapshot,
+        subjectRef.subjectId,
+        subjectRef.domainId,
+      ),
+      analysis: input.analysis,
+      parsedStream: input.parsedStream,
       generatedCodes: mergedGeneratedCodes,
       analysisOutputEnvelope,
       timestamp,
@@ -903,23 +804,22 @@ export async function saveHistory(
     if (prefersNativeDB()) {
       const db = await getDB();
       if (db) {
-        const parsedStreamStr = parsedStream ? JSON.stringify(parsedStream) : null;
+        const parsedStreamStr = input.parsedStream ? JSON.stringify(input.parsedStream) : null;
         const generatedCodesStr = mergedGeneratedCodes ? JSON.stringify(mergedGeneratedCodes) : null;
 
         await db.run(
           `
           INSERT OR REPLACE INTO ${HISTORY_TABLE}
-          (id, matchId, domainId, subjectId, subjectType, subjectSnapshotData, matchData, analysisData, parsedStreamData, generatedCodesData, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (id, domainId, subjectId, subjectType, subjectSnapshotData, subjectDisplayData, analysisData, parsedStreamData, generatedCodesData, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
           [
             record.id,
-            record.matchId,
             record.domainId,
             record.subjectId,
             record.subjectType,
             JSON.stringify(record.subjectSnapshot ?? null),
-            JSON.stringify(record.match),
+            JSON.stringify(record.subjectDisplay),
             JSON.stringify(record.analysis),
             parsedStreamStr,
             generatedCodesStr,
@@ -928,7 +828,7 @@ export async function saveHistory(
         );
 
         await pruneNativeHistory();
-        return;
+        return record.id;
       }
     }
 
@@ -942,9 +842,11 @@ export async function saveHistory(
       history.unshift(record);
     }
     writeHistoryToLocalStorage(history);
+    return record.id;
   } catch (e) {
     console.error('Failed to save history', e);
   }
+  return null;
 }
 
 export function clearHistory() {
@@ -1037,9 +939,9 @@ export function deleteHistoryRecord(id: string, options?: SubjectRefInput) {
           await db.run(
             `
             DELETE FROM ${HISTORY_TABLE}
-            WHERE id = ? OR matchId = ? OR subjectId = ?
+            WHERE id = ? OR subjectId = ?
           `,
-            [id, id, id],
+            [id, id],
           );
           return;
         }
@@ -1057,7 +959,7 @@ export function deleteHistoryRecord(id: string, options?: SubjectRefInput) {
               record.domainId === parsedFromId.domainId && record.subjectId === parsedFromId.subjectId
             );
           }
-          return !(record.id === id || record.matchId === id || record.subjectId === id);
+          return !(record.id === id || record.subjectId === id);
         });
         writeHistoryToLocalStorage(updated);
       })
@@ -1078,7 +980,7 @@ export function deleteHistoryRecord(id: string, options?: SubjectRefInput) {
       if (parsedFromId) {
         return !(record.domainId === parsedFromId.domainId && record.subjectId === parsedFromId.subjectId);
       }
-      return !(record.id === id || record.matchId === id || record.subjectId === id);
+      return !(record.id === id || record.subjectId === id);
     });
     writeHistoryToLocalStorage(updated);
   } catch (e) {

@@ -1,9 +1,12 @@
 import { Capacitor } from '@capacitor/core';
-import { getDB, SAVED_MATCHES_TABLE } from './db';
-import { Match } from '../data/matches';
+import { getDB, SAVED_SUBJECTS_TABLE } from './db';
 import type { SubjectRefInput } from './history';
+import {
+  coerceSubjectSnapshotToDisplayMatch,
+  type SubjectDisplayMatch,
+} from './subjectDisplayMatch';
 
-const LOCAL_STORAGE_KEY = 'matchflow_saved_subjects_v3';
+const LOCAL_STORAGE_KEY = 'matchflow_saved_subjects_v4';
 const MAX_SAVED_SUBJECT_COUNT = 100;
 const DEFAULT_DOMAIN_ID = 'football';
 const DEFAULT_SUBJECT_TYPE = 'match';
@@ -23,12 +26,12 @@ interface NormalizedSubjectRef {
 }
 
 export interface SavedSubjectRecord {
-  id: string; // legacy alias of subjectId
+  id: string;
   domainId: string;
   subjectId: string;
   subjectType: string;
   subjectSnapshot?: unknown;
-  match: Match;
+  subjectDisplay: SubjectDisplayMatch;
   timestamp: number;
 }
 
@@ -84,64 +87,32 @@ function isRecordObject(input: unknown): input is Record<string, unknown> {
   return !!input && typeof input === 'object' && !Array.isArray(input);
 }
 
-function buildFallbackMatch(subjectId: string, domainId: string): Match {
-  return {
-    id: subjectId,
-    league: domainId.toUpperCase(),
-    date: new Date().toISOString(),
-    status: 'upcoming',
-    homeTeam: {
-      id: `${subjectId}_home`,
-      name: 'Subject A',
-      logo: 'https://picsum.photos/seed/subject-a/200/200',
-      form: ['?', '?', '?', '?', '?'],
-    },
-    awayTeam: {
-      id: `${subjectId}_away`,
-      name: 'Subject B',
-      logo: 'https://picsum.photos/seed/subject-b/200/200',
-      form: ['?', '?', '?', '?', '?'],
-    },
-    stats: {
-      possession: { home: 50, away: 50 },
-      shots: { home: 0, away: 0 },
-      shotsOnTarget: { home: 0, away: 0 },
-    },
-  };
-}
-
-function coerceMatch(raw: unknown, subjectId: string, domainId: string): Match {
-  if (!isRecordObject(raw)) return buildFallbackMatch(subjectId, domainId);
-  const match = raw as Partial<Match>;
-  return {
-    ...buildFallbackMatch(subjectId, domainId),
-    ...match,
-    id: typeof match.id === 'string' && match.id.trim().length > 0 ? match.id : subjectId,
-    league:
-      typeof match.league === 'string' && match.league.trim().length > 0
-        ? match.league
-        : domainId,
-  };
-}
-
 function normalizeSavedSubjectRecord(raw: unknown): SavedSubjectRecord | null {
   if (!isRecordObject(raw)) return null;
   if (typeof raw.timestamp !== 'number' || !Number.isFinite(raw.timestamp)) return null;
 
   const parsedFromId = parseSubjectKey(typeof raw.id === 'string' ? raw.id : null);
   const domainId = normalizeDomainId(raw.domainId ?? parsedFromId?.domainId);
-  const subjectId = normalizeSubjectId(raw.subjectId ?? raw.id ?? parsedFromId?.subjectId, 'unknown_subject');
+  const subjectId = normalizeSubjectId(raw.subjectId ?? parsedFromId?.subjectId, 'unknown_subject');
   const subjectType = normalizeSubjectType(raw.subjectType);
-  const subjectSnapshot = raw.subjectSnapshot ?? raw.snapshotData ?? raw.match;
-  const match = coerceMatch(raw.match ?? subjectSnapshot, subjectId, domainId);
+  const subjectSnapshot =
+    raw.subjectSnapshot ?? raw.subjectSnapshotData;
+  const subjectDisplay = coerceSubjectSnapshotToDisplayMatch(
+    raw.subjectDisplay ?? raw.subjectDisplayData ?? subjectSnapshot,
+    subjectId,
+    domainId,
+  );
 
   return {
-    id: subjectId,
+    id:
+      typeof raw.id === 'string' && raw.id.trim().length > 0
+        ? raw.id
+        : buildSubjectKey(domainId, subjectId),
     domainId,
     subjectId,
     subjectType,
     subjectSnapshot,
-    match,
+    subjectDisplay,
     timestamp: raw.timestamp,
   };
 }
@@ -194,25 +165,29 @@ export async function getSavedSubjects(
           params.push(options.domainId.trim());
         }
         if (typeof options?.subjectId === 'string' && options.subjectId.trim().length > 0) {
-          conditions.push('(subjectId = ? OR id = ?)');
-          params.push(options.subjectId.trim(), options.subjectId.trim());
+          conditions.push('subjectId = ?');
+          params.push(options.subjectId.trim());
         }
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
         const result = await db.query(
-          `SELECT * FROM ${SAVED_MATCHES_TABLE} ${whereClause} ORDER BY timestamp DESC LIMIT ${MAX_SAVED_SUBJECT_COUNT}`,
+          `SELECT * FROM ${SAVED_SUBJECTS_TABLE} ${whereClause} ORDER BY timestamp DESC LIMIT ${MAX_SAVED_SUBJECT_COUNT}`,
           params,
         );
         if (Array.isArray(result.values)) {
           return result.values
             .map((row) =>
               normalizeSavedSubjectRecord({
-                id: row.subjectId || row.id,
+                id: row.id,
                 domainId: row.domainId,
                 subjectId: row.subjectId,
                 subjectType: row.subjectType,
-                subjectSnapshot: row.snapshotData ? JSON.parse(row.snapshotData) : undefined,
-                match: row.matchData ? JSON.parse(row.matchData) : undefined,
+                subjectSnapshot: row.subjectSnapshotData
+                  ? JSON.parse(row.subjectSnapshotData)
+                  : undefined,
+                subjectDisplay: row.subjectDisplayData
+                  ? JSON.parse(row.subjectDisplayData)
+                  : undefined,
                 timestamp: row.timestamp,
               }),
             )
@@ -228,22 +203,26 @@ export async function getSavedSubjects(
 }
 
 export async function saveSubject(
-  match: Match,
+  subjectDisplay: SubjectDisplayMatch,
   options?: SaveSubjectOptions,
 ): Promise<void> {
-  const subjectRef = buildSubjectRef(match.id, {
+  const subjectRef = buildSubjectRef(subjectDisplay.id, {
     domainId: options?.domainId,
     subjectId: options?.subjectId,
     subjectType: options?.subjectType,
   });
   const timestamp = Date.now();
   const record: SavedSubjectRecord = {
-    id: subjectRef.subjectId,
+    id: subjectRef.subjectKey,
     domainId: subjectRef.domainId,
     subjectId: subjectRef.subjectId,
     subjectType: subjectRef.subjectType,
-    subjectSnapshot: options?.subjectSnapshot ?? match,
-    match: coerceMatch(match, subjectRef.subjectId, subjectRef.domainId),
+    subjectSnapshot: options?.subjectSnapshot ?? subjectDisplay,
+    subjectDisplay: coerceSubjectSnapshotToDisplayMatch(
+      subjectDisplay,
+      subjectRef.subjectId,
+      subjectRef.domainId,
+    ),
     timestamp,
   };
 
@@ -253,8 +232,8 @@ export async function saveSubject(
       try {
         await db.run(
           `
-          INSERT OR REPLACE INTO ${SAVED_MATCHES_TABLE}
-          (id, domainId, subjectId, subjectType, snapshotData, matchData, timestamp)
+          INSERT OR REPLACE INTO ${SAVED_SUBJECTS_TABLE}
+          (id, domainId, subjectId, subjectType, subjectSnapshotData, subjectDisplayData, timestamp)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `,
           [
@@ -263,7 +242,7 @@ export async function saveSubject(
             record.subjectId,
             record.subjectType,
             JSON.stringify(record.subjectSnapshot ?? null),
-            JSON.stringify(record.match),
+            JSON.stringify(record.subjectDisplay),
             timestamp,
           ],
         );
@@ -299,7 +278,7 @@ export async function deleteSavedSubject(id: string, options?: SubjectRefInput):
         if (scopedSubject) {
           await db.run(
             `
-            DELETE FROM ${SAVED_MATCHES_TABLE}
+            DELETE FROM ${SAVED_SUBJECTS_TABLE}
             WHERE id = ? OR (domainId = ? AND subjectId = ?)
           `,
             [scopedSubject.subjectKey, scopedSubject.domainId, scopedSubject.subjectId],
@@ -310,7 +289,7 @@ export async function deleteSavedSubject(id: string, options?: SubjectRefInput):
         if (parsedFromId) {
           await db.run(
             `
-            DELETE FROM ${SAVED_MATCHES_TABLE}
+            DELETE FROM ${SAVED_SUBJECTS_TABLE}
             WHERE id = ? OR (domainId = ? AND subjectId = ?)
           `,
             [id, parsedFromId.domainId, parsedFromId.subjectId],
@@ -320,7 +299,7 @@ export async function deleteSavedSubject(id: string, options?: SubjectRefInput):
 
         await db.run(
           `
-          DELETE FROM ${SAVED_MATCHES_TABLE}
+          DELETE FROM ${SAVED_SUBJECTS_TABLE}
           WHERE id = ? OR subjectId = ?
         `,
           [id, id],
@@ -349,7 +328,7 @@ export async function clearSavedSubjects(): Promise<void> {
   if (prefersNativeDB()) {
     const db = await getDB();
     if (db) {
-      await db.run(`DELETE FROM ${SAVED_MATCHES_TABLE}`);
+      await db.run(`DELETE FROM ${SAVED_SUBJECTS_TABLE}`);
       return;
     }
   }
@@ -361,7 +340,7 @@ export async function clearSavedSubjectsByDomain(domainId: string): Promise<void
   if (prefersNativeDB()) {
     const db = await getDB();
     if (db) {
-      await db.run(`DELETE FROM ${SAVED_MATCHES_TABLE} WHERE domainId = ?`, [normalizedDomainId]);
+      await db.run(`DELETE FROM ${SAVED_SUBJECTS_TABLE} WHERE domainId = ?`, [normalizedDomainId]);
       return;
     }
   }
@@ -371,10 +350,3 @@ export async function clearSavedSubjectsByDomain(domainId: string): Promise<void
   writeSavedSubjectsToLocalStorage(filtered);
 }
 
-// Backward compatibility aliases.
-export type SaveMatchOptions = SaveSubjectOptions;
-export type SavedMatchQueryOptions = SavedSubjectQueryOptions;
-export type SavedMatchRecord = SavedSubjectRecord;
-export const getSavedMatches = getSavedSubjects;
-export const saveMatch = saveSubject;
-export const deleteSavedMatch = deleteSavedSubject;

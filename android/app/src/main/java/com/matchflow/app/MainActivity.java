@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
   @Override
   public void onCreate(Bundle savedInstanceState) {
     registerPlugin(AndroidForegroundExecutionPlugin.class);
+    registerPlugin(AutomationSchedulerPlugin.class);
     super.onCreate(savedInstanceState);
   }
 }

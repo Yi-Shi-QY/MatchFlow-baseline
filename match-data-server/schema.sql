@@ -45,6 +45,7 @@ CREATE TABLE matches (
     --   "hhad": { "h": 2.0, "d": 3.2, "a": 3.5, "goalline": -1 }
     -- }
     odds JSONB DEFAULT '{}'::jsonb,
+    source_context JSONB DEFAULT '{}'::jsonb,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

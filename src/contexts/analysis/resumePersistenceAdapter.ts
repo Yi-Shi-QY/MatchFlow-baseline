@@ -1,4 +1,3 @@
-import type { Match } from '@/src/data/matches';
 import type { AnalysisResumeState } from '@/src/services/ai';
 import {
   clearResumeState,
@@ -8,6 +7,12 @@ import {
 } from '@/src/services/history';
 import { parseAgentStream, type AgentResult } from '@/src/services/agentParser';
 import type { PlannerRuntimeState } from '@/src/services/planner/runtime';
+
+function resolveResumeStateSubjectDisplaySnapshot(
+  state: AnalysisResumeState | undefined,
+): AnalysisResumeState['subjectDisplaySnapshot'] {
+  return state?.subjectDisplaySnapshot;
+}
 
 export interface AnalysisResumeOptions {
   domainId: string;
@@ -25,7 +30,7 @@ export interface InitialResumeBootstrapState {
 }
 
 interface BootstrapResumeStateArgs {
-  matchId: string;
+  subjectId: string;
   isResume: boolean;
   resumeOptions: AnalysisResumeOptions;
 }
@@ -33,7 +38,7 @@ interface BootstrapResumeStateArgs {
 export async function bootstrapResumeState(
   args: BootstrapResumeStateArgs,
 ): Promise<InitialResumeBootstrapState> {
-  const { matchId, isResume, resumeOptions } = args;
+  const { subjectId, isResume, resumeOptions } = args;
 
   let initialThoughts = '';
   let initialParsedStream: AgentResult | null = null;
@@ -42,7 +47,7 @@ export async function bootstrapResumeState(
   let shouldResume = isResume;
 
   if (shouldResume) {
-    const savedState = await getResumeState(matchId, resumeOptions);
+    const savedState = await getResumeState(subjectId, resumeOptions);
     if (isResumeStateRecoverable(savedState)) {
       resumeStateData = savedState.state;
 
@@ -61,10 +66,10 @@ export async function bootstrapResumeState(
       });
     } else {
       shouldResume = false;
-      await clearResumeState(matchId, resumeOptions);
+      await clearResumeState(subjectId, resumeOptions);
     }
   } else {
-    await clearResumeState(matchId, resumeOptions);
+    await clearResumeState(subjectId, resumeOptions);
   }
 
   const initialResumeState: AnalysisResumeState = {
@@ -80,8 +85,9 @@ export async function bootstrapResumeState(
       ? resumeStateData.segmentResults
       : [],
     runtimeStatus: resumeStateData?.runtimeStatus,
-    subjectSnapshot: resumeStateData?.subjectSnapshot ?? resumeStateData?.matchSnapshot,
-    matchSnapshot: resumeStateData?.matchSnapshot,
+    subjectSnapshot:
+      resumeStateData?.subjectSnapshot ?? resolveResumeStateSubjectDisplaySnapshot(resumeStateData),
+    subjectDisplaySnapshot: resolveResumeStateSubjectDisplaySnapshot(resumeStateData),
   };
 
   return {
@@ -95,8 +101,9 @@ export async function bootstrapResumeState(
 }
 
 interface ResumeSnapshotPersisterArgs {
-  matchId: string;
-  match: Match;
+  subjectId: string;
+  subjectSnapshot: unknown;
+  subjectDisplayProjection: AnalysisResumeState['subjectDisplaySnapshot'];
   resumeOptions: AnalysisResumeOptions;
   ownerController: AbortController;
   getCurrentController: () => AbortController | undefined;
@@ -111,8 +118,9 @@ interface PersistResumeSnapshotPayload {
 
 export function createResumeSnapshotPersister(args: ResumeSnapshotPersisterArgs) {
   const {
-    matchId,
-    match,
+    subjectId,
+    subjectSnapshot,
+    subjectDisplayProjection,
     resumeOptions,
     ownerController,
     getCurrentController,
@@ -137,14 +145,17 @@ export function createResumeSnapshotPersister(args: ResumeSnapshotPersisterArgs)
 
     const stateToPersist: AnalysisResumeState = {
       ...payload.latestResumeState,
-      subjectSnapshot: match,
+      subjectSnapshot,
       runtimeStatus: payload.latestRuntimeStatus,
-      matchSnapshot: match,
+      subjectDisplaySnapshot:
+        resumeOptions.subjectType === 'match'
+          ? subjectDisplayProjection
+          : resolveResumeStateSubjectDisplaySnapshot(payload.latestResumeState),
     };
 
-    void saveResumeState(matchId, stateToPersist, payload.currentThoughts, {
+    void saveResumeState(subjectId, stateToPersist, payload.currentThoughts, {
       ...resumeOptions,
-      subjectSnapshot: match,
+      subjectSnapshot,
     });
   };
 

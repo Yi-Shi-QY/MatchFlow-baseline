@@ -358,6 +358,7 @@ async function upsertMatch(payload) {
     away_score,
     match_stats,
     odds,
+    source_context,
   } = payload;
 
   if (!league_name || !match_date || !home_team_id || !away_team_id) {
@@ -372,9 +373,9 @@ async function upsertMatch(payload) {
       INSERT INTO matches (
         id, league_name, match_date, status, 
         home_team_id, away_team_id, 
-        home_score, away_score, match_stats, odds
+        home_score, away_score, match_stats, odds, source_context
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       ON CONFLICT (id) DO UPDATE SET
         league_name = EXCLUDED.league_name,
         match_date = EXCLUDED.match_date,
@@ -382,7 +383,8 @@ async function upsertMatch(payload) {
         home_score = EXCLUDED.home_score,
         away_score = EXCLUDED.away_score,
         match_stats = EXCLUDED.match_stats,
-        odds = EXCLUDED.odds
+        odds = EXCLUDED.odds,
+        source_context = EXCLUDED.source_context
       RETURNING *
     `;
     params = [
@@ -396,15 +398,16 @@ async function upsertMatch(payload) {
       away_score || 0,
       JSON.stringify(match_stats || {}),
       JSON.stringify(odds || {}),
+      JSON.stringify(source_context || {}),
     ];
   } else {
     query = `
       INSERT INTO matches (
         league_name, match_date, status, 
         home_team_id, away_team_id, 
-        home_score, away_score, match_stats, odds
+        home_score, away_score, match_stats, odds, source_context
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `;
     params = [
@@ -417,6 +420,7 @@ async function upsertMatch(payload) {
       away_score || 0,
       JSON.stringify(match_stats || {}),
       JSON.stringify(odds || {}),
+      JSON.stringify(source_context || {}),
     ];
   }
 

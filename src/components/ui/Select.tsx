@@ -68,16 +68,16 @@ export function Select({ value, onChange, options, className = '' }: SelectProps
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors flex justify-between items-center"
+        className="w-full bg-[var(--mf-surface)] border border-[var(--mf-border)] rounded-lg p-3 text-sm text-[var(--mf-text)] focus:outline-none focus:border-[var(--mf-accent)] transition-colors flex justify-between items-center"
       >
         <span>{selectedOption?.label}</span>
-        <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-[var(--mf-text-muted)] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && menuStyle && typeof document !== 'undefined' && createPortal(
         <div
           ref={menuRef}
-          className="fixed z-[1000] bg-zinc-900 border border-white/10 rounded-lg shadow-lg overflow-hidden"
+          className="fixed z-[1000] bg-[var(--mf-surface)] border border-[var(--mf-border)] rounded-lg shadow-lg overflow-hidden"
           style={{
             top: `${menuStyle.top}px`,
             left: `${menuStyle.left}px`,
@@ -94,8 +94,8 @@ export function Select({ value, onChange, options, className = '' }: SelectProps
                 }}
                 className={`px-3 py-2 text-sm cursor-pointer transition-colors ${
                   option.value === value
-                    ? 'bg-emerald-500/20 text-emerald-400'
-                    : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    ? 'bg-[var(--mf-accent-soft)] text-[var(--mf-accent)]'
+                    : 'text-[var(--mf-text)] hover:bg-[var(--mf-surface-muted)]'
                 }`}
               >
                 {option.label}

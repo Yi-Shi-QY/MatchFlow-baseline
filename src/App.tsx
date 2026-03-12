@@ -5,19 +5,33 @@
 
 import React, { useEffect, Component, ErrorInfo, ReactNode, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
-import Home from './pages/Home';
 import { AnalysisProvider } from './contexts/AnalysisContext';
 import { App as CapacitorApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { getSettings } from './services/settings';
-import { buildLegacyMatchRoute, buildSubjectRoute } from './services/navigation/subjectRoute';
+import { buildSubjectRoute } from './services/navigation/subjectRoute';
+import {
+  kickAutomationRuntime,
+  setAutomationRuntimeAppActive,
+  startAutomationRuntime,
+  stopAutomationRuntime,
+} from './services/automation/runtimeCoordinator';
+import {
+  addNativeAutomationWakeListener,
+  consumePendingNativeAutomationWakeEvents,
+  scheduleNativeAutomationSync,
+} from './services/automation/nativeScheduler';
+import { startAndroidAutomationForegroundHost } from './services/automation/androidAutomationHost';
 
 const MatchDetail = lazy(() => import('./pages/MatchDetail'));
 const Share = lazy(() => import('./pages/Share'));
 const Scan = lazy(() => import('./pages/Scan'));
 const Settings = lazy(() => import('./pages/Settings'));
 const ExtensionsHub = lazy(() => import('./pages/ExtensionsHub'));
+const CommandCenter = lazy(() => import('./pages/CommandCenter'));
+const Automation = lazy(() => import('./pages/Automation'));
+const DataSources = lazy(() => import('./pages/DataSources'));
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -64,6 +78,26 @@ function AppRoutes() {
   );
 
   useEffect(() => {
+    startAutomationRuntime();
+    scheduleNativeAutomationSync('app_startup');
+    setAutomationRuntimeAppActive(
+      typeof document === 'undefined' ? true : document.visibilityState !== 'hidden',
+    );
+
+    const stopAutomationForegroundHost = startAndroidAutomationForegroundHost();
+
+    let nativeWakeListener: PluginListenerHandle | null = null;
+    void consumePendingNativeAutomationWakeEvents().then((events) => {
+      events.forEach((event) => {
+        kickAutomationRuntime(`native_wake:${event.kind}`);
+      });
+    });
+    void addNativeAutomationWakeListener((event) => {
+      kickAutomationRuntime(`native_wake:${event.kind}`);
+    }).then((listener) => {
+      nativeWakeListener = listener;
+    });
+
     const checkAndRequestPermissions = async () => {
       if (Capacitor.isNativePlatform()) {
         const settings = getSettings();
@@ -89,42 +123,64 @@ function AppRoutes() {
     const notificationTapListener = LocalNotifications.addListener(
       'localNotificationActionPerformed',
       (event: any) => {
-        const matchId = event?.notification?.extra?.matchId;
+        const subjectId = event?.notification?.extra?.subjectId;
         const domainId = event?.notification?.extra?.domainId;
         const route = event?.notification?.extra?.route;
 
-        if (typeof matchId === 'string' && matchId.trim().length > 0) {
-          if (typeof domainId === 'string' && domainId.trim().length > 0) {
-            navigate(buildSubjectRoute(domainId, matchId));
-            return;
-          }
-          navigate(buildLegacyMatchRoute(matchId));
-          return;
-        }
         if (typeof route === 'string' && route.startsWith('/')) {
           navigate(route);
+          return;
+        }
+        if (
+          typeof subjectId === 'string' &&
+          subjectId.trim().length > 0 &&
+          typeof domainId === 'string' &&
+          domainId.trim().length > 0
+        ) {
+          navigate(buildSubjectRoute(domainId, subjectId));
           return;
         }
         navigate('/');
       }
     );
 
+    const handleVisibilityChange = () => {
+      setAutomationRuntimeAppActive(document.visibilityState !== 'hidden');
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    const appStateListener = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      setAutomationRuntimeAppActive(Boolean(isActive));
+    });
+
     return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
       backButtonListener.then(listener => listener.remove());
       notificationTapListener.then(listener => listener.remove());
+      appStateListener.then(listener => listener.remove());
+      void nativeWakeListener?.remove();
+      stopAutomationForegroundHost();
+      stopAutomationRuntime();
     };
   }, [navigate]);
 
   return (
     <Suspense fallback={routeFallback}>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/match/:id" element={<MatchDetail />} />
+        <Route path="/" element={<CommandCenter />} />
+        <Route path="/sources" element={<DataSources />} />
+        <Route path="/tasks" element={<Automation />} />
         <Route path="/subject/:domainId/:subjectId" element={<MatchDetail />} />
         <Route path="/share" element={<Share />} />
         <Route path="/scan" element={<Scan />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/extensions" element={<ExtensionsHub />} />
+        <Route path="/automation" element={<Automation />} />
       </Routes>
     </Suspense>
   );

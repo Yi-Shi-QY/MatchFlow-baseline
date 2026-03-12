@@ -7,7 +7,7 @@ export function createFootballBuiltinModule(caseMinimum: number): BuiltinDomainM
   return {
     domain: footballDomain,
     planningStrategy: footballPlanningStrategy,
-    localTestCases: buildFootballLocalCases(caseMinimum),
+    localSubjectSnapshots: buildFootballLocalCases(caseMinimum),
   };
 }
 

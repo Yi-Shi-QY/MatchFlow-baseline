@@ -1,11 +1,11 @@
 import React from 'react';
-import type { Match } from '@/src/data/matches';
 import type { AnalysisDomain } from '@/src/services/domains/types';
 import type {
   DataSourceDefinition,
   FormFieldSchema,
   SourceSelection,
 } from '@/src/services/dataSources';
+import type { SubjectDisplayMatch } from '@/src/services/subjectDisplayMatch';
 import type { EditableSubjectDataFormModel } from './contracts';
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
@@ -15,7 +15,7 @@ interface UseEditableSourceFormArgs {
   editableData: string;
   setEditableData: React.Dispatch<React.SetStateAction<string>>;
   step: MatchStep;
-  match: Match | undefined;
+  subjectDisplay: SubjectDisplayMatch | undefined;
   importedData: EditableSubjectDataFormModel | null;
   activeDomain: AnalysisDomain;
   domainSourceCatalog: DataSourceDefinition[];
@@ -28,7 +28,7 @@ export function useEditableSourceForm({
   editableData,
   setEditableData,
   step,
-  match,
+  subjectDisplay,
   importedData,
   activeDomain,
   domainSourceCatalog,
@@ -48,7 +48,7 @@ export function useEditableSourceForm({
   }, [editableData]);
 
   React.useEffect(() => {
-    if (!match || step !== 'selection') return;
+    if (!subjectDisplay || step !== 'selection') return;
 
     let currentData: EditableSubjectDataFormModel = {};
     try {
@@ -61,7 +61,7 @@ export function useEditableSourceForm({
     }
 
     const nextData: EditableSubjectDataFormModel = { ...currentData };
-    const sourceContext = { match, importedData };
+    const sourceContext = { subjectDisplay, importedData };
 
     domainSourceCatalog.forEach((source) => {
       if (resolvedSelectedSources[source.id]) {
@@ -78,14 +78,14 @@ export function useEditableSourceForm({
 
     // Explicit source context helps deterministic planning routing in ai.ts.
     nextData.sourceContext = {
-      origin: match.source || (importedData ? 'imported' : 'local'),
+      origin: subjectDisplay.source || (importedData ? 'imported' : 'local'),
       domainId: activeDomain.id,
       selectedSources: { ...resolvedSelectedSources },
       selectedSourceIds: domainSourceCatalog
         .filter((source) => resolvedSelectedSources[source.id])
         .map((source) => source.id),
       capabilities,
-      matchStatus: nextData.status || match.status || 'unknown',
+      matchStatus: nextData.status || subjectDisplay.status || 'unknown',
     };
 
     const nextJson = JSON.stringify(nextData, null, 2);
@@ -93,7 +93,7 @@ export function useEditableSourceForm({
       setEditableData(nextJson);
     }
   }, [
-    match,
+    subjectDisplay,
     step,
     importedData,
     resolvedSelectedSources,
