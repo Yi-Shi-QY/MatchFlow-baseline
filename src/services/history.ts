@@ -342,6 +342,38 @@ async function pruneNativeResumeState(): Promise<void> {
   }
 }
 
+function matchResumeStateQuery(record: SavedResumeState, options?: HistoryQueryOptions): boolean {
+  if (!options) return true;
+  const domainId = typeof options.domainId === 'string' ? options.domainId.trim() : '';
+  const subjectId = typeof options.subjectId === 'string' ? options.subjectId.trim() : '';
+  if (domainId && record.domainId !== domainId) return false;
+  if (subjectId && record.subjectId !== subjectId) return false;
+  return true;
+}
+
+function normalizeSqlResumeStateRow(row: unknown): SavedResumeState | null {
+  try {
+    const rowValue = row as Record<string, unknown>;
+    return normalizeResumeRecord(
+      {
+        id: rowValue?.id,
+        domainId: rowValue?.domainId,
+        subjectId: rowValue?.subjectId,
+        subjectType: rowValue?.subjectType,
+        state:
+          typeof rowValue?.stateData === 'string'
+            ? JSON.parse(rowValue.stateData)
+            : rowValue?.stateData,
+        thoughts: typeof rowValue?.thoughts === 'string' ? rowValue.thoughts : '',
+        timestamp: typeof rowValue?.timestamp === 'number' ? rowValue.timestamp : 0,
+      },
+      typeof rowValue?.id === 'string' ? rowValue.id : undefined,
+    );
+  } catch {
+    return null;
+  }
+}
+
 function normalizeHistoryRecord(raw: unknown): HistoryRecord | null {
   if (!isRecordObject(raw)) return null;
   if (!raw.analysis) return null;
@@ -552,6 +584,69 @@ export async function getResumeState(
     console.error('Failed to load resume state', e);
   }
   return null;
+}
+
+export async function getRecoverableResumeStates(
+  options?: HistoryQueryOptions,
+): Promise<SavedResumeState[]> {
+  try {
+    if (prefersNativeDB()) {
+      const db = await getDB();
+      if (db) {
+        await pruneNativeResumeState();
+
+        const conditions: string[] = [];
+        const params: Array<string> = [];
+        const domainId =
+          typeof options?.domainId === 'string' && options.domainId.trim().length > 0
+            ? options.domainId.trim()
+            : '';
+        const subjectId =
+          typeof options?.subjectId === 'string' && options.subjectId.trim().length > 0
+            ? options.subjectId.trim()
+            : '';
+
+        if (domainId) {
+          conditions.push('domainId = ?');
+          params.push(domainId);
+        }
+        if (subjectId) {
+          conditions.push('subjectId = ?');
+          params.push(subjectId);
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const res = await db.query(
+          `SELECT * FROM ${RESUME_STATE_TABLE} ${whereClause} ORDER BY timestamp DESC LIMIT ${MAX_RESUME_STATE_COUNT}`,
+          params,
+        );
+        if (!Array.isArray(res.values)) {
+          return [];
+        }
+
+        return res.values
+          .map((row) => normalizeSqlResumeStateRow(row))
+          .filter((record): record is SavedResumeState => Boolean(record))
+          .filter((record) => isResumeFresh(record.timestamp))
+          .filter((record) => isResumeStateRecoverable(record));
+      }
+    }
+
+    const currentMap = readResumeStateMap();
+    const prunedMap = pruneResumeStateMap(currentMap);
+    if (Object.keys(prunedMap).length !== Object.keys(currentMap).length) {
+      writeResumeStateMap(prunedMap);
+    }
+
+    return Object.values(prunedMap)
+      .filter((record) => matchResumeStateQuery(record, options))
+      .filter((record) => isResumeStateRecoverable(record))
+      .sort((left, right) => right.timestamp - left.timestamp);
+  } catch (e) {
+    console.error('Failed to load recoverable resume states', e);
+  }
+
+  return [];
 }
 
 export async function saveResumeState(
