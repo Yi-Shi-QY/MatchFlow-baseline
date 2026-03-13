@@ -2,10 +2,10 @@ import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { WorkspaceShell } from '@/src/components/layout/WorkspaceShell';
-import { AutomationDiagnosticsCard } from '@/src/pages/automation/AutomationDiagnosticsCard';
 import { AutomationDraftList } from '@/src/pages/automation/AutomationDraftList';
 import { AutomationTaskList } from '@/src/pages/automation/AutomationTaskList';
 import { AutomationRunList } from '@/src/pages/automation/AutomationRunList';
+import { TaskCenterSummaryGrid } from '@/src/pages/automation/TaskCenterSummaryGrid';
 import { useAutomationTaskState } from '@/src/pages/automation/useAutomationTaskState';
 
 export default function Automation() {
@@ -14,12 +14,15 @@ export default function Automation() {
   const language = i18n.language.startsWith('zh') ? 'zh' : 'en';
   const state = useAutomationTaskState(language);
   const selectedDraftId = searchParams.get('draftId');
+  const selectedRuleId = searchParams.get('ruleId');
   const selectedJobId = searchParams.get('jobId');
   const selectedRunId = searchParams.get('runId');
 
   React.useEffect(() => {
     const targetElementId = selectedDraftId
       ? `automation-draft-${selectedDraftId}`
+      : selectedRuleId
+        ? `automation-rule-${selectedRuleId}`
       : selectedRunId
         ? `automation-run-${selectedRunId}`
         : selectedJobId
@@ -41,6 +44,7 @@ export default function Automation() {
     };
   }, [
     selectedDraftId,
+    selectedRuleId,
     selectedJobId,
     selectedRunId,
     state.drafts.length,
@@ -53,12 +57,12 @@ export default function Automation() {
       ? {
           title: '任务中心',
           subtitle:
-            '这里专门查看草稿、启用中的规则、待执行任务和最近运行记录。对话入口已经独立到总管 Agent 页面。',
+            '查看待我处理、执行中、已安排和最近完成的事项。重型诊断能力已移出主任务面。',
         }
       : {
           title: 'Task Center',
           subtitle:
-            'Review drafts, enabled rules, queued jobs, and recent runs here. The conversational entry now lives on the manager agent page.',
+            'Review waiting items, active work, scheduled tasks, and recent completions. Heavy diagnostics are no longer on the primary surface.',
         };
 
   return (
@@ -68,30 +72,38 @@ export default function Automation() {
       title={copy.title}
       subtitle={copy.subtitle}
     >
-      <AutomationDiagnosticsCard language={language} />
+      <TaskCenterSummaryGrid metrics={state.taskCenterModel.summaryMetrics} />
 
       <AutomationDraftList
-        drafts={state.drafts}
         language={language}
+        items={state.taskCenterModel.waitingItems}
         selectedDraftId={selectedDraftId}
-        onActivateDraft={state.handleActivateDraft}
-        onDeleteDraft={state.handleDeleteDraft}
-        onClarificationAnswer={state.handleClarificationAnswer}
+        onPrimaryAction={state.handleTaskCenterAction}
       />
 
       <AutomationTaskList
-        language={language}
-        rules={state.rules}
-        jobs={state.jobs}
+        items={state.taskCenterModel.runningItems}
+        title={language === 'zh' ? '执行中' : 'Running'}
+        emptyText={language === 'zh' ? '当前没有执行中的任务。' : 'No tasks are currently running.'}
+        selectedRunId={selectedRunId}
+        onPrimaryAction={state.handleTaskCenterAction}
+      />
+
+      <AutomationTaskList
+        items={state.taskCenterModel.scheduledItems}
+        title={language === 'zh' ? '已安排' : 'Scheduled'}
+        emptyText={language === 'zh' ? '当前没有已安排的任务或规则。' : 'No jobs or rules are scheduled yet.'}
+        selectedRuleId={selectedRuleId}
         selectedJobId={selectedJobId}
-        runningJobId={state.runningJobId}
-        onRunJobNow={state.handleRunJobNow}
+        onPrimaryAction={state.handleTaskCenterAction}
       />
 
       <AutomationRunList
-        language={language}
-        runs={state.runs}
+        items={state.taskCenterModel.completedItems}
+        title={language === 'zh' ? '最近完成' : 'Recent completions'}
+        emptyText={language === 'zh' ? '最近还没有已完成任务。' : 'No recent completed tasks yet.'}
         selectedRunId={selectedRunId}
+        onPrimaryAction={state.handleTaskCenterAction}
       />
     </WorkspaceShell>
   );

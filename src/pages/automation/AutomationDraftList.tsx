@@ -1,63 +1,44 @@
 import React from 'react';
-import { CircleAlert } from 'lucide-react';
-import { Card, CardContent } from '@/src/components/ui/Card';
-import type { AutomationDraft } from '@/src/services/automation';
-import { AutomationDraftCard } from './AutomationDraftCard';
+import { TaskCenterActionCard } from './TaskCenterActionCard';
+import { TaskCenterSection } from './TaskCenterSection';
+import type { TaskCenterAction, TaskCenterCard } from './taskCenterModel';
 
 interface AutomationDraftListProps {
-  drafts: AutomationDraft[];
+  items: TaskCenterCard[];
   language: 'zh' | 'en';
   selectedDraftId?: string | null;
-  onActivateDraft: (draftId: string) => void;
-  onDeleteDraft: (draftId: string) => void;
-  onClarificationAnswer: (draftId: string, answer: string) => void;
+  onPrimaryAction: (action: TaskCenterAction) => void;
 }
 
 export function AutomationDraftList({
-  drafts,
+  items,
   language,
   selectedDraftId = null,
-  onActivateDraft,
-  onDeleteDraft,
-  onClarificationAnswer,
+  onPrimaryAction,
 }: AutomationDraftListProps) {
   const copy =
     language === 'zh'
       ? {
-          title: '待确认草稿',
-          empty: '还没有任务草稿。先从对话里下达自然语言指令。',
+          title: '待我处理',
+          empty: '当前没有需要你立即处理的事项。',
         }
       : {
-          title: 'Drafts',
-          empty: 'No command drafts yet. Start with a natural-language command in chat.',
+          title: 'Waiting',
+          empty: 'There is nothing that needs your action right now.',
         };
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-2">
-        <CircleAlert className="h-4 w-4 text-[var(--mf-accent)]" />
-        <h3 className="text-sm font-semibold text-[var(--mf-text)]">{copy.title}</h3>
-      </div>
-
-      {drafts.length === 0 ? (
-        <Card>
-          <CardContent className="p-4 text-sm text-[var(--mf-text-muted)]">
-            {copy.empty}
-          </CardContent>
-        </Card>
-      ) : (
-        drafts.map((draft) => (
-          <AutomationDraftCard
-            key={draft.id}
-            draft={draft}
-            language={language}
-            isSelected={selectedDraftId === draft.id}
-            onActivateDraft={onActivateDraft}
-            onDeleteDraft={onDeleteDraft}
-            onClarificationAnswer={onClarificationAnswer}
+    <TaskCenterSection title={copy.title} emptyText={copy.empty} hasItems={items.length > 0}>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <TaskCenterActionCard
+            key={item.id}
+            card={item}
+            isSelected={item.target.type === 'draft' && item.target.id === selectedDraftId}
+            onPrimaryAction={onPrimaryAction}
           />
-        ))
-      )}
-    </section>
+        ))}
+      </div>
+    </TaskCenterSection>
   );
 }

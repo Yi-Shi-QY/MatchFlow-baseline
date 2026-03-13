@@ -14,6 +14,7 @@ import { getAutomationJob, listAutomationJobs } from '@/src/services/automation/
 import { listAutomationRules } from '@/src/services/automation/ruleStore';
 import { listAutomationRuns } from '@/src/services/automation/runStore';
 import { resolveImmediateAnalysisNavigation } from '@/src/services/automation/commandCenter';
+import { deriveTaskCenterModel, type TaskCenterAction } from './taskCenterModel';
 import type {
   AutomationDraft,
   AutomationJob,
@@ -30,6 +31,17 @@ export function useAutomationTaskState(language: 'zh' | 'en') {
   const [runs, setRuns] = React.useState<AutomationRun[]>([]);
   const [feedbackMessage, setFeedbackMessage] = React.useState('');
   const [runningJobId, setRunningJobId] = React.useState<string | null>(null);
+  const taskCenterModel = React.useMemo(
+    () =>
+      deriveTaskCenterModel({
+        drafts,
+        rules,
+        jobs,
+        runs,
+        language,
+      }),
+    [drafts, jobs, language, rules, runs],
+  );
 
   const refreshAll = React.useCallback(async () => {
     const [nextDrafts, nextRules, nextJobs, nextRuns] = await Promise.all([
@@ -173,6 +185,41 @@ export function useAutomationTaskState(language: 'zh' | 'en') {
     [language, refreshAll],
   );
 
+  const navigateToTaskCenterTarget = React.useCallback(
+    (params: Record<string, string>) => {
+      const search = new URLSearchParams(params);
+      navigate(`/tasks?${search.toString()}`);
+    },
+    [navigate],
+  );
+
+  const handleTaskCenterAction = React.useCallback(
+    async (action: TaskCenterAction) => {
+      if (action.type === 'activate_draft') {
+        await handleActivateDraft(action.draftId);
+        return;
+      }
+
+      if (action.type === 'focus_draft') {
+        navigateToTaskCenterTarget({ draftId: action.draftId });
+        return;
+      }
+
+      if (action.type === 'focus_rule') {
+        navigateToTaskCenterTarget({ ruleId: action.ruleId });
+        return;
+      }
+
+      if (action.type === 'focus_job') {
+        navigateToTaskCenterTarget({ jobId: action.jobId });
+        return;
+      }
+
+      navigateToTaskCenterTarget({ runId: action.runId });
+    },
+    [handleActivateDraft, navigateToTaskCenterTarget],
+  );
+
   return {
     activeDomainName: activeDomain.name,
     drafts,
@@ -181,10 +228,12 @@ export function useAutomationTaskState(language: 'zh' | 'en') {
     runs,
     feedbackMessage,
     runningJobId,
+    taskCenterModel,
     refreshAll,
     handleClarificationAnswer,
     handleActivateDraft,
     handleDeleteDraft,
     handleRunJobNow,
+    handleTaskCenterAction,
   };
 }
