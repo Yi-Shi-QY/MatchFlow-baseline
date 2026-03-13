@@ -34,6 +34,7 @@ const Automation = lazy(() => import('./pages/Automation'));
 const DataSources = lazy(() => import('./pages/DataSources'));
 const History = lazy(() => import('./pages/History'));
 const Memory = lazy(() => import('./pages/Memory'));
+const MemoryDetail = lazy(() => import('./pages/MemoryDetail'));
 const ConnectionDataSettings = lazy(() => import('./pages/settings/ConnectionDataSettings'));
 const AdvancedDiagnostics = lazy(() => import('./pages/settings/AdvancedDiagnostics'));
 
@@ -181,7 +182,7 @@ function AppRoutes() {
         <Route path="/tasks" element={<Automation />} />
         <Route path="/history" element={<History />} />
         <Route path="/memory" element={<Memory />} />
-        <Route path="/memory/:memoryId" element={<Memory />} />
+        <Route path="/memory/:memoryId" element={<MemoryDetail />} />
         <Route path="/subject/:domainId/:subjectId" element={<MatchDetail />} />
         <Route path="/share" element={<Share />} />
         <Route path="/scan" element={<Scan />} />
