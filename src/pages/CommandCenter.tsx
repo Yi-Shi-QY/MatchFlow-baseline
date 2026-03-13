@@ -1,10 +1,13 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { WorkspaceShell } from '@/src/components/layout/WorkspaceShell';
+import { CommandCenterContinueStrip } from '@/src/pages/command/CommandCenterContinueStrip';
 import { CommandCenterComposer } from '@/src/pages/command/CommandCenterComposer';
 import { CommandCenterConversation } from '@/src/pages/command/CommandCenterConversation';
-import { CommandCenterDebugPanel } from '@/src/pages/command/CommandCenterDebugPanel';
 import { CommandCenterRunStatus } from '@/src/pages/command/CommandCenterRunStatus';
+import { CommandCenterStatusBar } from '@/src/pages/command/CommandCenterStatusBar';
+import { CommandCenterSuggestionBar } from '@/src/pages/command/CommandCenterSuggestionBar';
+import { CommandCenterSummaryStrip } from '@/src/pages/command/CommandCenterSummaryStrip';
 import { useCommandCenterState } from '@/src/pages/command/useCommandCenterState';
 
 export default function CommandCenter() {
@@ -29,8 +32,24 @@ export default function CommandCenter() {
       title={copy.title}
       subtitle={copy.subtitle}
       hideHeader
-      contentClassName="min-h-screen"
+      contentClassName="min-h-screen gap-4"
     >
+      <CommandCenterStatusBar language={language} layout={state.homeLayout} />
+
+      {state.homeLayout.mode === 'continue_first' ? (
+        <CommandCenterContinueStrip
+          language={language}
+          cards={state.homeLayout.continueCards}
+          onAction={state.handleContinueAction}
+        />
+      ) : (
+        <CommandCenterSummaryStrip
+          language={language}
+          card={state.homeLayout.lastSummaryCard}
+          onOpenConversation={state.handleOpenConversation}
+        />
+      )}
+
       <CommandCenterConversation
         language={language}
         items={state.feedItems}
@@ -50,9 +69,10 @@ export default function CommandCenter() {
         onCancelRun={state.handleCancelRun}
       />
 
-      <CommandCenterDebugPanel
+      <CommandCenterSuggestionBar
         language={language}
-        projection={state.projection}
+        chips={state.homeLayout.suggestionChips}
+        onSelect={state.handleSuggestionSelect}
       />
 
       <CommandCenterComposer

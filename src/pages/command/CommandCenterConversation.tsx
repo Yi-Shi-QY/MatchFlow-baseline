@@ -13,6 +13,7 @@ interface CommandCenterConversationProps {
   onDeleteDraft: (draftId: string) => void;
   onClarificationAnswer: (draftId: string, answer: string) => void;
   onOpenSettings: () => void;
+  className?: string;
 }
 
 export function CommandCenterConversation({
@@ -23,6 +24,7 @@ export function CommandCenterConversation({
   onDeleteDraft,
   onClarificationAnswer,
   onOpenSettings,
+  className = '',
 }: CommandCenterConversationProps) {
   const emptyBundleCopy =
     language === 'zh'
@@ -30,7 +32,10 @@ export function CommandCenterConversation({
       : 'Those cards have already been handled.';
 
   return (
-    <section className="flex flex-col gap-3 pt-[calc(3.8rem+env(safe-area-inset-top))]">
+    <section
+      id="command-center-conversation"
+      className={`flex flex-col gap-3 ${className}`.trim()}
+    >
       {items.map((item) => {
         const relatedDrafts =
           item.draftIds?.length
@@ -43,7 +48,7 @@ export function CommandCenterConversation({
         const bubbleText = item.text || '';
 
         return (
-          <div key={item.id} className="space-y-3">
+          <div key={item.id} id={`command-feed-item-${item.id}`} className="space-y-3">
             <div
               className={`flex gap-3 ${
                 isSystem ? 'justify-center' : isUser ? 'justify-end' : 'justify-start'

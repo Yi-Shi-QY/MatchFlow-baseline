@@ -17,6 +17,11 @@ import {
   createCommandCenterWelcomeFeed,
   projectManagerSessionProjectionToCommandCenterFeed,
 } from './feedAdapter';
+import {
+  deriveCommandCenterHomeLayout,
+  type CommandCenterContinueAction,
+  type CommandCenterSuggestionChip,
+} from './homeLayoutModel';
 
 function isAbortLikeError(error: unknown): boolean {
   return (
@@ -46,10 +51,30 @@ export function useCommandCenterState(language: 'zh' | 'en') {
     const projectedFeed = projectManagerSessionProjectionToCommandCenterFeed(projection);
     return projectedFeed.length > 0 ? projectedFeed : fallbackFeedItems;
   }, [fallbackFeedItems, projection]);
+  const homeLayout = React.useMemo(
+    () =>
+      deriveCommandCenterHomeLayout({
+        projection,
+        drafts: taskState.drafts,
+        language,
+      }),
+    [language, projection, taskState.drafts],
+  );
 
   const handleCommandTextChange = React.useCallback((value: string) => {
     setCommandText(value);
     setSubmitError(null);
+  }, []);
+
+  const scrollToElement = React.useCallback((elementId: string) => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    document.getElementById(elementId)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
   }, []);
 
   const applyActionResult = React.useCallback(
@@ -266,6 +291,39 @@ export function useCommandCenterState(language: 'zh' | 'en') {
     navigate('/settings');
   }, [navigate]);
 
+  const handleContinueAction = React.useCallback(
+    async (action: CommandCenterContinueAction) => {
+      if (action.type === 'activate_draft') {
+        await handleActivateDraft(action.draftId);
+        return;
+      }
+
+      if (action.type === 'focus_draft') {
+        scrollToElement(`automation-draft-${action.draftId}`);
+        return;
+      }
+
+      if (action.type === 'focus_run_status') {
+        scrollToElement('command-center-run-status');
+        return;
+      }
+
+      scrollToElement('command-center-conversation');
+    },
+    [handleActivateDraft, scrollToElement],
+  );
+
+  const handleSuggestionSelect = React.useCallback(
+    (chip: CommandCenterSuggestionChip) => {
+      handleCommandTextChange(chip.fillText);
+    },
+    [handleCommandTextChange],
+  );
+
+  const handleOpenConversation = React.useCallback(() => {
+    scrollToElement('command-center-conversation');
+  }, [scrollToElement]);
+
   const handleCancelRun = React.useCallback(async () => {
     const sessionId = projection?.session.id;
     if (!sessionId) {
@@ -314,11 +372,15 @@ export function useCommandCenterState(language: 'zh' | 'en') {
     projection,
     feedItems,
     drafts: taskState.drafts,
+    homeLayout,
     handleParseCommand,
     handleClarificationAnswer,
     handleActivateDraft,
     handleDeleteDraft,
     handleOpenSettings,
     handleCancelRun,
+    handleContinueAction,
+    handleSuggestionSelect,
+    handleOpenConversation,
   };
 }

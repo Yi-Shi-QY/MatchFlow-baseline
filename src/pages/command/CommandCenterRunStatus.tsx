@@ -102,6 +102,7 @@ export function CommandCenterRunStatus({
 
   return (
     <Card
+      id="command-center-run-status"
       className={`overflow-hidden rounded-[1.6rem] shadow-lg backdrop-blur-xl ${tone.shell}`}
     >
       <CardContent className="p-4">
