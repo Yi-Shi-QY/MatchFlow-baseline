@@ -378,9 +378,12 @@ export default function ExtensionsHub() {
           <Button variant="ghost" size="icon" onClick={() => navigate("/settings/diagnostics")} className="h-8 w-8 rounded-full bg-zinc-900 border border-white/10">
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-            <Package className="w-4 h-4 text-emerald-500" /> {t("extensions.title")}
-          </h1>
+          <div className="min-w-0">
+            <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
+              <Package className="w-4 h-4 text-emerald-500" /> {t("extensions.title")}
+            </h1>
+            <p className="mt-1 text-[11px] text-zinc-500">{t("extensions.subtitle")}</p>
+          </div>
         </div>
       </header>
 

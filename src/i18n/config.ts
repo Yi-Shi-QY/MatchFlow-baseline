@@ -64,6 +64,9 @@ i18n
   .init({
     resources: collectLocaleResources(),
     fallbackLng: 'en',
+    supportedLngs: ['en', 'zh'],
+    load: 'languageOnly',
+    returnNull: false,
     interpolation: {
       escapeValue: false
     }

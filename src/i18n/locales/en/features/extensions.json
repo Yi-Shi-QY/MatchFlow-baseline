@@ -1,9 +1,10 @@
 {
   "extensions": {
-    "title": "Extension Hub",
-    "hub_endpoint": "Hub Endpoint",
+    "title": "Extension Management",
+    "subtitle": "Install, update, and clean up extensions and domain packs, then sync recommended items when needed.",
+    "hub_endpoint": "Service URL",
     "not_configured": "Not configured",
-    "hub_hint": "Reuses Match Data Source server URL and API key by default. Configure them in Settings before installing extensions.",
+    "hub_hint": "Uses the data service URL and API key from Connections & Data. Configure them there before managing extensions.",
     "kind_agent": "Agent",
     "kind_skill": "Skill",
     "kind_template": "Template",

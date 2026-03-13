@@ -1,6 +1,10 @@
 {
   "home": {
     "welcome": "欢迎使用 MatchFlow",
+    "command_center": {
+      "title": "对话中心",
+      "subtitle": "对话是默认入口；继续协作、待确认事项和新输入都回到消息流中。"
+    },
     "start_analysis": "开始分析",
     "history": "历史记录",
     "saved_matches": "已保存赛事",

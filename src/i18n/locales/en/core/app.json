@@ -2,5 +2,43 @@
   "app": {
     "title": "MatchFlow",
     "subtitle": "AI-Powered Football Analysis"
+  },
+  "workspace": {
+    "nav": {
+      "chat": {
+        "title": "Conversation Center",
+        "hint": "Continue flows and start new input"
+      },
+      "tasks": {
+        "title": "Task Center",
+        "hint": "Waiting items, running work, and recent completions"
+      },
+      "sources": {
+        "title": "Analysis & Data",
+        "hint": "Analyzable objects and data readiness"
+      },
+      "history": {
+        "title": "History",
+        "hint": "Recent results and resumable topics"
+      },
+      "memory": {
+        "title": "Memory",
+        "hint": "Long-term context and daily summaries"
+      },
+      "settings": {
+        "title": "Settings",
+        "hint": "Preferences, connections, and system entry points"
+      }
+    },
+    "tasks": {
+      "title": "Task Center",
+      "subtitle": "Review waiting items, active work, scheduled tasks, and recent completions.",
+      "running_title": "Running",
+      "running_empty": "No tasks are currently running.",
+      "scheduled_title": "Scheduled",
+      "scheduled_empty": "No jobs or rules are scheduled yet.",
+      "completed_title": "Recent completions",
+      "completed_empty": "No recent completed tasks yet."
+    }
   }
 }

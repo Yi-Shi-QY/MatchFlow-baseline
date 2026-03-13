@@ -11,26 +11,16 @@ import { CommandCenterSummaryStrip } from '@/src/pages/command/CommandCenterSumm
 import { useCommandCenterState } from '@/src/pages/command/useCommandCenterState';
 
 export default function CommandCenter() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const language = i18n.language.startsWith('zh') ? 'zh' : 'en';
   const state = useCommandCenterState(language);
-  const copy =
-    language === 'zh'
-      ? {
-          title: '总管 Agent',
-          subtitle: '对话即入口，任务安排和待编辑卡片都回到消息流里。',
-        }
-      : {
-          title: 'Manager Agent',
-          subtitle: 'Chat is the primary entry. Task arrangement and editable cards stay inside the message flow.',
-        };
 
   return (
     <WorkspaceShell
       language={language}
       section="chat"
-      title={copy.title}
-      subtitle={copy.subtitle}
+      title={t('home.command_center.title')}
+      subtitle={t('home.command_center.subtitle')}
       hideHeader
       contentClassName="min-h-screen gap-4"
     >

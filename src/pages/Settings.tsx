@@ -11,7 +11,7 @@ import { useSettingsState } from '@/src/pages/settings/useSettingsState';
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const language = i18n.language.startsWith('zh') ? 'zh' : 'en';
   const state = useSettingsState();
   const model = React.useMemo(
@@ -23,18 +23,6 @@ export default function Settings() {
       }),
     [language, state.domainOptions, state.settings],
   );
-
-  const copy =
-    language === 'zh'
-      ? {
-          title: '设置',
-          subtitle: '设置项即时生效；这里负责通用偏好、执行策略、记忆策略与正式入口。',
-        }
-      : {
-          title: 'Settings',
-          subtitle:
-            'Settings apply immediately. Use this home for preferences, execution behavior, memory strategy, and formal product entry points.',
-        };
 
   const handleToggle = React.useCallback(
     (item: (typeof model.sectionItems)[keyof typeof model.sectionItems][number]) => {
@@ -60,8 +48,8 @@ export default function Settings() {
     <WorkspaceShell
       language={language}
       section="settings"
-      title={copy.title}
-      subtitle={copy.subtitle}
+      title={t('settings.workspace_title')}
+      subtitle={t('settings.workspace_subtitle')}
       headerActions={
         <Button variant="secondary" size="sm" className="rounded-2xl" onClick={() => navigate(-1)}>
           {model.primaryAction.label}

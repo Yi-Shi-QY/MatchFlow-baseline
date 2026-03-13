@@ -10,7 +10,7 @@ import { useAutomationTaskState } from '@/src/pages/automation/useAutomationTask
 
 export default function Automation() {
   const [searchParams] = useSearchParams();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const language = i18n.language.startsWith('zh') ? 'zh' : 'en';
   const state = useAutomationTaskState(language);
   const selectedDraftId = searchParams.get('draftId');
@@ -52,25 +52,12 @@ export default function Automation() {
     state.runs.length,
   ]);
 
-  const copy =
-    language === 'zh'
-      ? {
-          title: '任务中心',
-          subtitle:
-            '查看待我处理、执行中、已安排和最近完成的事项。重型诊断能力已移出主任务面。',
-        }
-      : {
-          title: 'Task Center',
-          subtitle:
-            'Review waiting items, active work, scheduled tasks, and recent completions. Heavy diagnostics are no longer on the primary surface.',
-        };
-
   return (
     <WorkspaceShell
       language={language}
       section="tasks"
-      title={copy.title}
-      subtitle={copy.subtitle}
+      title={t('workspace.tasks.title')}
+      subtitle={t('workspace.tasks.subtitle')}
     >
       <TaskCenterSummaryGrid metrics={state.taskCenterModel.summaryMetrics} />
 
@@ -83,16 +70,16 @@ export default function Automation() {
 
       <AutomationTaskList
         items={state.taskCenterModel.runningItems}
-        title={language === 'zh' ? '执行中' : 'Running'}
-        emptyText={language === 'zh' ? '当前没有执行中的任务。' : 'No tasks are currently running.'}
+        title={t('workspace.tasks.running_title')}
+        emptyText={t('workspace.tasks.running_empty')}
         selectedRunId={selectedRunId}
         onPrimaryAction={state.handleTaskCenterAction}
       />
 
       <AutomationTaskList
         items={state.taskCenterModel.scheduledItems}
-        title={language === 'zh' ? '已安排' : 'Scheduled'}
-        emptyText={language === 'zh' ? '当前没有已安排的任务或规则。' : 'No jobs or rules are scheduled yet.'}
+        title={t('workspace.tasks.scheduled_title')}
+        emptyText={t('workspace.tasks.scheduled_empty')}
         selectedRuleId={selectedRuleId}
         selectedJobId={selectedJobId}
         onPrimaryAction={state.handleTaskCenterAction}
@@ -100,8 +87,8 @@ export default function Automation() {
 
       <AutomationRunList
         items={state.taskCenterModel.completedItems}
-        title={language === 'zh' ? '最近完成' : 'Recent completions'}
-        emptyText={language === 'zh' ? '最近还没有已完成任务。' : 'No recent completed tasks yet.'}
+        title={t('workspace.tasks.completed_title')}
+        emptyText={t('workspace.tasks.completed_empty')}
         selectedRunId={selectedRunId}
         onPrimaryAction={state.handleTaskCenterAction}
       />

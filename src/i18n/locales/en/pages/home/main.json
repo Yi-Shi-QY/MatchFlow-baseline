@@ -1,6 +1,10 @@
 {
   "home": {
     "welcome": "Welcome to MatchFlow",
+    "command_center": {
+      "title": "Conversation Center",
+      "subtitle": "Conversation is the default workspace for ongoing collaboration, pending actions, and new input."
+    },
     "start_analysis": "Start Analysis",
     "history": "History",
     "saved_matches": "Saved Matches",
