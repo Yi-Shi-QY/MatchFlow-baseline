@@ -375,7 +375,7 @@ export default function ExtensionsHub() {
     <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col pb-[calc(5rem+env(safe-area-inset-bottom))]">
       <header className="sticky top-0 z-20 bg-black/80 backdrop-blur-md border-b border-white/10 px-4 pb-4 pt-[calc(1rem+env(safe-area-inset-top))] flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} className="h-8 w-8 rounded-full bg-zinc-900 border border-white/10">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/settings/diagnostics")} className="h-8 w-8 rounded-full bg-zinc-900 border border-white/10">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
