@@ -4,6 +4,12 @@
     "subtitle": "AI-Powered Football Analysis"
   },
   "workspace": {
+    "shell": {
+      "open_sidebar": "Open sidebar",
+      "close_sidebar": "Close sidebar",
+      "brand": "MatchFlow Workspace",
+      "mobile": "Mobile Workspace"
+    },
     "nav": {
       "chat": {
         "title": "Conversation Center",

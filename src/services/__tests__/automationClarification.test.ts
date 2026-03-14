@@ -32,4 +32,15 @@ describe('automation clarification', () => {
     expect(updated.executionPolicy.targetExpansion).toBe('all_matches');
     expect(updated.status).toBe('ready');
   });
+
+  it('builds recurring titles from target display text instead of leaking selector mode names', () => {
+    const [draft] = parseAutomationCommand('Every day 09:00 automatic analysis', {
+      defaultDomainId: 'football',
+      now: new Date('2026-03-11T09:00:00.000Z'),
+    });
+
+    const updated = applyClarificationAnswer(draft, 'Premier League all matches');
+
+    expect(updated.title).toBe('Premier League all matches @ 09:00');
+  });
 });

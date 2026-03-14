@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MOCK_MATCHES, Match } from '@/src/data/matches';
 import { MatchAnalysis } from '@/src/services/ai';
@@ -37,6 +37,7 @@ import { PromptPreviewPanel } from '@/src/pages/matchDetail/PromptPreviewPanel';
 import { AnalysisResultPanel } from '@/src/pages/matchDetail/AnalysisResultPanel';
 import type { SubjectDisplayMatch } from '@/src/services/subjectDisplayMatch';
 import type { EditableSubjectDataFormModel } from '@/src/pages/matchDetail/contracts';
+import { useWorkspaceNavigation } from '@/src/services/navigation/useWorkspaceNavigation';
 
 interface ExportSegmentOption {
   includeSegment: boolean;
@@ -53,7 +54,7 @@ export default function MatchDetail() {
       ? decodeURIComponent(params.subjectId)
       : '';
   const id = routeSubjectId;
-  const navigate = useNavigate();
+  const { navigate, goBack } = useWorkspaceNavigation();
   const { t, i18n } = useTranslation();
   const location = useLocation();
   const importedData = (location.state?.importedData ?? null) as EditableSubjectDataFormModel | null;
@@ -124,23 +125,24 @@ export default function MatchDetail() {
         (analysis) => analysis.subjectId === id && analysis.domainId === activeDomain.id,
       ) || activeAnalyses[id]
     : null;
-  const routeBuiltinCase = React.useMemo(() => {
+  const routeBuiltinCase = React.useMemo<SubjectDisplayMatch | null>(() => {
     if (!id || id === 'custom') return null;
-    return findBuiltinDomainLocalSubjectSnapshotById({
+    return findBuiltinDomainLocalSubjectSnapshotById<SubjectDisplayMatch>({
       domainId: activeDomain.id,
       subjectId: id,
     });
   }, [activeDomain.id, id]);
-  const match =
+  const match = (
     (importedData ? customMatch : null) ||
     (isCustom
       ? customMatch
-      : (routeActiveAnalysis?.match ||
+      : ((routeActiveAnalysis?.match as SubjectDisplayMatch | undefined) ||
         historyRecord?.subjectDisplay ||
         savedSubjectRecord?.subjectDisplay ||
         resumeSubjectDisplay ||
         routeBuiltinCase ||
-        MOCK_MATCHES.find(m => m.id === id)));
+        MOCK_MATCHES.find(m => m.id === id)))
+  ) as SubjectDisplayMatch | null;
 
   const activeAnalysis =
     routeActiveAnalysis ||
@@ -452,7 +454,12 @@ export default function MatchDetail() {
       {/* Mobile App Header */}
       <header className="sticky top-0 z-20 bg-black/80 backdrop-blur-md border-b border-white/10 px-4 pb-4 pt-[calc(1rem+env(safe-area-inset-top))] flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="h-8 w-8 rounded-full bg-zinc-900 border border-white/10">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => void goBack('/')}
+            className="h-8 w-8 rounded-full bg-zinc-900 border border-white/10"
+          >
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex flex-col">

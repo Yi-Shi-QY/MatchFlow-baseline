@@ -5,7 +5,7 @@ import type {
   FormFieldSchema,
   SourceSelection,
 } from '@/src/services/dataSources';
-import type { SubjectDisplayMatch } from '@/src/services/subjectDisplayMatch';
+import type { SubjectDisplay } from '@/src/services/subjectDisplay';
 import type { EditableSubjectDataFormModel } from './contracts';
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
@@ -15,7 +15,7 @@ interface UseEditableSourceFormArgs {
   editableData: string;
   setEditableData: React.Dispatch<React.SetStateAction<string>>;
   step: MatchStep;
-  subjectDisplay: SubjectDisplayMatch | undefined;
+  subjectDisplay: SubjectDisplay | undefined;
   importedData: EditableSubjectDataFormModel | null;
   activeDomain: AnalysisDomain;
   domainSourceCatalog: DataSourceDefinition[];

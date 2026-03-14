@@ -1,3 +1,3 @@
-import { MANAGER_BUILTIN_SKILL_ENTRIES } from '@/src/services/manager/toolRegistry';
+import { listRuntimeManagerBuiltinSkillEntries } from '@/src/services/manager/runtimeToolRegistry';
 
-export const BUILTIN_SKILL_ENTRIES = MANAGER_BUILTIN_SKILL_ENTRIES;
+export const BUILTIN_SKILL_ENTRIES = listRuntimeManagerBuiltinSkillEntries();

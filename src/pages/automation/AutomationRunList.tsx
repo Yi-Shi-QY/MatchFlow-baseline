@@ -8,7 +8,7 @@ interface AutomationRunListProps {
   title: string;
   emptyText: string;
   selectedRunId?: string | null;
-  onPrimaryAction: (action: TaskCenterAction) => void;
+  onAction: (action: TaskCenterAction) => void;
 }
 
 export function AutomationRunList({
@@ -16,7 +16,7 @@ export function AutomationRunList({
   title,
   emptyText,
   selectedRunId = null,
-  onPrimaryAction,
+  onAction,
 }: AutomationRunListProps) {
   return (
     <TaskCenterSection title={title} emptyText={emptyText} hasItems={items.length > 0}>
@@ -26,7 +26,7 @@ export function AutomationRunList({
             key={item.id}
             card={item}
             isSelected={item.target.type === 'run' && item.target.id === selectedRunId}
-            onPrimaryAction={onPrimaryAction}
+            onAction={onAction}
           />
         ))}
       </div>

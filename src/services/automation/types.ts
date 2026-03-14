@@ -54,8 +54,10 @@ export interface AutomationNotificationPolicy {
   notifyOnFailure: boolean;
 }
 
+export type AutomationExecutionTargetExpansion = 'single' | 'all_matches';
+
 export interface AutomationExecutionPolicy {
-  targetExpansion: 'single' | 'all_matches';
+  targetExpansion: AutomationExecutionTargetExpansion;
   recoveryWindowMinutes: number;
   maxRetries: number;
 }

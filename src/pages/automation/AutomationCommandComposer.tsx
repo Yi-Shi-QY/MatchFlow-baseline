@@ -2,6 +2,7 @@ import React from 'react';
 import { Send } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardContent } from '@/src/components/ui/Card';
+import { translateText } from '@/src/i18n/translate';
 import type { AutomationCommandComposerMode } from '@/src/services/automation';
 
 interface AutomationCommandComposerProps {
@@ -17,6 +18,10 @@ interface AutomationCommandComposerProps {
   onSubmit: () => void;
 }
 
+function tr(language: 'zh' | 'en', key: string, zh: string, en: string) {
+  return translateText(language, key, language === 'zh' ? zh : en);
+}
+
 export function AutomationCommandComposer({
   language,
   composerMode,
@@ -29,38 +34,39 @@ export function AutomationCommandComposer({
   onUseExample,
   onSubmit,
 }: AutomationCommandComposerProps) {
-  const copy =
-    language === 'zh'
-      ? {
-          title: '统一自然语言入口',
-          subtitle:
-            '一句话说目标和时间。系统会先理解这是立即分析还是自动化任务，再生成可确认的结构化草稿。',
-          placeholder:
-            '例如：现在分析皇马 vs 巴萨；今晚 20:00 分析皇马 vs 巴萨；每天 09:00 分析英超和西甲全部比赛',
-          actionSmart: '理解指令',
-          actionAnalyzeNow: '准备立即分析',
-          actionAutomation: '生成自动化草稿',
-          examples: '示例指令',
-          modeLabel: '模式',
-          smart: '智能',
-          analyzeNow: '立即分析',
-          automation: '自动化',
-        }
-      : {
-          title: 'Unified Natural Language Entry',
-          subtitle:
-            'Describe the target and timing in one sentence. MatchFlow will decide whether this should run now or become automation, then prepare structured drafts for confirmation.',
-          placeholder:
-            'Example: analyze Real Madrid vs Barcelona now; tonight at 20:00 analyze Real Madrid vs Barcelona',
-          actionSmart: 'Understand Command',
-          actionAnalyzeNow: 'Prepare Instant Run',
-          actionAutomation: 'Generate Automation Drafts',
-          examples: 'Examples',
-          modeLabel: 'Mode',
-          smart: 'Smart',
-          analyzeNow: 'Analyze Now',
-          automation: 'Automation',
-        };
+  const copy = {
+    title: tr(language, 'task_center.composer.title', '统一自然语言入口', 'Unified Natural Language Entry'),
+    subtitle: tr(
+      language,
+      'task_center.composer.subtitle',
+      '一句话描述目标和时间。系统会先判断这是立即分析还是自动化任务，再生成可确认的结构化草稿。',
+      'Describe the target and timing in one sentence. MatchFlow will decide whether this should run now or become automation, then prepare structured drafts for confirmation.',
+    ),
+    placeholder: tr(
+      language,
+      'task_center.composer.placeholder',
+      '例如：现在分析皇马 vs 巴萨；今晚 20:00 分析皇马 vs 巴萨；每天 09:00 分析英超和西甲全部比赛',
+      'Example: analyze Real Madrid vs Barcelona now; tonight at 20:00 analyze Real Madrid vs Barcelona',
+    ),
+    actionSmart: tr(language, 'task_center.composer.action_smart', '理解指令', 'Understand Command'),
+    actionAnalyzeNow: tr(
+      language,
+      'task_center.composer.action_analyze_now',
+      '准备立即分析',
+      'Prepare Instant Run',
+    ),
+    actionAutomation: tr(
+      language,
+      'task_center.composer.action_automation',
+      '生成自动化草稿',
+      'Generate Automation Drafts',
+    ),
+    examples: tr(language, 'task_center.composer.examples', '示例指令', 'Examples'),
+    modeLabel: tr(language, 'task_center.composer.mode_label', '模式', 'Mode'),
+    smart: tr(language, 'task_center.composer.smart', '智能', 'Smart'),
+    analyzeNow: tr(language, 'task_center.composer.analyze_now', '立即分析', 'Analyze Now'),
+    automation: tr(language, 'task_center.composer.automation', '自动化', 'Automation'),
+  };
 
   const actionLabel =
     composerMode === 'analyze_now'

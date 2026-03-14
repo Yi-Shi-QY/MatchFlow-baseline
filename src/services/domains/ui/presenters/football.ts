@@ -34,7 +34,7 @@ function resolveFootballLeague(subjectDisplay: DomainSubjectDisplay, draftData: 
 }
 
 export function resolveFootballStatusLabel(
-  status: SubjectDisplayStatus,
+  status: SubjectDisplayStatus | string | undefined,
   t: TranslateFn,
 ): string {
   if (status === "live") return t("home.live");

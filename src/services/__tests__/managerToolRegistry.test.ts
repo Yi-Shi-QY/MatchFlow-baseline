@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DomainEvent } from '@/src/domains/runtime/types';
 import { executeManagerQueryLocalMatches } from '@/src/services/manager/toolRegistry';
+import {
+  listRuntimeManagerBuiltinSkillEntries,
+  listRuntimeManagerToolIdsForDomain,
+  supportsRuntimeManagerTool,
+} from '@/src/services/manager/runtimeToolRegistry';
 
 const mocks = vi.hoisted(() => ({
   resolveDomainEventFeed: vi.fn(),
@@ -81,5 +86,24 @@ describe('manager tool registry', () => {
     });
 
     expect(result.agentText).toContain('found no');
+  });
+
+  it('derives available manager skills from runtime-pack registrations', () => {
+    expect(listRuntimeManagerBuiltinSkillEntries().map((entry) => entry.id)).toEqual([
+      'manager_query_local_matches',
+      'manager_describe_capability',
+      'manager_prepare_task_intake',
+      'manager_continue_task_intake',
+      'manager_help',
+    ]);
+    expect(listRuntimeManagerToolIdsForDomain('football')).toEqual([
+      'manager_query_local_matches',
+      'manager_describe_capability',
+      'manager_prepare_task_intake',
+      'manager_continue_task_intake',
+      'manager_help',
+    ]);
+    expect(supportsRuntimeManagerTool('football', 'manager_help')).toBe(true);
+    expect(supportsRuntimeManagerTool('football', 'manager_unknown')).toBe(false);
   });
 });

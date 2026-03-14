@@ -1,0 +1,46 @@
+{
+  "history_workspace": {
+    "page": {
+      "title": "历史",
+      "subtitle": "从这里回看最近完成的结果、恢复旧主题，或重新打开已保存的长期主题。",
+      "empty_completed": "最近还没有已完成的结果。",
+      "empty_resumable": "当前没有可恢复的历史主题。",
+      "empty_saved": "还没有已保存主题。"
+    },
+    "sections": {
+      "summary": "顶部轻量摘要",
+      "recent_completed": "最近完成",
+      "resumable_topics": "可继续内容",
+      "saved_topics": "已保存主题"
+    },
+    "summary_card": {
+      "title": "历史",
+      "description": "先看最近产出的结果，再决定是否恢复旧主题或打开已保存主题。",
+      "metrics": {
+        "completed": "最近完成",
+        "resumable": "可继续",
+        "saved": "已保存"
+      }
+    },
+    "match_status": {
+      "live": "进行中",
+      "finished": "已结束",
+      "upcoming": "待开始"
+    },
+    "meta": {
+      "completed": "完成时间",
+      "last_active": "上次停留",
+      "saved": "最近保存"
+    },
+    "actions": {
+      "view_result": "查看结果",
+      "continue_topic": "继续此主题",
+      "open_topic": "打开主题"
+    },
+    "defaults": {
+      "result_summary": "从这里重新打开结果详情，再决定是否继续跟进。",
+      "resume_reason": "这个主题仍然保留了可恢复的分析上下文。",
+      "saved_summary": "保留这个主题，之后可以直接重新打开继续查看。"
+    }
+  }
+}

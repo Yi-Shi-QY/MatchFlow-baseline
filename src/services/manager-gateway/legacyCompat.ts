@@ -1,11 +1,9 @@
 import type { SessionWorkflowStateSnapshot } from '@/src/domains/runtime/types';
-import {
-  FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE,
-} from '@/src/domains/runtime/football/tools';
 import type {
   ManagerConversationMessage,
   ManagerSessionSnapshot,
 } from '@/src/services/manager/types';
+import { parseRuntimeManagerPendingTask } from '@/src/services/manager/runtimeIntentRouter';
 import type {
   ManagerFeedBlock,
   ManagerMessageBlockType,
@@ -72,25 +70,14 @@ function projectFeedBlockToLegacyMessage(block: ManagerFeedBlock): ManagerConver
   };
 }
 
-function projectWorkflowToPendingTask(
+function projectWorkflowToPendingTask(input: {
+  domainId: string;
   workflow: SessionWorkflowStateSnapshot | null,
-): ManagerSessionSnapshot['pendingTask'] {
-  if (!workflow || workflow.workflowType !== FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE) {
-    return null;
-  }
-
-  const value = workflow.stateData;
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    typeof (value as Record<string, unknown>).id !== 'string' ||
-    typeof (value as Record<string, unknown>).sourceText !== 'string' ||
-    !Array.isArray((value as Record<string, unknown>).drafts)
-  ) {
-    return null;
-  }
-
-  return value as unknown as ManagerSessionSnapshot['pendingTask'];
+}): ManagerSessionSnapshot['pendingTask'] {
+  return parseRuntimeManagerPendingTask({
+    domainId: input.domainId,
+    workflow: input.workflow,
+  });
 }
 
 export function projectManagerSessionProjectionToLegacySnapshot(
@@ -102,6 +89,9 @@ export function projectManagerSessionProjectionToLegacySnapshot(
 
   return {
     messages,
-    pendingTask: projectWorkflowToPendingTask(projection.activeWorkflow),
+    pendingTask: projectWorkflowToPendingTask({
+      domainId: projection.runtimeDomainId || projection.session.domainId,
+      workflow: projection.activeWorkflow,
+    }),
   };
 }

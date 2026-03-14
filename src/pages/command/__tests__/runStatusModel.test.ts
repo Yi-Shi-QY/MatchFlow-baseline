@@ -71,8 +71,8 @@ describe('command center run status model', () => {
     expect(model).toMatchObject({
       state: 'running',
       badgeLabel: 'Running',
-      title: 'Manager is processing this turn',
-      actionLabel: 'Stop run',
+      title: 'Working on your latest request',
+      actionLabel: 'Stop request',
     });
     expect(model?.metrics).toEqual(
       expect.arrayContaining([
@@ -105,7 +105,8 @@ describe('command center run status model', () => {
     expect(model).toMatchObject({
       state: 'queued',
       badgeLabel: 'Queued',
-      actionLabel: 'Cancel queued turn',
+      title: 'Waiting for the previous step to finish',
+      actionLabel: 'Cancel pending request',
     });
   });
 
@@ -123,7 +124,7 @@ describe('command center run status model', () => {
     expect(model).toMatchObject({
       state: 'submitting',
       badgeLabel: 'Submitting',
-      title: 'Submitting this turn',
+      title: 'Starting your request',
     });
     expect(model?.metrics).toEqual(
       expect.arrayContaining([
@@ -150,50 +151,54 @@ describe('command center run status model', () => {
     expect(model).toMatchObject({
       state: 'failed',
       badgeLabel: 'Failed',
+      title: 'This request could not be started',
       description: 'Strict manager gateway turn requires an LLM planner.',
     });
   });
 
-  it('projects the latest persisted failed run when one exists', () => {
-    const model = projectManagerSessionProjectionToRunStatusModel({
-      projection: {
-        ...createProjection(),
-        activeRun: null,
-        latestRun: {
-          ...createProjection().latestRun!,
-          status: 'failed',
-          plannerMode: 'llm_assisted',
-          toolPath: 'workflow:task_intake',
-          errorCode: 'submit_failed',
-          errorMessage: 'Provider timeout',
+  it('hides historical failed runs from the standalone status strip', () => {
+    expect(
+      projectManagerSessionProjectionToRunStatusModel({
+        projection: {
+          ...createProjection(),
+          activeRun: null,
+          latestRun: {
+            ...createProjection().latestRun!,
+            status: 'failed',
+            plannerMode: 'llm_assisted',
+            toolPath: 'workflow:task_intake',
+            errorCode: 'submit_failed',
+            errorMessage: 'Provider timeout',
+          },
         },
-      },
-      isSubmitting: false,
-      submitError: null,
-      language: 'en',
-    });
-
-    expect(model).toMatchObject({
-      state: 'failed',
-      badgeLabel: 'Failed',
-      title: 'The most recent run failed',
-      description: 'Provider timeout',
-    });
-    expect(model?.metrics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'planner',
-          value: 'LLM',
-        }),
-        expect.objectContaining({
-          id: 'tool',
-          value: 'workflow:task_intake',
-        }),
-      ]),
-    );
+        isSubmitting: false,
+        submitError: null,
+        language: 'en',
+      }),
+    ).toBeNull();
   });
 
-  it('projects the latest cancelled run when one exists', () => {
+  it('hides historical cancelled runs from the standalone status strip', () => {
+    expect(
+      projectManagerSessionProjectionToRunStatusModel({
+        projection: {
+          ...createProjection(),
+          activeRun: null,
+          latestRun: {
+            ...createProjection().latestRun!,
+            status: 'cancelled',
+            errorCode: 'cancelled_by_user',
+            errorMessage: 'Cancelled before execution.',
+          },
+        },
+        isSubmitting: false,
+        submitError: null,
+        language: 'en',
+      }),
+    ).toBeNull();
+  });
+
+  it('still prefers a direct submit error for the current request', () => {
     const model = projectManagerSessionProjectionToRunStatusModel({
       projection: {
         ...createProjection(),
@@ -206,41 +211,14 @@ describe('command center run status model', () => {
         },
       },
       isSubmitting: false,
-      submitError: null,
+      submitError: 'Gateway rejected the request.',
       language: 'en',
     });
 
     expect(model).toMatchObject({
-      state: 'cancelled',
-      badgeLabel: 'Cancelled',
-      title: 'The most recent queued run was cancelled',
-      description: 'Cancelled before execution.',
-    });
-    expect(model?.actionLabel).toBeUndefined();
-  });
-
-  it('projects an interrupted run distinctly from a queued cancellation', () => {
-    const model = projectManagerSessionProjectionToRunStatusModel({
-      projection: {
-        ...createProjection(),
-        activeRun: null,
-        latestRun: {
-          ...createProjection().latestRun!,
-          status: 'cancelled',
-          errorCode: 'aborted_by_user',
-          errorMessage: 'Interrupted by user.',
-        },
-      },
-      isSubmitting: false,
-      submitError: null,
-      language: 'en',
-    });
-
-    expect(model).toMatchObject({
-      state: 'cancelled',
-      badgeLabel: 'Cancelled',
-      title: 'The most recent run was interrupted',
-      description: 'Interrupted by user.',
+      state: 'failed',
+      title: 'This request could not be started',
+      description: 'Gateway rejected the request.',
     });
   });
 

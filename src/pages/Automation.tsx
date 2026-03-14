@@ -65,7 +65,7 @@ export default function Automation() {
         language={language}
         items={state.taskCenterModel.waitingItems}
         selectedDraftId={selectedDraftId}
-        onPrimaryAction={state.handleTaskCenterAction}
+        onAction={state.handleTaskCenterAction}
       />
 
       <AutomationTaskList
@@ -73,7 +73,7 @@ export default function Automation() {
         title={t('workspace.tasks.running_title')}
         emptyText={t('workspace.tasks.running_empty')}
         selectedRunId={selectedRunId}
-        onPrimaryAction={state.handleTaskCenterAction}
+        onAction={state.handleTaskCenterAction}
       />
 
       <AutomationTaskList
@@ -82,7 +82,7 @@ export default function Automation() {
         emptyText={t('workspace.tasks.scheduled_empty')}
         selectedRuleId={selectedRuleId}
         selectedJobId={selectedJobId}
-        onPrimaryAction={state.handleTaskCenterAction}
+        onAction={state.handleTaskCenterAction}
       />
 
       <AutomationRunList
@@ -90,7 +90,7 @@ export default function Automation() {
         title={t('workspace.tasks.completed_title')}
         emptyText={t('workspace.tasks.completed_empty')}
         selectedRunId={selectedRunId}
-        onPrimaryAction={state.handleTaskCenterAction}
+        onAction={state.handleTaskCenterAction}
       />
     </WorkspaceShell>
   );

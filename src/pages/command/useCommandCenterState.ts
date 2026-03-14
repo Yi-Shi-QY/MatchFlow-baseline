@@ -12,7 +12,9 @@ import {
   syncGatewayBackedManagerConversationWithDrafts,
 } from '@/src/services/manager-gateway/compatActions';
 import type { ManagerSessionProjection } from '@/src/services/manager-gateway/types';
+import { buildManagerWorkspaceProjection } from '@/src/services/manager-workspace/projection';
 import { useAutomationTaskState } from '@/src/pages/automation/useAutomationTaskState';
+import { withWorkspaceBackContext } from '@/src/services/navigation/workspaceBackNavigation';
 import {
   createCommandCenterWelcomeFeed,
   projectManagerSessionProjectionToCommandCenterFeed,
@@ -30,6 +32,23 @@ function isAbortLikeError(error: unknown): boolean {
     'name' in error &&
     (error as { name?: string }).name === 'AbortError'
   );
+}
+
+export function shouldNavigateCommandCenterActionResult(
+  result: Pick<GatewayBackedManagerActionResult, 'navigation'>,
+  options?: {
+    navigateOnSuccess?: boolean;
+  },
+): boolean {
+  if (options?.navigateOnSuccess === false) {
+    return false;
+  }
+
+  if (options?.navigateOnSuccess === true) {
+    return Boolean(result.navigation);
+  }
+
+  return Boolean(result.navigation);
 }
 
 export function useCommandCenterState(language: 'zh' | 'en') {
@@ -51,14 +70,31 @@ export function useCommandCenterState(language: 'zh' | 'en') {
     const projectedFeed = projectManagerSessionProjectionToCommandCenterFeed(projection);
     return projectedFeed.length > 0 ? projectedFeed : fallbackFeedItems;
   }, [fallbackFeedItems, projection]);
+  const workspaceProjection = React.useMemo(
+    () =>
+      buildManagerWorkspaceProjection({
+        managerProjection: projection,
+        drafts: taskState.drafts,
+        jobs: taskState.jobs,
+        runs: taskState.runs,
+        executionTickets: taskState.executionTickets,
+        memoryCandidates: [],
+      }),
+    [
+      projection,
+      taskState.drafts,
+      taskState.executionTickets,
+      taskState.jobs,
+      taskState.runs,
+    ],
+  );
   const homeLayout = React.useMemo(
     () =>
       deriveCommandCenterHomeLayout({
-        projection,
-        drafts: taskState.drafts,
+        workspaceProjection,
         language,
       }),
-    [language, projection, taskState.drafts],
+    [language, workspaceProjection],
   );
 
   const handleCommandTextChange = React.useCallback((value: string) => {
@@ -92,9 +128,9 @@ export function useCommandCenterState(language: 'zh' | 'en') {
       if (result.shouldRefreshTaskState) {
         await taskState.refreshAll();
       }
-      if (options?.navigateOnSuccess && result.navigation) {
+      if (shouldNavigateCommandCenterActionResult(result, options) && result.navigation) {
         navigate(result.navigation.route, {
-          state: result.navigation.state,
+          state: withWorkspaceBackContext(result.navigation.state, '/'),
         });
       }
     },
@@ -154,13 +190,14 @@ export function useCommandCenterState(language: 'zh' | 'en') {
   }, [activeDomain.id, activeDomain.name, language, taskState.drafts]);
 
   React.useEffect(() => {
-    if (!isSubmitting && !projection?.activeRun) {
-      return;
-    }
-
     let cancelled = false;
     let isRefreshing = false;
+    const intervalMs = isSubmitting || projection?.activeRun ? 900 : 2500;
     const pollProjection = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+
       if (isRefreshing) {
         return;
       }
@@ -181,11 +218,23 @@ export function useCommandCenterState(language: 'zh' | 'en') {
     void pollProjection();
     const timerId = window.setInterval(() => {
       void pollProjection();
-    }, 900);
+    }, intervalMs);
+    const canObserveVisibility = typeof document !== 'undefined';
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void pollProjection();
+      }
+    };
+    if (canObserveVisibility) {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
 
     return () => {
       cancelled = true;
       window.clearInterval(timerId);
+      if (canObserveVisibility) {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
   }, [
     isSubmitting,
@@ -291,6 +340,15 @@ export function useCommandCenterState(language: 'zh' | 'en') {
     navigate('/settings');
   }, [navigate]);
 
+  const handleOpenAutomationEventRoute = React.useCallback(
+    (route: string) => {
+      navigate(route, {
+        state: withWorkspaceBackContext(undefined, '/'),
+      });
+    },
+    [navigate],
+  );
+
   const handleContinueAction = React.useCallback(
     async (action: CommandCenterContinueAction) => {
       if (action.type === 'activate_draft') {
@@ -372,12 +430,14 @@ export function useCommandCenterState(language: 'zh' | 'en') {
     projection,
     feedItems,
     drafts: taskState.drafts,
+    executionTickets: taskState.executionTickets,
     homeLayout,
     handleParseCommand,
     handleClarificationAnswer,
     handleActivateDraft,
     handleDeleteDraft,
     handleOpenSettings,
+    handleOpenAutomationEventRoute,
     handleCancelRun,
     handleContinueAction,
     handleSuggestionSelect,

@@ -1,4 +1,9 @@
-import { MANAGER_TOOL_IDS } from '@/src/services/manager/toolRegistry';
+import { getDefaultRuntimeDomainPack } from '@/src/domains/runtime/registry';
+import { resolveRuntimeManagerHelpText } from '@/src/services/manager/runtimeIntentRouter';
+import {
+  listRuntimeManagerToolIds,
+  listRuntimeManagerToolIdsForDomain,
+} from '@/src/services/manager/runtimeToolRegistry';
 import type { AgentConfig } from './types';
 
 function formatConversation(
@@ -50,12 +55,49 @@ function formatContextFragments(
     .join('\n\n');
 }
 
+function buildToolChoiceRules(activeDomainId: string, hasPendingTask: boolean): string {
+  const toolIds = new Set(listRuntimeManagerToolIdsForDomain(activeDomainId));
+  const rules: string[] = [];
+
+  if (toolIds.has('manager_query_local_matches')) {
+    rules.push(
+      'Use `manager_query_local_matches` for requests about today, tonight, tomorrow, live, or league-specific matches.',
+    );
+  }
+  if (toolIds.has('manager_describe_capability')) {
+    rules.push(
+      'Use `manager_describe_capability` when the user asks what factors are supported, what order analysis uses, or needs command guidance. Always pass the active domain id.',
+    );
+  }
+  if (toolIds.has('manager_prepare_task_intake')) {
+    rules.push(
+      'Use `manager_prepare_task_intake` when the user wants to analyze something now, later, or on a recurring schedule.',
+    );
+  }
+  if (hasPendingTask && toolIds.has('manager_continue_task_intake')) {
+    rules.push(
+      'If pending task intake state exists, use `manager_continue_task_intake` to process the latest answer.',
+    );
+  }
+  if (toolIds.has('manager_help')) {
+    rules.push(
+      'Use `manager_help` when the request is ambiguous or unsupported. Always pass the active domain id.',
+    );
+  }
+
+  rules.push('Never call more than one tool in a single turn.');
+  rules.push('After the tool result comes back, write the final reply in natural language.');
+  rules.push('If no tool is needed, answer directly and concisely.');
+
+  return rules.map((rule, index) => `${index + 1}. ${rule}`).join('\n');
+}
+
 export const managerCommandCenterAgent: AgentConfig = {
   id: 'manager_command_center',
   name: 'Manager Command Center',
   description:
     'Routes command-center requests to local tools for fixture lookup, task creation, and clarification.',
-  skills: [...MANAGER_TOOL_IDS],
+  skills: listRuntimeManagerToolIds(),
   systemPrompt: ({
     language,
     userInput,
@@ -67,9 +109,17 @@ export const managerCommandCenterAgent: AgentConfig = {
   }) => {
     const lang = language === 'zh' ? 'zh' : 'en';
     const latestInput = typeof userInput === 'string' ? userInput.trim() : '';
-    const activeDomainId = typeof domainId === 'string' && domainId.trim() ? domainId.trim() : 'football';
+    const activeDomainId =
+      typeof domainId === 'string' && domainId.trim()
+        ? domainId.trim()
+        : getDefaultRuntimeDomainPack().manifest.domainId;
     const activeDomainName =
       typeof domainName === 'string' && domainName.trim() ? domainName.trim() : activeDomainId;
+    const toolChoiceRules = buildToolChoiceRules(activeDomainId, Boolean(managerPendingTask));
+    const domainHelpText = resolveRuntimeManagerHelpText({
+      domainId: activeDomainId,
+      language: lang,
+    });
 
     return `
 You are the Manager Agent for a local-first mobile command center.
@@ -80,18 +130,13 @@ Language: ${lang}
 Active domain id: ${activeDomainId}
 Active domain name: ${activeDomainName}
 Pending task intake state: ${formatPendingTask(managerPendingTask)}
+Domain help text:
+${domainHelpText}
 Assembled context fragments:
 ${formatContextFragments(managerContextFragments)}
 
 TOOL CHOICE RULES:
-1. Use \`manager_query_local_matches\` for requests about today's, tonight's, tomorrow's, live, or league-specific matches.
-2. Use \`manager_describe_capability\` when the user asks what factors are supported, what order analysis uses, or needs command guidance.
-3. Use \`manager_prepare_task_intake\` when the user wants to analyze something now, later, or on a recurring schedule.
-4. If pending task intake state exists, use \`manager_continue_task_intake\` to process the latest answer.
-5. Use \`manager_help\` when the request is ambiguous or unsupported.
-6. Never call more than one tool in a single turn.
-7. After the tool result comes back, write the final reply in natural language.
-8. If no tool is needed, answer directly and concisely.
+${toolChoiceRules}
 
 RECENT CONVERSATION:
 ${formatConversation(conversationHistory)}

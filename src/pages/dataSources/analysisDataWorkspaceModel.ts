@@ -1,6 +1,7 @@
-import type { Match } from '@/src/data/matches';
+import { translateText } from '@/src/i18n/translate';
 import type { HistoryRecord } from '@/src/services/history';
 import type { SavedSubjectRecord } from '@/src/services/savedSubjects';
+import type { SubjectDisplay } from '@/src/services/subjectDisplay';
 
 type AnalysisDataSectionId =
   | 'status_summary'
@@ -33,12 +34,13 @@ export interface AnalysisObjectCardModel {
   subtitle: string;
   league: string;
   statusLabel: string;
-  subjectDisplay: Match;
+  subjectDisplay: SubjectDisplay;
   primaryAction: {
     label: string;
     route: string;
     state: {
-      importedData: Match;
+      importedData: SubjectDisplay;
+      subjectType: string;
     };
   };
 }
@@ -73,9 +75,19 @@ export interface AnalysisDataWorkspaceModel {
 interface SubjectCandidate {
   domainId: string;
   subjectId: string;
-  subjectDisplay: Match;
+  subjectDisplay: SubjectDisplay;
   sourcePriority: number;
   timestamp: number;
+}
+
+function tr(
+  language: 'zh' | 'en',
+  key: string,
+  zh: string,
+  en: string,
+  options: Record<string, unknown> = {},
+): string {
+  return translateText(language, key, language === 'zh' ? zh : en, options);
 }
 
 function buildSubjectKey(domainId: string, subjectId: string): string {
@@ -109,25 +121,35 @@ function formatDate(value: string, language: 'zh' | 'en'): string {
   });
 }
 
-function buildMatchTitle(match: Match): string {
-  return `${match.homeTeam.name} vs ${match.awayTeam.name}`;
-}
-
-function getStatusLabel(status: Match['status'], language: 'zh' | 'en'): string {
-  if (language === 'zh') {
-    if (status === 'live') return '进行中';
-    if (status === 'finished') return '已结束';
-    return '待开始';
+function buildSubjectTitle(subjectDisplay: SubjectDisplay): string {
+  if (typeof subjectDisplay.title === 'string' && subjectDisplay.title.trim().length > 0) {
+    return subjectDisplay.title.trim();
   }
 
-  if (status === 'live') return 'Live';
-  if (status === 'finished') return 'Finished';
-  return 'Upcoming';
+  if (subjectDisplay.homeTeam?.name && subjectDisplay.awayTeam?.name) {
+    return `${subjectDisplay.homeTeam.name} vs ${subjectDisplay.awayTeam.name}`;
+  }
+
+  return subjectDisplay.id;
+}
+
+function buildMatchTitle(subjectDisplay: SubjectDisplay): string {
+  return buildSubjectTitle(subjectDisplay);
+}
+
+function getStatusLabel(status: SubjectDisplay['status'], language: 'zh' | 'en'): string {
+  if (status === 'live') {
+    return tr(language, 'analysis_data.match_status.live', '进行中', 'Live');
+  }
+  if (status === 'finished') {
+    return tr(language, 'analysis_data.match_status.finished', '已结束', 'Finished');
+  }
+  return tr(language, 'analysis_data.match_status.upcoming', '待开始', 'Upcoming');
 }
 
 function collectSubjectCandidates(input: {
   activeDomainId: string;
-  liveSubjectDisplays: Match[];
+  liveSubjectDisplays: SubjectDisplay[];
   savedSubjects: SavedSubjectRecord[];
   recentHistory: HistoryRecord[];
 }): SubjectCandidate[] {
@@ -184,8 +206,7 @@ function collectSubjectCandidates(input: {
 }
 
 function buildRecentUpdates(input: {
-  activeDomainId: string;
-  liveSubjectDisplays: Match[];
+  liveSubjectDisplays: SubjectDisplay[];
   recentHistory: HistoryRecord[];
   language: 'zh' | 'en';
 }): RecentUpdateItemModel[] {
@@ -194,21 +215,34 @@ function buildRecentUpdates(input: {
   if (input.liveSubjectDisplays.length > 0) {
     updates.push({
       id: 'live_sync',
-      title:
-        input.language === 'zh'
-          ? `已同步 ${input.liveSubjectDisplays.length} 个可分析对象`
-          : `Synced ${input.liveSubjectDisplays.length} analyzable objects`,
+      title: tr(
+        input.language,
+        'analysis_data.recent.synced_objects',
+        '已同步 {{count}} 个可分析对象',
+        'Synced {{count}} analyzable objects',
+        { count: input.liveSubjectDisplays.length },
+      ),
       timestampLabel: formatDate(input.liveSubjectDisplays[0].date, input.language),
-      context: input.language === 'zh' ? '实时对象' : 'Live feed',
+      context: tr(
+        input.language,
+        'analysis_data.recent.live_feed',
+        '实时对象',
+        'Live feed',
+      ),
     });
   }
 
   input.recentHistory.slice(0, 3).forEach((record) => {
     updates.push({
       id: `history:${record.id}`,
-      title: buildMatchTitle(record.subjectDisplay),
+      title: buildSubjectTitle(record.subjectDisplay),
       timestampLabel: formatTimestamp(record.timestamp, input.language),
-      context: input.language === 'zh' ? '最近结果' : 'Recent result',
+      context: tr(
+        input.language,
+        'analysis_data.recent.recent_result',
+        '最近结果',
+        'Recent result',
+      ),
       route: `/subject/${record.domainId}/${record.subjectId}`,
     });
   });
@@ -218,7 +252,7 @@ function buildRecentUpdates(input: {
 
 export function deriveAnalysisDataWorkspaceModel(input: {
   activeDomainId: string;
-  liveSubjectDisplays: Match[];
+  liveSubjectDisplays: SubjectDisplay[];
   savedSubjects: SavedSubjectRecord[];
   recentHistory: HistoryRecord[];
   isRefreshing: boolean;
@@ -237,16 +271,17 @@ export function deriveAnalysisDataWorkspaceModel(input: {
     id: buildSubjectKey(candidate.domainId, candidate.subjectId),
     domainId: candidate.domainId,
     subjectId: candidate.subjectId,
-    title: buildMatchTitle(candidate.subjectDisplay),
+    title: buildSubjectTitle(candidate.subjectDisplay),
     subtitle: `${candidate.subjectDisplay.league} · ${formatDate(candidate.subjectDisplay.date, language)}`,
     league: candidate.subjectDisplay.league,
     statusLabel: getStatusLabel(candidate.subjectDisplay.status, language),
     subjectDisplay: candidate.subjectDisplay,
     primaryAction: {
-      label: language === 'zh' ? '进入分析' : 'Open analysis',
+      label: tr(language, 'analysis_data.object.open_analysis', '进入分析', 'Open analysis'),
       route: `/subject/${candidate.domainId}/${candidate.subjectId}`,
       state: {
         importedData: candidate.subjectDisplay,
+        subjectType: candidate.subjectDisplay.subjectType || 'match',
       },
     },
   }));
@@ -262,41 +297,53 @@ export function deriveAnalysisDataWorkspaceModel(input: {
     sections: [
       {
         id: 'status_summary',
-        title: language === 'zh' ? '顶部状态摘要' : 'Status summary',
+        title: tr(language, 'analysis_data.sections.status_summary', '顶部状态摘要', 'Status summary'),
       },
       {
         id: 'analyzable_objects',
-        title: language === 'zh' ? '当前可分析对象' : 'Analyzable objects',
+        title: tr(
+          language,
+          'analysis_data.sections.analyzable_objects',
+          '当前可分析对象',
+          'Analyzable objects',
+        ),
       },
       {
         id: 'data_availability',
-        title: language === 'zh' ? '数据可用性' : 'Data availability',
+        title: tr(
+          language,
+          'analysis_data.sections.data_availability',
+          '数据可用性',
+          'Data availability',
+        ),
       },
       {
         id: 'recent_updates',
-        title: language === 'zh' ? '最近更新' : 'Recent updates',
+        title: tr(language, 'analysis_data.sections.recent_updates', '最近更新', 'Recent updates'),
       },
     ],
     statusCard: {
-      title: language === 'zh' ? '分析与数据' : 'Analysis & Data',
-      description:
-        language === 'zh'
-          ? '先看可分析对象，再判断当前数据是否可用。'
-          : 'Check analyzable objects first, then confirm whether data is currently available.',
+      title: tr(language, 'analysis_data.status_card.title', '分析与数据', 'Analysis & Data'),
+      description: tr(
+        language,
+        'analysis_data.status_card.description',
+        '先看可分析对象，再确认当前数据是否可用。',
+        'Check analyzable objects first, then confirm whether data is currently available.',
+      ),
       metrics: [
         {
           id: 'objects',
-          label: language === 'zh' ? '可分析对象' : 'Objects',
+          label: tr(language, 'analysis_data.status_card.metrics.objects', '可分析对象', 'Objects'),
           value: objectCards.length,
         },
         {
           id: 'saved',
-          label: language === 'zh' ? '已保存主题' : 'Saved topics',
+          label: tr(language, 'analysis_data.status_card.metrics.saved', '已保存主题', 'Saved topics'),
           value: savedSubjects.length,
         },
         {
           id: 'recent',
-          label: language === 'zh' ? '最近结果' : 'Recent results',
+          label: tr(language, 'analysis_data.status_card.metrics.recent', '最近结果', 'Recent results'),
           value: recentHistory.length,
         },
       ],
@@ -304,42 +351,43 @@ export function deriveAnalysisDataWorkspaceModel(input: {
     objectCards,
     dataAvailabilityCard: {
       kind: 'summary',
-      title: language === 'zh' ? '数据可用性' : 'Data availability',
+      title: tr(language, 'analysis_data.availability.title', '数据可用性', 'Data availability'),
       statusLabel: refreshError
-        ? language === 'zh'
-          ? '需要处理'
-          : 'Needs attention'
+        ? tr(language, 'analysis_data.availability.needs_attention', '需要处理', 'Needs attention')
         : isRefreshing
-          ? language === 'zh'
-            ? '刷新中'
-            : 'Refreshing'
+          ? tr(language, 'analysis_data.availability.refreshing', '刷新中', 'Refreshing')
           : liveSubjectDisplays.length > 0
-            ? language === 'zh'
-              ? '数据可用'
-              : 'Data available'
-            : language === 'zh'
-              ? '暂无实时对象'
-              : 'No live objects',
+            ? tr(language, 'analysis_data.availability.data_available', '数据可用', 'Data available')
+            : tr(language, 'analysis_data.availability.no_live_objects', '暂无实时对象', 'No live objects'),
       description: refreshError
         ? refreshError
         : isRefreshing
-          ? language === 'zh'
-            ? '正在刷新可分析对象与数据状态。'
-            : 'Refreshing analyzable objects and data state.'
+          ? tr(
+              language,
+              'analysis_data.availability.refreshing_description',
+              '正在刷新可分析对象与数据状态。',
+              'Refreshing analyzable objects and data state.',
+            )
           : latestUpdateTimestamp > 0
-            ? language === 'zh'
-              ? `最近更新：${formatTimestamp(latestUpdateTimestamp, language)}`
-              : `Last updated: ${formatTimestamp(latestUpdateTimestamp, language)}`
-            : language === 'zh'
-              ? '还没有可用的数据更新时间。'
-              : 'No data update timestamp is available yet.',
+            ? tr(
+                language,
+                'analysis_data.availability.last_updated',
+                '最近更新：{{timestamp}}',
+                'Last updated: {{timestamp}}',
+                { timestamp: formatTimestamp(latestUpdateTimestamp, language) },
+              )
+            : tr(
+                language,
+                'analysis_data.availability.no_timestamp',
+                '还没有可用的数据更新时间。',
+                'No data update timestamp is available yet.',
+              ),
       primaryAction: {
-        label: language === 'zh' ? '查看详情' : 'View details',
+        label: tr(language, 'analysis_data.availability.view_details', '查看详情', 'View details'),
         route: '/settings/connections',
       },
     },
     recentUpdates: buildRecentUpdates({
-      activeDomainId,
       liveSubjectDisplays,
       recentHistory,
       language,

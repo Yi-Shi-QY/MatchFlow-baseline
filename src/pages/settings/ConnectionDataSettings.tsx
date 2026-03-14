@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { WorkspaceShell } from '@/src/components/layout/WorkspaceShell';
 import { Button } from '@/src/components/ui/Button';
@@ -8,6 +7,7 @@ import { testConnection } from '@/src/services/ai';
 import { useSettingsState } from '@/src/pages/settings/useSettingsState';
 import { ConnectionStatusCard } from '@/src/pages/settings/ConnectionStatusCard';
 import { deriveConnectionDataModel } from '@/src/pages/settings/connectionDataModel';
+import { useWorkspaceNavigation } from '@/src/services/navigation/useWorkspaceNavigation';
 
 function getCurrentProviderApiKey(settings: ReturnType<typeof useSettingsState>['settings']): string {
   if (settings.provider === 'gemini') {
@@ -40,15 +40,13 @@ async function testDataSourceConnection(input: {
 }
 
 export default function ConnectionDataSettings() {
-  const navigate = useNavigate();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const language = i18n.language.startsWith('zh') ? 'zh' : 'en';
+  const { goBack } = useWorkspaceNavigation();
   const state = useSettingsState();
   const [aiCheckState, setAiCheckState] = React.useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [dataCheckState, setDataCheckState] = React.useState<'idle' | 'testing' | 'success' | 'error'>('idle');
-  const [lastCheckedLabel, setLastCheckedLabel] = React.useState(
-    language === 'zh' ? '尚未检查' : 'Not checked yet',
-  );
+  const [lastCheckedLabel, setLastCheckedLabel] = React.useState<string | undefined>(undefined);
   const model = React.useMemo(
     () =>
       deriveConnectionDataModel({
@@ -59,26 +57,59 @@ export default function ConnectionDataSettings() {
     [language, lastCheckedLabel, state.settings],
   );
 
-  const copy =
-    language === 'zh'
-      ? {
-          title: '连接与数据',
-          subtitle: '当前版本直接修改 AI 与数据源配置，并在这里执行正式连接检查。',
-          aiApiKey: 'AI API Key',
-          model: 'Model',
-          baseUrl: 'Base URL',
-          serverUrl: '服务地址',
-          dataApiKey: '数据 API Key',
-        }
-      : {
-          title: 'Connections & Data',
-          subtitle: 'Edit AI and data-source settings directly in the current version and run formal connection checks here.',
-          aiApiKey: 'AI API Key',
-          model: 'Model',
-          baseUrl: 'Base URL',
-          serverUrl: 'Server URL',
-          dataApiKey: 'Data API Key',
-        };
+  const copy = {
+    title: t('settings_connections.page.title', {
+      defaultValue: language === 'zh' ? '连接与数据' : 'Connections & Data',
+    }),
+    subtitle: t('settings_connections.page.subtitle', {
+      defaultValue:
+        language === 'zh'
+          ? '当前版本直接修改 AI 与数据源配置，并在这里执行正式连接检查。'
+          : 'Edit AI and data-source settings directly in the current version and run formal connection checks here.',
+    }),
+    model: t('settings_connections.fields.model', {
+      defaultValue: 'Model',
+    }),
+    baseUrl: t('settings_connections.fields.base_url', {
+      defaultValue: 'Base URL',
+    }),
+    serverUrl: t('settings_connections.fields.server_url', {
+      defaultValue: language === 'zh' ? '服务地址' : 'Server URL',
+    }),
+    aiApiKey: t('settings_connections.fields.api_key', {
+      defaultValue: language === 'zh' ? 'AI API Key' : 'AI API Key',
+    }),
+    dataApiKey: t('settings_connections.fields.data_api_key', {
+      defaultValue: language === 'zh' ? '数据 API Key' : 'Data API Key',
+    }),
+    done: t('settings_home.primary_action', {
+      defaultValue: language === 'zh' ? '完成' : 'Done',
+    }),
+    aiPassed: t('settings_connections.checks.ai_passed', {
+      defaultValue: language === 'zh' ? 'AI 连接通过' : 'AI connection passed',
+    }),
+    aiFailed: t('settings_connections.checks.ai_failed', {
+      defaultValue: language === 'zh' ? 'AI 连接失败' : 'AI connection failed',
+    }),
+    aiNotChecked: t('settings_connections.checks.ai_not_checked', {
+      defaultValue:
+        language === 'zh'
+          ? '尚未执行 AI 检查'
+          : 'AI connection has not been checked yet',
+    }),
+    dataPassed: t('settings_connections.checks.data_passed', {
+      defaultValue: language === 'zh' ? '数据连接通过' : 'Data connection passed',
+    }),
+    dataFailed: t('settings_connections.checks.data_failed', {
+      defaultValue: language === 'zh' ? '数据连接失败' : 'Data connection failed',
+    }),
+    dataNotChecked: t('settings_connections.checks.data_not_checked', {
+      defaultValue:
+        language === 'zh'
+          ? '尚未执行数据检查'
+          : 'Data connection has not been checked yet',
+    }),
+  };
 
   const updateApiKey = React.useCallback(
     (value: string) => {
@@ -139,8 +170,13 @@ export default function ConnectionDataSettings() {
       title={copy.title}
       subtitle={copy.subtitle}
       headerActions={
-        <Button variant="secondary" size="sm" className="rounded-2xl" onClick={() => navigate(-1)}>
-          {language === 'zh' ? '完成' : 'Done'}
+        <Button
+          variant="secondary"
+          size="sm"
+          className="rounded-2xl"
+          onClick={() => void goBack('/settings')}
+        >
+          {copy.done}
         </Button>
       }
     >
@@ -203,16 +239,10 @@ export default function ConnectionDataSettings() {
 
             <div className="text-sm text-[var(--mf-text-muted)]">
               {aiCheckState === 'success'
-                ? language === 'zh'
-                  ? 'AI 连接通过'
-                  : 'AI connection passed'
+                ? copy.aiPassed
                 : aiCheckState === 'error'
-                  ? language === 'zh'
-                    ? 'AI 连接失败'
-                    : 'AI connection failed'
-                  : language === 'zh'
-                    ? '尚未执行 AI 检查'
-                    : 'AI connection has not been checked yet'}
+                  ? copy.aiFailed
+                  : copy.aiNotChecked}
             </div>
           </div>
         </div>
@@ -246,16 +276,10 @@ export default function ConnectionDataSettings() {
 
             <div className="text-sm text-[var(--mf-text-muted)]">
               {dataCheckState === 'success'
-                ? language === 'zh'
-                  ? '数据连接通过'
-                  : 'Data connection passed'
+                ? copy.dataPassed
                 : dataCheckState === 'error'
-                  ? language === 'zh'
-                    ? '数据连接失败'
-                    : 'Data connection failed'
-                  : language === 'zh'
-                    ? '尚未执行数据检查'
-                    : 'Data connection has not been checked yet'}
+                  ? copy.dataFailed
+                  : copy.dataNotChecked}
             </div>
           </div>
         </div>

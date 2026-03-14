@@ -4,26 +4,32 @@
     "subtitle": "AI 驱动的足球分析"
   },
   "workspace": {
+    "shell": {
+      "open_sidebar": "展开侧栏",
+      "close_sidebar": "收起侧栏",
+      "brand": "MatchFlow 工作区",
+      "mobile": "移动工作区"
+    },
     "nav": {
       "chat": {
         "title": "对话中心",
-        "hint": "继续协作与发起新输入"
+        "hint": "继续协作并发起新的输入"
       },
       "tasks": {
         "title": "任务中心",
-        "hint": "待我处理、执行中与最近完成"
+        "hint": "待处理、执行中和最近完成"
       },
       "sources": {
         "title": "分析与数据",
-        "hint": "可分析对象与数据状态"
+        "hint": "可分析对象和数据可用性"
       },
       "history": {
         "title": "历史",
-        "hint": "最近结果与可继续主题"
+        "hint": "最近结果和可继续的主题"
       },
       "memory": {
         "title": "记忆",
-        "hint": "长期上下文与每日摘要"
+        "hint": "长期上下文和每日摘要"
       },
       "settings": {
         "title": "设置",
@@ -32,7 +38,7 @@
     },
     "tasks": {
       "title": "任务中心",
-      "subtitle": "查看待我处理、执行中、已安排和最近完成的事项。",
+      "subtitle": "查看待处理、执行中、已安排和最近完成的事项。",
       "running_title": "执行中",
       "running_empty": "当前没有执行中的任务。",
       "scheduled_title": "已安排",

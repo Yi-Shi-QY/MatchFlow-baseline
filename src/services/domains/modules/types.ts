@@ -1,11 +1,11 @@
-import type { Match } from "@/src/data/matches";
+import type { SubjectDisplay } from "@/src/services/subjectDisplay";
 import type { DomainPlanningStrategy } from "../planning/types";
 import type { AnalysisDomain } from "../types";
 
 export interface BuiltinDomainModule {
   domain: AnalysisDomain;
   planningStrategy: DomainPlanningStrategy;
-  localSubjectSnapshots: Match[];
+  localSubjectSnapshots: SubjectDisplay[];
 }
 
 export type BuiltinDomainModuleFactory = (caseMinimum: number) => BuiltinDomainModule;

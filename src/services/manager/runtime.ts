@@ -9,9 +9,14 @@ import {
   saveAutomationDrafts,
 } from '@/src/services/automation/draftStore';
 import {
+  ensureExecutionTicketForDraft,
+  patchExecutionTicket,
+} from '@/src/services/manager-workspace/executionTicketStore';
+import {
   applyClarificationAnswer,
   getNextClarificationQuestion,
 } from '@/src/services/automation/clarification';
+import { DEFAULT_DOMAIN_ID } from '@/src/services/domains/builtinModules';
 import { createManagerSessionStore } from '@/src/services/manager-gateway/sessionStore';
 import { projectManagerSessionProjectionToLegacySnapshot } from '@/src/services/manager-gateway/legacyCompat';
 import { getManagerGateway } from '@/src/services/manager-gateway/service';
@@ -161,7 +166,7 @@ function getLatestDraftBundleIds(projection: ManagerSessionProjection): string[]
 function defaultMainSessionRef(): MainSessionRef {
   const settings = getSettings();
   return {
-    domainId: settings.activeDomainId || 'football',
+    domainId: settings.activeDomainId || DEFAULT_DOMAIN_ID,
   };
 }
 
@@ -238,6 +243,40 @@ function buildLegacySessionResult(
   };
 }
 
+function buildDraftActivationMessage(args: {
+  draft: {
+    title: string;
+    intentType: 'one_time' | 'recurring';
+    activationMode: 'save_only' | 'run_now';
+  };
+  activationKind: 'job' | 'rule';
+  language: ManagerLanguage;
+}): string {
+  const { draft, activationKind, language } = args;
+
+  if (language === 'zh') {
+    if (draft.activationMode === 'run_now' && activationKind === 'job') {
+      return `总管已确认“${draft.title}”，正式任务已拉起并开始执行。`;
+    }
+
+    if (activationKind === 'rule' || draft.intentType === 'recurring') {
+      return `总管已启用周期规则“${draft.title}”。`;
+    }
+
+    return `总管已安排定时任务“${draft.title}”。`;
+  }
+
+  if (draft.activationMode === 'run_now' && activationKind === 'job') {
+    return `The manager confirmed "${draft.title}" and started the formal task.`;
+  }
+
+  if (activationKind === 'rule' || draft.intentType === 'recurring') {
+    return `The manager enabled recurring rule "${draft.title}".`;
+  }
+
+  return `The manager scheduled "${draft.title}".`;
+}
+
 export async function submitManagerTurnProjectionResult(args: {
   input: string;
   language: ManagerLanguage;
@@ -259,6 +298,16 @@ export async function submitManagerTurnProjectionResult(args: {
 
   if (draftsToSave.length > 0) {
     await saveAutomationDrafts(draftsToSave);
+    await Promise.all(
+      draftsToSave
+        .filter((draft) => draft.status === 'ready')
+        .map((draft) =>
+          ensureExecutionTicketForDraft({
+            draft,
+            source: 'command_center',
+          }),
+        ),
+    );
   }
 
   return buildProjectionActionResult(result.projection, {
@@ -431,7 +480,11 @@ export async function submitManagerDraftActivationProjectionResult(args: {
     return buildProjectionActionResult(currentProjection);
   }
 
-  if (draft.activationMode === 'run_now') {
+  if (false && draft.activationMode === 'run_now') {
+    const ticket = await ensureExecutionTicketForDraft({
+      draft,
+      source: 'command_center',
+    });
     const result = await resolveImmediateAnalysisNavigation(draft, args.language);
     if (result.status !== 'ready' || !result.navigation) {
       const projection = await appendConversationMessages({
@@ -453,6 +506,12 @@ export async function submitManagerDraftActivationProjectionResult(args: {
       });
     }
 
+    await patchExecutionTicket({
+      ticketId: ticket.id,
+      patch: {
+        status: 'confirmed',
+      },
+    });
     await deleteAutomationDraft(args.draftId);
     const projection = await appendConversationMessages({
       session: args.session,
@@ -473,10 +532,42 @@ export async function submitManagerDraftActivationProjectionResult(args: {
     });
   }
 
-  await activateAutomationDraft(draft);
+  const ticket = await ensureExecutionTicketForDraft({
+    draft,
+    source: 'command_center',
+  });
+  const activationResult = await activateAutomationDraft(draft);
+  await patchExecutionTicket({
+    ticketId: ticket.id,
+    patch: {
+      status: 'confirmed',
+      jobId: activationResult.kind === 'job' ? activationResult.job.id : undefined,
+    },
+  });
   await deleteAutomationDraft(args.draftId);
   const { kickAutomationRuntime } = await import('@/src/services/automation/runtimeCoordinator');
   kickAutomationRuntime('draft_activated');
+
+  {
+    const projection = await appendConversationMessages({
+      session: args.session,
+      messages: [
+        createMessage(
+          'agent',
+          'text',
+          buildDraftActivationMessage({
+            draft,
+            activationKind: activationResult.kind,
+            language: args.language,
+          }),
+        ),
+      ],
+    });
+
+    return buildProjectionActionResult(projection, {
+      shouldRefreshTaskState: true,
+    });
+  }
 
   const projection = await appendConversationMessages({
     session: args.session,

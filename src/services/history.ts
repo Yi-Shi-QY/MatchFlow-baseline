@@ -3,6 +3,8 @@ import { AgentResult, parseAgentStream } from './agentParser';
 import { getDB, HISTORY_TABLE, RESUME_STATE_TABLE } from './db';
 import { Capacitor } from '@capacitor/core';
 import type { AnalysisOutputEnvelope } from './ai/contracts';
+import { DEFAULT_DOMAIN_ID as BUILTIN_DEFAULT_DOMAIN_ID } from './domains/builtinModules';
+import { getSettings } from './settings';
 import {
   coerceSubjectSnapshotToDisplayMatch,
   type SubjectDisplayMatch,
@@ -58,7 +60,7 @@ const RESUME_STATE_KEY = 'matchflow_resume_state_v4';
 const RESUME_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_RESUME_STATE_COUNT = 20;
 const MAX_HISTORY_RECORD_COUNT = 20;
-const DEFAULT_DOMAIN_ID = 'football';
+const DEFAULT_DOMAIN_ID = BUILTIN_DEFAULT_DOMAIN_ID;
 const DEFAULT_SUBJECT_TYPE = 'match';
 const SUBJECT_KEY_SEPARATOR = '::';
 export const ANALYSIS_OUTPUT_ENVELOPE_CODE_KEY = 'analysisOutputEnvelope';
@@ -122,10 +124,14 @@ function prefersNativeDB(): boolean {
   return Capacitor.isNativePlatform();
 }
 
-function normalizeDomainId(input: unknown): string {
-  if (typeof input !== 'string') return DEFAULT_DOMAIN_ID;
+function resolveConfiguredDomainId(): string {
+  return getSettings().activeDomainId || DEFAULT_DOMAIN_ID;
+}
+
+function normalizeDomainId(input: unknown, fallback: string = DEFAULT_DOMAIN_ID): string {
+  if (typeof input !== 'string') return fallback;
   const normalized = input.trim();
-  return normalized.length > 0 ? normalized : DEFAULT_DOMAIN_ID;
+  return normalized.length > 0 ? normalized : fallback;
 }
 
 function normalizeSubjectId(input: unknown, fallback: string): string {
@@ -157,7 +163,7 @@ function parseSubjectKey(input: string | null | undefined): { domainId: string; 
 }
 
 function buildSubjectRef(fallbackSubjectId: string, input?: SubjectRefInput): NormalizedSubjectRef {
-  const domainId = normalizeDomainId(input?.domainId);
+  const domainId = normalizeDomainId(input?.domainId, resolveConfiguredDomainId());
   const subjectId = normalizeSubjectId(input?.subjectId, fallbackSubjectId);
   const subjectType = normalizeSubjectType(input?.subjectType);
   return {

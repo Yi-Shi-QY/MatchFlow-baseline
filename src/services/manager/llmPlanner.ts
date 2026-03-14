@@ -1,25 +1,15 @@
 import { getAgent } from '@/src/agents';
-import { FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE, mapLegacyManagerEffectToRuntimeToolResult, parsePendingTaskFromWorkflow } from '@/src/domains/runtime/football/tools';
 import type { RuntimeToolExecutionResult } from '@/src/domains/runtime/types';
+import { resolveRuntimeModelRoute } from '@/src/services/ai/runtimeModel';
 import { streamAIRequest } from '@/src/services/ai/streamRequest';
 import { getSettings } from '@/src/services/settings';
 import type { ManagerGatewayLlmPlanner } from '@/src/services/manager-gateway/types';
+import {
+  mapRuntimeManagerEffect,
+  parseRuntimeManagerPendingTask,
+  runtimePackSupportsManagerLlm,
+} from './runtimeIntentRouter';
 import type { ManagerConversationEffect, ManagerLanguage } from './types';
-
-function canUseManagerLLM(): boolean {
-  const settings = getSettings();
-  if (settings.provider === 'gemini') {
-    return typeof settings.geminiApiKey === 'string' && settings.geminiApiKey.trim().length > 0;
-  }
-  if (settings.provider === 'deepseek') {
-    return typeof settings.deepseekApiKey === 'string' && settings.deepseekApiKey.trim().length > 0;
-  }
-  const baseUrl =
-    typeof settings.openaiCompatibleBaseUrl === 'string'
-      ? settings.openaiCompatibleBaseUrl.trim()
-      : '';
-  return baseUrl.length > 0;
-}
 
 function createAbortError(): Error & { name: string } {
   const error = new Error('Manager run aborted') as Error & { name: string };
@@ -92,6 +82,57 @@ function extractManagerAssistantReply(output: string): string {
     .trim();
 }
 
+function extractManagerError(output: string): string | null {
+  const matches = [...output.matchAll(/\[ERROR\]\s*([^\n]+)/g)];
+  const raw = matches.length > 0 ? matches[matches.length - 1][1] : null;
+  return raw && raw.trim().length > 0 ? raw.trim() : null;
+}
+
+function getManagerConnectionIssue(language: ManagerLanguage): string | null {
+  const settings = getSettings();
+  const route = resolveRuntimeModelRoute(settings, 'manager_command_center');
+
+  if (route.provider === 'gemini') {
+    const configuredApiKey =
+      typeof settings.geminiApiKey === 'string' ? settings.geminiApiKey.trim() : '';
+    const envApiKey =
+      typeof process !== 'undefined' && typeof process.env.GEMINI_API_KEY === 'string'
+        ? process.env.GEMINI_API_KEY.trim()
+        : '';
+    if (configuredApiKey.length > 0 || envApiKey.length > 0) {
+      return null;
+    }
+
+    return language === 'zh'
+      ? `当前对话正式分析实际使用 Gemini（${route.model}），但 Gemini API Key 尚未配置。`
+      : `Formal conversation analysis currently uses Gemini (${route.model}), but the Gemini API key is missing.`;
+  }
+
+  if (route.provider === 'deepseek') {
+    const configuredApiKey =
+      typeof settings.deepseekApiKey === 'string' ? settings.deepseekApiKey.trim() : '';
+    if (configuredApiKey.length > 0) {
+      return null;
+    }
+
+    return language === 'zh'
+      ? `当前对话正式分析实际使用 DeepSeek（${route.model}），但 DeepSeek API Key 尚未配置。`
+      : `Formal conversation analysis currently uses DeepSeek (${route.model}), but the DeepSeek API key is missing.`;
+  }
+
+  const baseUrl =
+    typeof settings.openaiCompatibleBaseUrl === 'string'
+      ? settings.openaiCompatibleBaseUrl.trim()
+      : '';
+  if (baseUrl.length > 0) {
+    return null;
+  }
+
+  return language === 'zh'
+    ? `当前对话正式分析实际使用 OpenAI Compatible（${route.model}），但 Base URL 尚未配置。`
+    : `Formal conversation analysis currently uses OpenAI Compatible (${route.model}), but the base URL is missing.`;
+}
+
 function buildAiSetupToolResult(language: ManagerLanguage, reason?: string): RuntimeToolExecutionResult {
   const suffix =
     typeof reason === 'string' && reason.trim().length > 0
@@ -102,8 +143,8 @@ function buildAiSetupToolResult(language: ManagerLanguage, reason?: string): Run
 
   const text =
     language === 'zh'
-      ? `当前主管 Agent 还没有可用的 AI 连接。请先到设置页补充 API Key，完成“测试 AI 连接”后再回来继续。${suffix}`
-      : `The manager agent does not have a usable AI connection yet. Open Settings, add the required API key, verify it with "Test AI Connection", and then come back here to continue.${suffix}`;
+      ? `当前主管 Agent 没有可用的 AI 连接。请到设置页检查当前生效的提供商、模型和 API Key 后重试。${suffix}`
+      : `The manager agent does not have a working AI connection. Open Settings, review the active provider, model, and API key, then try again.${suffix}`;
 
   return {
     blocks: [
@@ -129,7 +170,7 @@ function buildAiSetupToolResult(language: ManagerLanguage, reason?: string): Run
 export function createLegacyManagerGatewayLlmPlanner(): ManagerGatewayLlmPlanner {
   return {
     async planTurn(input) {
-      if (input.runtimePack.manifest.domainId !== 'football') {
+      if (!runtimePackSupportsManagerLlm({ runtimePack: input.runtimePack })) {
         return input.requireLlm
           ? {
               blocks: [
@@ -138,28 +179,32 @@ export function createLegacyManagerGatewayLlmPlanner(): ManagerGatewayLlmPlanner
                   role: 'assistant',
                   text:
                     input.language === 'zh'
-                      ? '当前域还没有接入 Gateway 的 AI 规划器。'
+                      ? '当前领域还没有接入 Gateway 的 AI 规划器。'
                       : 'This domain does not have a gateway AI planner yet.',
                 },
               ],
               diagnostics: {
                 feedbackMessage:
                   input.language === 'zh'
-                    ? '当前域还没有接入 Gateway 的 AI 规划器。'
+                    ? '当前领域还没有接入 Gateway 的 AI 规划器。'
                     : 'This domain does not have a gateway AI planner yet.',
               },
             }
           : null;
       }
 
-      if (!canUseManagerLLM()) {
-        return input.requireLlm ? buildAiSetupToolResult(input.language) : null;
+      const connectionIssue = getManagerConnectionIssue(input.language);
+      if (connectionIssue) {
+        return input.requireLlm ? buildAiSetupToolResult(input.language, connectionIssue) : null;
       }
 
       try {
         throwIfAborted(input.signal);
         const agent = getAgent('manager_command_center');
-        const pendingTask = parsePendingTaskFromWorkflow(input.projection.activeWorkflow);
+        const pendingTask = parseRuntimeManagerPendingTask({
+          runtimePack: input.runtimePack,
+          workflow: input.projection.activeWorkflow,
+        });
         const prompt = agent.systemPrompt({
           language: input.language,
           userInput: input.input,
@@ -200,12 +245,16 @@ export function createLegacyManagerGatewayLlmPlanner(): ManagerGatewayLlmPlanner
         throwIfAborted(input.signal);
         const assistantReply = extractManagerAssistantReply(output);
         const effect = parseManagerToolResult(output);
+        const streamError = extractManagerError(output);
 
         if (effect) {
-          return mapLegacyManagerEffectToRuntimeToolResult({
+          return mapRuntimeManagerEffect({
+            runtimePack: input.runtimePack,
+            effect: {
             ...effect,
             agentText: assistantReply || effect.agentText,
             feedbackMessage: effect.feedbackMessage || assistantReply || effect.agentText,
+            },
           });
         }
 
@@ -224,30 +273,18 @@ export function createLegacyManagerGatewayLlmPlanner(): ManagerGatewayLlmPlanner
           };
         }
 
-        return input.requireLlm
-          ? buildAiSetupToolResult(
-              input.language,
-              input.language === 'zh'
-                ? 'AI 规划未返回可执行结果'
-                : 'AI planning did not return an executable result',
-            )
-          : null;
+        if (streamError) {
+          return null;
+        }
+
+        return null;
       } catch (error) {
         if (isAbortError(error)) {
           throw error;
         }
         console.warn('Gateway manager LLM planning failed.', error);
-        return input.requireLlm
-          ? buildAiSetupToolResult(
-              input.language,
-              input.language === 'zh'
-                ? 'AI 连接尚未通过验证'
-                : 'AI connection is not verified yet',
-            )
-          : null;
+        return null;
       }
     },
   };
 }
-
-export { FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE };

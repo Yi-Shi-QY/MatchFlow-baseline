@@ -1,4 +1,5 @@
 import React from 'react';
+import { translateText } from '@/src/i18n/translate';
 import { TaskCenterActionCard } from './TaskCenterActionCard';
 import { TaskCenterSection } from './TaskCenterSection';
 import type { TaskCenterAction, TaskCenterCard } from './taskCenterModel';
@@ -7,25 +8,28 @@ interface AutomationDraftListProps {
   items: TaskCenterCard[];
   language: 'zh' | 'en';
   selectedDraftId?: string | null;
-  onPrimaryAction: (action: TaskCenterAction) => void;
+  onAction: (action: TaskCenterAction) => void;
+}
+
+function tr(language: 'zh' | 'en', key: string, zh: string, en: string) {
+  return translateText(language, key, language === 'zh' ? zh : en);
 }
 
 export function AutomationDraftList({
   items,
   language,
   selectedDraftId = null,
-  onPrimaryAction,
+  onAction,
 }: AutomationDraftListProps) {
-  const copy =
-    language === 'zh'
-      ? {
-          title: '待我处理',
-          empty: '当前没有需要你立即处理的事项。',
-        }
-      : {
-          title: 'Waiting',
-          empty: 'There is nothing that needs your action right now.',
-        };
+  const copy = {
+    title: tr(language, 'task_center.sections.waiting_title', '待我处理', 'Waiting'),
+    empty: tr(
+      language,
+      'task_center.sections.waiting_empty',
+      '当前没有需要你立即处理的事项。',
+      'There is nothing that needs your action right now.',
+    ),
+  };
 
   return (
     <TaskCenterSection title={copy.title} emptyText={copy.empty} hasItems={items.length > 0}>
@@ -35,7 +39,7 @@ export function AutomationDraftList({
             key={item.id}
             card={item}
             isSelected={item.target.type === 'draft' && item.target.id === selectedDraftId}
-            onPrimaryAction={onPrimaryAction}
+            onAction={onAction}
           />
         ))}
       </div>

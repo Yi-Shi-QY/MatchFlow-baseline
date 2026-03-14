@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { BookmarkCheck, History as HistoryIcon, RotateCcw } from 'lucide-react';
 import { WorkspaceShell } from '@/src/components/layout/WorkspaceShell';
@@ -9,33 +8,41 @@ import { HistoryResumeCard } from '@/src/pages/history/HistoryResumeCard';
 import { HistorySavedTopicCard } from '@/src/pages/history/HistorySavedTopicCard';
 import { HistorySummaryCard } from '@/src/pages/history/HistorySummaryCard';
 import { useHistoryWorkspaceState } from '@/src/pages/history/useHistoryWorkspaceState';
+import { useWorkspaceNavigation } from '@/src/services/navigation/useWorkspaceNavigation';
+import { withWorkspaceBackContext } from '@/src/services/navigation/workspaceBackNavigation';
 
 export default function History() {
-  const navigate = useNavigate();
-  const { i18n } = useTranslation();
+  const { openRoute } = useWorkspaceNavigation();
+  const { t, i18n } = useTranslation();
   const language = i18n.language.startsWith('zh') ? 'zh' : 'en';
   const state = useHistoryWorkspaceState(language);
   const sectionTitles = Object.fromEntries(
     state.model.sections.map((section) => [section.id, section.title]),
   ) as Record<string, string>;
 
-  const copy =
-    language === 'zh'
-      ? {
-          title: '历史',
-          subtitle: '从这里回看最近完成的结果、恢复旧主题，或重新打开已保存的长期主题。',
-          emptyCompleted: '最近还没有已完成的结果。',
-          emptyResumable: '当前没有可恢复的历史主题。',
-          emptySaved: '还没有已保存主题。',
-        }
-      : {
-          title: 'History',
-          subtitle:
-            'Review recent completed results, resume older topics, or reopen long-lived saved topics from here.',
-          emptyCompleted: 'No completed results yet.',
-          emptyResumable: 'No resumable topics are available right now.',
-          emptySaved: 'No saved topics yet.',
-        };
+  const copy = {
+    title: t('history_workspace.page.title', {
+      defaultValue: language === 'zh' ? '历史' : 'History',
+    }),
+    subtitle: t('history_workspace.page.subtitle', {
+      defaultValue:
+        language === 'zh'
+          ? '从这里回看最近完成的结果、恢复旧主题，或重新打开已保存的长期主题。'
+          : 'Review recent completed results, resume older topics, or reopen long-lived saved topics from here.',
+    }),
+    emptyCompleted: t('history_workspace.page.empty_completed', {
+      defaultValue: language === 'zh' ? '最近还没有已完成的结果。' : 'No completed results yet.',
+    }),
+    emptyResumable: t('history_workspace.page.empty_resumable', {
+      defaultValue:
+        language === 'zh'
+          ? '当前没有可恢复的历史主题。'
+          : 'No resumable topics are available right now.',
+    }),
+    emptySaved: t('history_workspace.page.empty_saved', {
+      defaultValue: language === 'zh' ? '还没有已保存主题。' : 'No saved topics yet.',
+    }),
+  };
 
   return (
     <WorkspaceShell
@@ -63,7 +70,11 @@ export default function History() {
               <HistoryResultCard
                 key={card.id}
                 model={card}
-                onOpen={(route, routeState) => navigate(route, { state: routeState })}
+                onOpen={(route, routeState) =>
+                  openRoute(route, {
+                    state: withWorkspaceBackContext(routeState, '/history'),
+                  })
+                }
               />
             ))}
           </div>
@@ -87,7 +98,11 @@ export default function History() {
               <HistoryResumeCard
                 key={card.id}
                 model={card}
-                onOpen={(route, routeState) => navigate(route, { state: routeState })}
+                onOpen={(route, routeState) =>
+                  openRoute(route, {
+                    state: withWorkspaceBackContext(routeState, '/history'),
+                  })
+                }
               />
             ))}
           </div>
@@ -111,7 +126,11 @@ export default function History() {
               <HistorySavedTopicCard
                 key={card.id}
                 model={card}
-                onOpen={(route, routeState) => navigate(route, { state: routeState })}
+                onOpen={(route, routeState) =>
+                  openRoute(route, {
+                    state: withWorkspaceBackContext(routeState, '/history'),
+                  })
+                }
               />
             ))}
           </div>

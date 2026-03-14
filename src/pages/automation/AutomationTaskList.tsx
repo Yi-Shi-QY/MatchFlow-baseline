@@ -10,7 +10,7 @@ interface AutomationTaskListProps {
   selectedRuleId?: string | null;
   selectedJobId?: string | null;
   selectedRunId?: string | null;
-  onPrimaryAction: (action: TaskCenterAction) => void;
+  onAction: (action: TaskCenterAction) => void;
 }
 
 export function AutomationTaskList({
@@ -20,7 +20,7 @@ export function AutomationTaskList({
   selectedRuleId = null,
   selectedJobId = null,
   selectedRunId = null,
-  onPrimaryAction,
+  onAction,
 }: AutomationTaskListProps) {
   return (
     <TaskCenterSection title={title} emptyText={emptyText} hasItems={items.length > 0}>
@@ -36,7 +36,7 @@ export function AutomationTaskList({
               key={item.id}
               card={item}
               isSelected={isSelected}
-              onPrimaryAction={onPrimaryAction}
+              onAction={onAction}
             />
           );
         })}

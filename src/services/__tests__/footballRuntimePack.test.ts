@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Match } from '@/src/data/matches';
 import type {
   DomainSourceAdapter,
   RuntimeSessionSnapshot,
@@ -9,7 +10,26 @@ import {
   FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE,
   parsePendingTaskFromWorkflow,
 } from '@/src/domains/runtime/football/tools';
+import type { AutomationJob } from '@/src/services/automation/types';
 import { queryFootballMatchesViaRuntimeAdapters } from '@/src/domains/runtime/football/sourceAdapters';
+
+const mocks = vi.hoisted(() => ({
+  resolveDomainEventFeed: vi.fn(),
+  getHistory: vi.fn(),
+  getSavedSubjects: vi.fn(),
+}));
+
+vi.mock('@/src/services/domainMatchFeed', () => ({
+  resolveDomainEventFeed: mocks.resolveDomainEventFeed,
+}));
+
+vi.mock('@/src/services/history', () => ({
+  getHistory: mocks.getHistory,
+}));
+
+vi.mock('@/src/services/savedSubjects', () => ({
+  getSavedSubjects: mocks.getSavedSubjects,
+}));
 
 function createAbortedSignal(): AbortSignal {
   const controller = new AbortController();
@@ -28,9 +48,95 @@ function createSession(): RuntimeSessionSnapshot {
   };
 }
 
+function createMatch(id: string, overrides: Partial<Match> = {}): Match {
+  return {
+    id,
+    league: 'Premier League',
+    date: '2026-03-12T12:00:00.000Z',
+    status: 'upcoming',
+    homeTeam: {
+      id: `${id}-home`,
+      name: `${id} Home`,
+      logo: '',
+      form: [],
+    },
+    awayTeam: {
+      id: `${id}-away`,
+      name: `${id} Away`,
+      logo: '',
+      form: [],
+    },
+    stats: {
+      possession: { home: 50, away: 50 },
+      shots: { home: 0, away: 0 },
+      shotsOnTarget: { home: 0, away: 0 },
+    },
+    ...overrides,
+  };
+}
+
+function createEvent(match: Match) {
+  return {
+    domainId: 'football',
+    eventType: 'match',
+    eventId: match.id,
+    title: `${match.homeTeam.name} vs ${match.awayTeam.name}`,
+    subjectRefs: [],
+    metadata: {
+      matchData: match,
+    },
+  };
+}
+
+function createJob(overrides: Partial<AutomationJob> = {}): AutomationJob {
+  return {
+    id: 'job-1',
+    title: 'Analyze Arsenal vs Manchester City',
+    sourceDraftId: 'draft-1',
+    sourceRuleId: undefined,
+    domainId: 'football',
+    domainPackVersion: undefined,
+    templateId: undefined,
+    triggerType: 'one_time',
+    targetSelector: {
+      mode: 'server_resolve',
+      queryText: 'Arsenal vs Manchester City',
+      displayLabel: 'Arsenal vs Manchester City',
+    },
+    targetSnapshot: undefined,
+    notificationPolicy: {
+      notifyOnClarification: true,
+      notifyOnStart: false,
+      notifyOnComplete: true,
+      notifyOnFailure: true,
+    },
+    analysisProfile: undefined,
+    scheduledFor: '2026-03-12T12:00:00.000Z',
+    state: 'pending',
+    retryCount: 0,
+    maxRetries: 2,
+    retryAfter: null,
+    recoveryWindowEndsAt: null,
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
 describe('football runtime pack', () => {
+  beforeEach(() => {
+    mocks.resolveDomainEventFeed.mockReset();
+    mocks.getHistory.mockReset();
+    mocks.getSavedSubjects.mockReset();
+
+    mocks.resolveDomainEventFeed.mockResolvedValue([]);
+    mocks.getHistory.mockResolvedValue([]);
+    mocks.getSavedSubjects.mockResolvedValue([]);
+  });
+
   it('exposes football source adapters for pack-level data access', async () => {
     expect(footballRuntimePack.sourceAdapters.length).toBeGreaterThan(0);
+    expect(footballRuntimePack.automation).toBeTruthy();
 
     const matches = await queryFootballMatchesViaRuntimeAdapters();
     expect(matches.length).toBeGreaterThan(0);
@@ -277,5 +383,117 @@ describe('football runtime pack', () => {
     ).rejects.toMatchObject({
       name: 'AbortError',
     });
+  });
+
+  it('resolves server_resolve automation targets against the football event feed', async () => {
+    const runtimeMatch = createMatch('runtime-arsenal-city', {
+      homeTeam: {
+        id: 'arsenal',
+        name: 'Arsenal',
+        logo: '',
+        form: [],
+      },
+      awayTeam: {
+        id: 'man-city',
+        name: 'Manchester City',
+        logo: '',
+        form: [],
+      },
+    });
+    mocks.resolveDomainEventFeed.mockResolvedValue([createEvent(runtimeMatch)]);
+
+    const targets = await footballRuntimePack.automation!.resolveJobTargets(createJob());
+
+    expect(mocks.resolveDomainEventFeed).toHaveBeenCalledWith(expect.objectContaining({
+      domainId: 'football',
+    }));
+    expect(targets).toHaveLength(1);
+    expect(targets[0]).toMatchObject({
+      domainId: 'football',
+      subjectId: runtimeMatch.id,
+      subjectType: 'match',
+      title: 'Arsenal vs Manchester City',
+      subjectDisplay: runtimeMatch,
+    });
+  });
+
+  it('expands league_query automation selectors through the football automation capability', async () => {
+    const premierA = createMatch('premier-a', { league: 'Premier League' });
+    const laLiga = createMatch('laliga-a', { league: 'La Liga' });
+    const premierB = createMatch('premier-b', { league: 'Premier League' });
+    mocks.resolveDomainEventFeed.mockResolvedValue([
+      createEvent(premierA),
+      createEvent(laLiga),
+      createEvent(premierB),
+    ]);
+
+    const targets = await footballRuntimePack.automation!.resolveJobTargets(createJob({
+      title: 'Analyze Premier League slate',
+      targetSelector: {
+        mode: 'league_query',
+        leagueKey: 'premier_league',
+        leagueLabel: 'Premier League',
+      },
+    }));
+
+    expect(targets.map((target) => target.subjectId)).toEqual([
+      'premier-a',
+      'premier-b',
+    ]);
+  });
+
+  it('resolves fixed_subject automation selectors from persisted history before saved subjects', async () => {
+    const historyMatch = createMatch('history-1');
+    const savedMatch = createMatch('saved-1');
+    mocks.getHistory.mockResolvedValue([
+      {
+        subjectDisplay: historyMatch,
+      },
+    ]);
+    mocks.getSavedSubjects.mockResolvedValue([
+      {
+        subjectDisplay: savedMatch,
+      },
+    ]);
+
+    const targets = await footballRuntimePack.automation!.resolveJobTargets(createJob({
+      targetSelector: {
+        mode: 'fixed_subject',
+        subjectId: 'history-1',
+        subjectLabel: 'History Match',
+      },
+    }));
+
+    expect(mocks.getHistory).toHaveBeenCalledWith({
+      domainId: 'football',
+      subjectId: 'history-1',
+    });
+    expect(mocks.getSavedSubjects).toHaveBeenCalledWith({
+      domainId: 'football',
+      subjectId: 'history-1',
+    });
+    expect(targets).toHaveLength(1);
+    expect(targets[0].subjectId).toBe('history-1');
+    expect(targets[0].subjectDisplay).toEqual(historyMatch);
+  });
+
+  it('creates a synthetic automation target when no concrete football target is available', async () => {
+    const target = await footballRuntimePack.automation!.createSyntheticTarget(createJob({
+      targetSelector: {
+        mode: 'server_resolve',
+        queryText: 'Real Madrid vs Barcelona',
+        displayLabel: 'Real Madrid vs Barcelona',
+      },
+    }));
+
+    expect(target).toMatchObject({
+      domainId: 'football',
+      subjectId: 'football_job-1',
+      subjectType: 'match',
+      title: 'Real Madrid vs Barcelona',
+    });
+    expect((target.subjectDisplay as Match & { customInfo?: unknown }).customInfo).toBe(
+      'Real Madrid vs Barcelona',
+    );
   });
 });

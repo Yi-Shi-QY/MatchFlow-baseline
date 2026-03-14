@@ -1,8 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE } from '@/src/domains/runtime/football/tools';
+import { PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE } from '@/src/domains/runtime/projectOps/tools';
 import type { ManagerSessionProjection } from '@/src/services/manager-gateway/types';
 import type { ManagerPendingTask } from '@/src/services/manager/types';
 import { projectManagerSessionProjectionToLegacySnapshot } from '@/src/services/manager-gateway/legacyCompat';
+
+const registryMocks = vi.hoisted(() => ({
+  getRuntimeDomainPackById: vi.fn(),
+  getDefaultRuntimeDomainPack: vi.fn(),
+}));
+
+vi.mock('@/src/domains/runtime/registry', () => {
+  return {
+    getRuntimeDomainPackById: (...args: unknown[]) => registryMocks.getRuntimeDomainPackById(...args),
+    getDefaultRuntimeDomainPack: (...args: unknown[]) =>
+      registryMocks.getDefaultRuntimeDomainPack(...args),
+  };
+});
 
 function createPendingTask(): ManagerPendingTask {
   return {
@@ -46,6 +60,39 @@ function createProjection(
 }
 
 describe('manager legacy compat', () => {
+  beforeEach(() => {
+    registryMocks.getRuntimeDomainPackById.mockReset();
+    registryMocks.getDefaultRuntimeDomainPack.mockReset();
+    registryMocks.getRuntimeDomainPackById.mockImplementation((domainId?: string | null) => {
+      if (domainId === 'football') {
+        return {
+          manifest: {
+            domainId: 'football',
+          },
+          manager: {
+            domainId: 'football',
+            skillIds: ['manager_continue_task_intake'],
+            parsePendingTask: (workflow: { workflowType?: string; stateData?: unknown } | null) =>
+              workflow?.workflowType === FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE
+                ? (workflow.stateData as Record<string, unknown>)
+                : null,
+          },
+        };
+      }
+      return null;
+    });
+    registryMocks.getDefaultRuntimeDomainPack.mockReturnValue({
+      manifest: {
+        domainId: 'football',
+      },
+      manager: {
+        domainId: 'football',
+        skillIds: ['manager_continue_task_intake'],
+        parsePendingTask: () => null,
+      },
+    });
+  });
+
   it('projects gateway feed blocks back into the legacy manager snapshot shape', () => {
     const pendingTask = createPendingTask();
     const snapshot = projectManagerSessionProjectionToLegacySnapshot(
@@ -117,5 +164,43 @@ describe('manager legacy compat', () => {
       kind: 'draft_bundle',
       draftIds: ['draft_1'],
     });
+  });
+
+  it('reads pending workflow state from the active runtime-domain capability', () => {
+    const pendingTask = createPendingTask();
+    registryMocks.getRuntimeDomainPackById.mockImplementation((domainId?: string | null) => {
+      if (domainId === 'project_ops') {
+        return {
+          manifest: {
+            domainId: 'project_ops',
+          },
+          manager: {
+            domainId: 'project_ops',
+            skillIds: ['manager_continue_task_intake'],
+            parsePendingTask: (workflow: { workflowType?: string; stateData?: unknown } | null) =>
+              workflow?.workflowType === PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE
+                ? (workflow.stateData as Record<string, unknown>)
+                : null,
+          },
+        };
+      }
+      return null;
+    });
+
+    const snapshot = projectManagerSessionProjectionToLegacySnapshot(
+      createProjection({
+        session: {
+          ...createProjection().session,
+          domainId: 'project_ops',
+        },
+        runtimeDomainId: 'project_ops',
+        activeWorkflow: {
+          workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+          stateData: pendingTask as unknown as Record<string, unknown>,
+        },
+      }),
+    );
+
+    expect(snapshot.pendingTask).toEqual(pendingTask);
   });
 });

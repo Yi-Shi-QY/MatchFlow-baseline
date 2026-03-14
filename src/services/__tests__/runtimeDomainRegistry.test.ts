@@ -43,6 +43,7 @@ describe('runtime domain registry', () => {
     expect(pack?.manifest.domainId).toBe('football');
     expect(pack?.manifest.supportedEventTypes).toContain('match');
     expect(pack?.sourceAdapters.length).toBeGreaterThan(1);
+    expect(pack?.automation).toBeTruthy();
     expect(pack?.queryCatalog).toMatchObject({
       eventListQueryType: 'football_match_list',
       matchListQueryType: 'football_match_list',

@@ -1,4 +1,3 @@
-import type { Match } from '@/src/data/matches';
 import {
   streamAgentThoughts,
   type MatchAnalysis,
@@ -21,6 +20,7 @@ import type {
   AnalysisOutputEnvelope,
   AnalysisRequestPayload,
 } from '@/src/services/ai/contracts';
+import { DEFAULT_DOMAIN_ID } from '@/src/services/domains/builtinModules';
 import { getSettings } from '@/src/services/settings';
 import {
   buildPlannerRuntimeState,
@@ -28,6 +28,8 @@ import {
   type PlannerRuntimeSource,
   type PlannerRuntimeState,
 } from '@/src/services/planner/runtime';
+import type { SubjectDisplay } from '@/src/services/subjectDisplay';
+import type { SubjectDisplayMatch } from '@/src/services/subjectDisplayMatch';
 import { buildAnalysisOutputEnvelope } from '@/src/services/ai/multimodalCompatibility';
 import {
   bootstrapResumeState,
@@ -45,8 +47,8 @@ const STREAM_UI_UPDATE_INTERVAL_MS = 80;
 export interface AnalysisExecutionSubjectRef extends AnalysisSubjectRef {}
 
 export interface ExecuteAnalysisRunArgs {
-  subjectDisplay?: Match;
-  match?: Match;
+  subjectDisplay?: SubjectDisplay;
+  match?: SubjectDisplay;
   subjectSnapshot?: unknown;
   dataToAnalyze: AnalysisRequestPayload;
   includeAnimations: boolean;
@@ -131,7 +133,7 @@ function createAbortError(): Error & { name: string } {
   return error;
 }
 
-function resolveExecutionSubjectDisplay(args: ExecuteAnalysisRunArgs): Match {
+function resolveExecutionSubjectDisplay(args: ExecuteAnalysisRunArgs): SubjectDisplay {
   const subjectDisplay = args.subjectDisplay ?? args.match;
   if (subjectDisplay) {
     return subjectDisplay;
@@ -141,7 +143,7 @@ function resolveExecutionSubjectDisplay(args: ExecuteAnalysisRunArgs): Match {
 }
 
 function resolveSubjectRef(
-  subjectDisplay: Match,
+  subjectDisplay: SubjectDisplay,
   dataToAnalyze: AnalysisRequestPayload,
   input?: Partial<AnalysisExecutionSubjectRef>,
 ): AnalysisExecutionSubjectRef {
@@ -154,7 +156,8 @@ function resolveSubjectRef(
     typeof input?.domainId === 'string' && input.domainId.trim().length > 0
       ? input.domainId.trim()
       : '';
-  const domainId = explicitDomainId || sourceContextDomainId || getSettings().activeDomainId || 'football';
+  const domainId =
+    explicitDomainId || sourceContextDomainId || getSettings().activeDomainId || DEFAULT_DOMAIN_ID;
   const subjectId =
     typeof input?.subjectId === 'string' && input.subjectId.trim().length > 0
       ? input.subjectId.trim()
@@ -347,7 +350,7 @@ export function stabilizeParsedStream(
 function createActiveAnalysisSnapshot(args: {
   subjectRef: AnalysisExecutionSubjectRef;
   subjectSnapshot: unknown;
-  subjectDisplay: Match;
+  subjectDisplay: SubjectDisplay;
   dataToAnalyze: AnalysisRequestPayload;
   includeAnimations: boolean;
   thoughts: string;
@@ -514,7 +517,10 @@ async function runSingleAnalysisAttempt(
       ? createResumeSnapshotPersister({
           subjectId: subjectRef.subjectId,
           subjectSnapshot: resolvedSubjectSnapshot,
-          subjectDisplayProjection: subjectDisplay,
+          subjectDisplayProjection:
+            subjectRef.subjectType === 'match'
+              ? (subjectDisplay as SubjectDisplayMatch)
+              : undefined,
           resumeOptions,
           ownerController: abortController,
           getCurrentController: getCurrentAbortController,
@@ -723,13 +729,17 @@ async function runSingleAnalysisAttempt(
         summary: finalParsed.summary,
       });
 
-      const finalSubjectDisplay: Match & { customInfo?: unknown } = { ...subjectDisplay };
+      const finalSubjectDisplay: SubjectDisplayMatch & { customInfo?: unknown } = {
+        ...(subjectDisplay as SubjectDisplayMatch),
+      };
       if (!finalSubjectDisplay.homeTeam.id) finalSubjectDisplay.homeTeam.id = 'home';
       if (!finalSubjectDisplay.awayTeam.id) finalSubjectDisplay.awayTeam.id = 'away';
       if (dataToAnalyze.homeTeam?.name) finalSubjectDisplay.homeTeam.name = dataToAnalyze.homeTeam.name;
       if (dataToAnalyze.awayTeam?.name) finalSubjectDisplay.awayTeam.name = dataToAnalyze.awayTeam.name;
       if (dataToAnalyze.league) finalSubjectDisplay.league = dataToAnalyze.league;
-      if (dataToAnalyze.odds) finalSubjectDisplay.odds = dataToAnalyze.odds as Match['odds'];
+      if (dataToAnalyze.odds) {
+        finalSubjectDisplay.odds = dataToAnalyze.odds as SubjectDisplay['odds'];
+      }
       if (dataToAnalyze.customInfo) finalSubjectDisplay.customInfo = dataToAnalyze.customInfo;
 
       const historyId = await saveHistory({

@@ -1,7 +1,18 @@
+import { translateText } from '@/src/i18n/translate';
 import type { AutomationSchedule } from './types';
 
 function padTimePart(value: number): string {
   return String(value).padStart(2, '0');
+}
+
+function tr(
+  language: 'zh' | 'en',
+  key: string,
+  zh: string,
+  en: string,
+  options: Record<string, unknown> = {},
+): string {
+  return translateText(language, key, language === 'zh' ? zh : en, options);
 }
 
 export function buildDailyTime(hour: number, minute: number): string {
@@ -115,18 +126,22 @@ export function formatAutomationSchedule(
   language: 'zh' | 'en',
 ): string {
   if (!schedule) {
-    return language === 'zh' ? '待补充时间' : 'Time needed';
+    return tr(language, 'task_center.schedule.time_needed', '待补充时间', 'Time needed');
   }
 
   if (schedule.type === 'daily') {
-    return language === 'zh'
-      ? `每日 ${schedule.time}`
-      : `Daily at ${schedule.time}`;
+    return tr(
+      language,
+      'task_center.schedule.daily',
+      '每日 {{time}}',
+      'Daily at {{time}}',
+      { time: schedule.time },
+    );
   }
 
   const runDate = new Date(schedule.runAt);
   if (Number.isNaN(runDate.getTime())) {
-    return language === 'zh' ? '时间无效' : 'Invalid time';
+    return tr(language, 'task_center.schedule.invalid', '时间无效', 'Invalid time');
   }
   return runDate.toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', {
     hour12: false,

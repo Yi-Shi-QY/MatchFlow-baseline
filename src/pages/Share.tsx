@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MOCK_MATCHES, type Match } from '@/src/data/matches';
 import { Card, CardContent } from '@/src/components/ui/Card';
@@ -11,6 +11,8 @@ import { decompressFromEncodedURIComponent } from 'lz-string';
 import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
 import { buildSubjectRoute } from '@/src/services/navigation/subjectRoute';
 import type { EditableSubjectDataFormModel } from '@/src/pages/matchDetail/contracts';
+import { useWorkspaceNavigation } from '@/src/services/navigation/useWorkspaceNavigation';
+import { withWorkspaceBackContext } from '@/src/services/navigation/workspaceBackNavigation';
 
 function resolveTeamLogo(input: string | undefined, fallback: string): string {
   return typeof input === 'string' && input.trim().length > 0 ? input : fallback;
@@ -98,7 +100,7 @@ function buildSharedSubjectPreview(data: EditableSubjectDataFormModel): Match {
 
 export default function Share() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const { navigate, goBack } = useWorkspaceNavigation();
   const { t } = useTranslation();
   const [importedData, setImportedData] = useState<EditableSubjectDataFormModel | null>(null);
   const [match, setMatch] = useState<Match | null>(null);
@@ -186,7 +188,12 @@ export default function Share() {
       subjectSnapshot: normalizedMatch,
     });
     navigate(buildSubjectRoute(activeDomainId, subjectId), {
-      state: { importedData: normalizedImportedData },
+      state: withWorkspaceBackContext(
+        {
+          importedData: normalizedImportedData,
+        },
+        '/',
+      ),
     });
   };
 
@@ -195,7 +202,7 @@ export default function Share() {
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
         <Card className="max-w-xs w-full text-center p-6 border-red-500/20 bg-red-500/5">
           <h2 className="text-lg font-bold text-red-400 mb-4">{t('share.invalid_link')}</h2>
-          <Button onClick={() => navigate('/')} size="sm">{t('share.return_home')}</Button>
+          <Button onClick={() => void goBack('/')} size="sm">{t('share.return_home')}</Button>
         </Card>
       </div>
     );
@@ -246,7 +253,7 @@ export default function Share() {
               <Button
                 variant="outline"
                 className="w-full gap-2 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                onClick={() => navigate('/')}
+                onClick={() => void goBack('/')}
                 size="sm"
               >
                 <ArrowLeft className="w-4 h-4" /> {t('share.return_home')}

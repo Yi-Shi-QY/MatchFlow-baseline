@@ -1,11 +1,18 @@
+import { translateText } from '@/src/i18n/translate';
 import {
   formatAutomationSchedule,
+  getAutomationTargetSelectorLabel,
   getNextClarificationQuestion,
   type AutomationDraft,
   type AutomationJob,
   type AutomationRule,
   type AutomationRun,
 } from '@/src/services/automation';
+import type { ExecutionTicket } from '@/src/services/manager-workspace/executionTicketTypes';
+import {
+  buildExecutionApprovalCardModel,
+  type ExecutionApprovalCardModel,
+} from '@/src/pages/command/ExecutionApprovalCard';
 
 export type TaskCenterSummaryMetricId = 'waiting' | 'running' | 'scheduled' | 'completed';
 export type TaskCenterCardKind =
@@ -19,6 +26,10 @@ export type TaskCenterCardKind =
 export type TaskCenterAction =
   | {
       type: 'activate_draft';
+      draftId: string;
+    }
+  | {
+      type: 'delete_draft';
       draftId: string;
     }
   | {
@@ -57,6 +68,8 @@ export interface TaskCenterCard {
   meta: string[];
   target: TaskCenterCardTarget;
   primaryAction: TaskCenterActionDescriptor;
+  secondaryAction?: TaskCenterActionDescriptor;
+  approval?: ExecutionApprovalCardModel;
 }
 
 export interface TaskCenterSummaryMetric {
@@ -71,6 +84,16 @@ export interface TaskCenterModel {
   runningItems: TaskCenterCard[];
   scheduledItems: TaskCenterCard[];
   completedItems: TaskCenterCard[];
+}
+
+function tr(
+  language: 'zh' | 'en',
+  key: string,
+  zh: string,
+  en: string,
+  options: Record<string, unknown> = {},
+): string {
+  return translateText(language, key, language === 'zh' ? zh : en, options);
 }
 
 function formatTimestamp(value: number | string | null | undefined, language: 'zh' | 'en'): string {
@@ -106,76 +129,82 @@ function parseComparableTime(value: number | string | null | undefined): number 
 }
 
 function getDraftTargetLabel(draft: AutomationDraft, language: 'zh' | 'en'): string {
-  if (!draft.targetSelector) {
-    return language === 'zh' ? '待补充目标' : 'Target needed';
-  }
-
-  if (draft.targetSelector.mode === 'fixed_subject') {
-    return draft.targetSelector.subjectLabel;
-  }
-
-  if (draft.targetSelector.mode === 'league_query') {
-    return draft.targetSelector.leagueLabel;
-  }
-
-  return draft.targetSelector.displayLabel;
+  return (
+    getAutomationTargetSelectorLabel(draft.targetSelector) ||
+    tr(language, 'task_center.cards.target_needed', '待补充目标', 'Target needed')
+  );
 }
 
 function getRuleTargetLabel(rule: AutomationRule): string {
-  if (rule.targetSelector.mode === 'fixed_subject') {
-    return rule.targetSelector.subjectLabel;
-  }
-  if (rule.targetSelector.mode === 'league_query') {
-    return rule.targetSelector.leagueLabel;
-  }
-  return rule.targetSelector.displayLabel;
+  return getAutomationTargetSelectorLabel(rule.targetSelector) || rule.title;
 }
 
 function getJobTargetLabel(job: AutomationJob): string {
-  if (job.targetSelector.mode === 'fixed_subject') {
-    return job.targetSelector.subjectLabel;
-  }
-  if (job.targetSelector.mode === 'league_query') {
-    return job.targetSelector.leagueLabel;
-  }
-  return job.targetSelector.displayLabel;
+  return getAutomationTargetSelectorLabel(job.targetSelector) || job.title;
 }
 
 function buildDraftDescription(draft: AutomationDraft, language: 'zh' | 'en'): string {
   const target = getDraftTargetLabel(draft, language);
   const schedule = formatAutomationSchedule(draft.schedule, language);
-  return language === 'zh' ? `${target} · ${schedule}` : `${target} · ${schedule}`;
+  return `${target} · ${schedule}`;
 }
 
 function buildApprovalCards(
   drafts: AutomationDraft[],
+  executionTickets: ExecutionTicket[],
   language: 'zh' | 'en',
 ): TaskCenterCard[] {
+  const ticketsByDraftId = new Map(
+    executionTickets
+      .filter((ticket) => typeof ticket.draftId === 'string' && ticket.draftId.trim().length > 0)
+      .map((ticket) => [ticket.draftId as string, ticket]),
+  );
+
   return drafts
     .filter((draft) => draft.status === 'ready')
-    .sort((left, right) => right.updatedAt - left.updatedAt)
-    .map((draft) => ({
-      id: `approval:${draft.id}`,
+    .sort((left, right) => {
+      const leftTicketUpdatedAt = ticketsByDraftId.get(left.id)?.updatedAt || 0;
+      const rightTicketUpdatedAt = ticketsByDraftId.get(right.id)?.updatedAt || 0;
+      return Math.max(right.updatedAt, rightTicketUpdatedAt) - Math.max(left.updatedAt, leftTicketUpdatedAt);
+    })
+    .map((draft) => {
+      const approval = buildExecutionApprovalCardModel({
+        draft,
+        ticket: ticketsByDraftId.get(draft.id) || null,
+        language,
+      });
+
+      return {
+      id: `approval:${approval.approvalId}`,
       kind: 'approval',
-      title: draft.title,
-      eyebrow: language === 'zh' ? '待确认执行' : 'Approval needed',
-      description: buildDraftDescription(draft, language),
+      title: approval.title,
+      eyebrow: tr(language, 'task_center.cards.approval.eyebrow', '待确认执行', 'Approval needed'),
+      description: approval.summary || buildDraftDescription(draft, language),
       meta: [
-        getDraftTargetLabel(draft, language),
-        formatAutomationSchedule(draft.schedule, language),
+        approval.targetValue,
+        approval.whenValue,
       ],
       target: {
         type: 'draft',
         id: draft.id,
       },
       primaryAction: {
-        label: language === 'zh' ? '确认执行' : 'Confirm run',
+        label: tr(language, 'task_center.cards.approval.action', '确认执行', 'Confirm run'),
         action: {
           type: 'activate_draft',
           draftId: draft.id,
         },
       },
-    }));
+      secondaryAction: {
+        label: approval.secondaryActionLabel,
+        action: {
+          type: 'delete_draft',
+          draftId: draft.id,
+        },
+      },
+      approval,
+    };
+    });
 }
 
 function buildClarificationCards(
@@ -189,19 +218,27 @@ function buildClarificationCards(
       id: `clarification:${draft.id}`,
       kind: 'clarification',
       title: draft.title,
-      eyebrow: language === 'zh' ? '待补充信息' : 'Needs clarification',
+      eyebrow: tr(
+        language,
+        'task_center.cards.clarification.eyebrow',
+        '待补充信息',
+        'Needs clarification',
+      ),
       description:
         getNextClarificationQuestion(draft, language)?.prompt ||
-        (language === 'zh'
-          ? '还缺少继续执行所需的关键信息。'
-          : 'Some required details are still missing before this can proceed.'),
+        tr(
+          language,
+          'task_center.cards.clarification.description_fallback',
+          '还缺少继续执行所需的关键信息。',
+          'Some required details are still missing before this can proceed.',
+        ),
       meta: [getDraftTargetLabel(draft, language)],
       target: {
         type: 'draft',
         id: draft.id,
       },
       primaryAction: {
-        label: language === 'zh' ? '继续补充' : 'Continue',
+        label: tr(language, 'task_center.cards.clarification.action', '继续补充', 'Continue'),
         action: {
           type: 'focus_draft',
           draftId: draft.id,
@@ -221,19 +258,22 @@ function buildRejectedDraftCards(
       id: `exception:draft:${draft.id}`,
       kind: 'exception',
       title: draft.title,
-      eyebrow: language === 'zh' ? '异常待处理' : 'Issue detected',
+      eyebrow: tr(language, 'task_center.cards.rejected.eyebrow', '异常待处理', 'Issue detected'),
       description:
         draft.rejectionReason ||
-        (language === 'zh'
-          ? '这条任务草稿当前无法继续执行。'
-          : 'This draft cannot proceed in its current form.'),
+        tr(
+          language,
+          'task_center.cards.rejected.description_fallback',
+          '这条任务草稿当前无法继续执行。',
+          'This draft cannot proceed in its current form.',
+        ),
       meta: [getDraftTargetLabel(draft, language)],
       target: {
         type: 'draft',
         id: draft.id,
       },
       primaryAction: {
-        label: language === 'zh' ? '处理异常' : 'Handle issue',
+        label: tr(language, 'task_center.cards.rejected.action', '处理异常', 'Handle issue'),
         action: {
           type: 'focus_draft',
           draftId: draft.id,
@@ -253,19 +293,22 @@ function buildFailedRunCards(
       id: `exception:run:${run.id}`,
       kind: 'exception',
       title: run.title,
-      eyebrow: language === 'zh' ? '异常待处理' : 'Issue detected',
+      eyebrow: tr(language, 'task_center.cards.failed.eyebrow', '异常待处理', 'Issue detected'),
       description:
         run.errorMessage ||
-        (language === 'zh'
-          ? '最近一次运行失败，需要回看详情。'
-          : 'The most recent run failed and needs review.'),
+        tr(
+          language,
+          'task_center.cards.failed.description_fallback',
+          '最近一次运行失败，需要回看详情。',
+          'The most recent run failed and needs review.',
+        ),
       meta: [formatTimestamp(run.updatedAt, language)],
       target: {
         type: 'run',
         id: run.id,
       },
       primaryAction: {
-        label: language === 'zh' ? '处理异常' : 'Handle issue',
+        label: tr(language, 'task_center.cards.failed.action', '处理异常', 'Handle issue'),
         action: {
           type: 'focus_run',
           runId: run.id,
@@ -285,18 +328,20 @@ function buildRunningCards(
       id: `running:${run.id}`,
       kind: 'running',
       title: run.title,
-      eyebrow: language === 'zh' ? '执行中' : 'Running',
-      description:
-        language === 'zh'
-          ? '任务已经开始执行，可回看最近进展。'
-          : 'This task is already running. Open it to review the latest progress.',
+      eyebrow: tr(language, 'task_center.cards.running.eyebrow', '执行中', 'Running'),
+      description: tr(
+        language,
+        'task_center.cards.running.description',
+        '任务已经开始执行，可以回看最近进展。',
+        'This task is already running. Open it to review the latest progress.',
+      ),
       meta: [formatTimestamp(run.updatedAt, language)],
       target: {
         type: 'run',
         id: run.id,
       },
       primaryAction: {
-        label: language === 'zh' ? '查看进展' : 'View progress',
+        label: tr(language, 'task_center.cards.running.action', '查看进展', 'View progress'),
         action: {
           type: 'focus_run',
           runId: run.id,
@@ -320,18 +365,25 @@ function buildScheduledRuleCards(
       id: `scheduled:rule:${rule.id}`,
       kind: 'scheduled',
       title: rule.title,
-      eyebrow: language === 'zh' ? '已安排规则' : 'Scheduled rule',
-      description:
-        language === 'zh'
-          ? `${getRuleTargetLabel(rule)} · ${formatAutomationSchedule(rule.schedule, language)}`
-          : `${getRuleTargetLabel(rule)} · ${formatAutomationSchedule(rule.schedule, language)}`,
+      eyebrow: tr(
+        language,
+        'task_center.cards.scheduled_rule.eyebrow',
+        '已安排规则',
+        'Scheduled rule',
+      ),
+      description: `${getRuleTargetLabel(rule)} · ${formatAutomationSchedule(rule.schedule, language)}`,
       meta: [formatTimestamp(rule.nextPlannedAt, language)],
       target: {
         type: 'rule',
         id: rule.id,
       },
       primaryAction: {
-        label: language === 'zh' ? '查看安排' : 'View schedule',
+        label: tr(
+          language,
+          'task_center.cards.scheduled_rule.action',
+          '查看安排',
+          'View schedule',
+        ),
         action: {
           type: 'focus_rule',
           ruleId: rule.id,
@@ -354,18 +406,25 @@ function buildScheduledJobCards(
       id: `scheduled:job:${job.id}`,
       kind: 'scheduled',
       title: job.title,
-      eyebrow: language === 'zh' ? '已安排任务' : 'Scheduled job',
-      description:
-        language === 'zh'
-          ? `${getJobTargetLabel(job)} · ${formatTimestamp(job.scheduledFor, language)}`
-          : `${getJobTargetLabel(job)} · ${formatTimestamp(job.scheduledFor, language)}`,
+      eyebrow: tr(
+        language,
+        'task_center.cards.scheduled_job.eyebrow',
+        '已安排任务',
+        'Scheduled job',
+      ),
+      description: `${getJobTargetLabel(job)} · ${formatTimestamp(job.scheduledFor, language)}`,
       meta: [getJobTargetLabel(job)],
       target: {
         type: 'job',
         id: job.id,
       },
       primaryAction: {
-        label: language === 'zh' ? '查看安排' : 'View schedule',
+        label: tr(
+          language,
+          'task_center.cards.scheduled_job.action',
+          '查看安排',
+          'View schedule',
+        ),
         action: {
           type: 'focus_job',
           jobId: job.id,
@@ -389,18 +448,20 @@ function buildCompletedCards(
       id: `completed:${run.id}`,
       kind: 'completed',
       title: run.title,
-      eyebrow: language === 'zh' ? '最近完成' : 'Recent result',
-      description:
-        language === 'zh'
-          ? '任务已完成，可查看结果回顾。'
-          : 'This task is complete. Open it to review the result.',
+      eyebrow: tr(language, 'task_center.cards.completed.eyebrow', '最近完成', 'Recent result'),
+      description: tr(
+        language,
+        'task_center.cards.completed.description',
+        '任务已经完成，可以查看结果回顾。',
+        'This task is complete. Open it to review the result.',
+      ),
       meta: [formatTimestamp(run.endedAt || run.updatedAt, language)],
       target: {
         type: 'run',
         id: run.id,
       },
       primaryAction: {
-        label: language === 'zh' ? '查看结果' : 'View result',
+        label: tr(language, 'task_center.cards.completed.action', '查看结果', 'View result'),
         action: {
           type: 'focus_run',
           runId: run.id,
@@ -427,11 +488,12 @@ export function deriveTaskCenterModel(input: {
   rules: AutomationRule[];
   jobs: AutomationJob[];
   runs: AutomationRun[];
+  executionTickets: ExecutionTicket[];
   language: 'zh' | 'en';
 }): TaskCenterModel {
-  const { drafts, rules, jobs, runs, language } = input;
+  const { drafts, rules, jobs, runs, executionTickets, language } = input;
   const waitingItems = [
-    ...buildApprovalCards(drafts, language),
+    ...buildApprovalCards(drafts, executionTickets, language),
     ...buildClarificationCards(drafts, language),
     ...buildRejectedDraftCards(drafts, language),
     ...buildFailedRunCards(runs, language),
@@ -447,22 +509,22 @@ export function deriveTaskCenterModel(input: {
     summaryMetrics: [
       {
         id: 'waiting',
-        label: language === 'zh' ? '待我处理' : 'Waiting',
+        label: tr(language, 'task_center.summary.waiting', '待我处理', 'Waiting'),
         value: waitingItems.length,
       },
       {
         id: 'running',
-        label: language === 'zh' ? '执行中' : 'Running',
+        label: tr(language, 'task_center.summary.running', '执行中', 'Running'),
         value: runningItems.length,
       },
       {
         id: 'scheduled',
-        label: language === 'zh' ? '已安排' : 'Scheduled',
+        label: tr(language, 'task_center.summary.scheduled', '已安排', 'Scheduled'),
         value: scheduledItems.length,
       },
       {
         id: 'completed',
-        label: language === 'zh' ? '最近完成' : 'Completed',
+        label: tr(language, 'task_center.summary.completed', '最近完成', 'Completed'),
         value: completedItems.length,
       },
     ],

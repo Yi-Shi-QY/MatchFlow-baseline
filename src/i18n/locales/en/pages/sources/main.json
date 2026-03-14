@@ -1,0 +1,51 @@
+{
+  "analysis_data": {
+    "page": {
+      "title": "Analysis & Data",
+      "subtitle": "Start with what can be analyzed right now, then confirm whether the data is available and recently updated.",
+      "empty_objects": "No analyzable objects are available right now.",
+      "empty_recent": "No recent sync or update events yet.",
+      "refresh": "Refresh",
+      "scan": "Scan"
+    },
+    "sections": {
+      "status_summary": "Status summary",
+      "analyzable_objects": "Analyzable objects",
+      "data_availability": "Data availability",
+      "recent_updates": "Recent updates"
+    },
+    "status_card": {
+      "title": "Analysis & Data",
+      "description": "Check analyzable objects first, then confirm whether data is currently available.",
+      "metrics": {
+        "objects": "Objects",
+        "saved": "Saved topics",
+        "recent": "Recent results"
+      }
+    },
+    "match_status": {
+      "live": "Live",
+      "finished": "Finished",
+      "upcoming": "Upcoming"
+    },
+    "object": {
+      "open_analysis": "Open analysis"
+    },
+    "recent": {
+      "synced_objects": "Synced {{count}} analyzable objects",
+      "live_feed": "Live feed",
+      "recent_result": "Recent result"
+    },
+    "availability": {
+      "title": "Data availability",
+      "needs_attention": "Needs attention",
+      "refreshing": "Refreshing",
+      "data_available": "Data available",
+      "no_live_objects": "No live objects",
+      "refreshing_description": "Refreshing analyzable objects and data state.",
+      "last_updated": "Last updated: {{timestamp}}",
+      "no_timestamp": "No data update timestamp is available yet.",
+      "view_details": "View details"
+    }
+  }
+}

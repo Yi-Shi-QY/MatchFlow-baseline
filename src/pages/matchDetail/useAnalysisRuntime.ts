@@ -1,5 +1,4 @@
 import React from 'react';
-import type { Match } from '@/src/data/matches';
 import type { ActiveAnalysis } from '@/src/contexts/AnalysisContext';
 import { buildAnalysisSubjectKey } from '@/src/contexts/analysis/types';
 import type { MatchAnalysis } from '@/src/services/ai';
@@ -7,6 +6,7 @@ import type { AgentResult } from '@/src/services/agentParser';
 import type { HistoryRecord } from '@/src/services/history';
 import type { PlannerRuntimeState } from '@/src/services/planner/runtime';
 import type { AnalysisRunMetrics } from '@/src/contexts/analysis/types';
+import type { SubjectDisplay } from '@/src/services/subjectDisplay';
 import {
   fetchSubjectAnalysisConfig,
   mergeServerPlanningIntoAnalysisPayload,
@@ -14,7 +14,7 @@ import {
 } from '@/src/services/analysisConfig';
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
-type AnalysisSubjectDisplay = Match;
+type AnalysisSubjectDisplay = SubjectDisplay;
 type ContextStartAnalysis = (
   subjectDisplay: AnalysisSubjectDisplay,
   dataToAnalyze: any,

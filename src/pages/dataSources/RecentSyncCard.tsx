@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RecentUpdateItemModel } from './analysisDataWorkspaceModel';
+import { withWorkspaceBackContext } from '@/src/services/navigation/workspaceBackNavigation';
 
 interface RecentSyncCardProps {
   items: RecentUpdateItemModel[];
@@ -32,7 +33,11 @@ export function RecentSyncCard({ items, emptyText }: RecentSyncCardProps) {
                 key={item.id}
                 type="button"
                 className="w-full rounded-[1.2rem] border border-[var(--mf-border)] bg-[var(--mf-surface-strong)] px-3 py-3 text-left"
-                onClick={() => navigate(item.route!)}
+                onClick={() =>
+                  navigate(item.route!, {
+                    state: withWorkspaceBackContext(undefined, '/sources'),
+                  })
+                }
               >
                 {content}
               </button>

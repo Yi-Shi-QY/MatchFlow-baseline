@@ -4,11 +4,26 @@ import { scheduleNativeAutomationSync } from './nativeScheduler';
 import { saveAutomationRule } from './ruleStore';
 import type { AutomationDraft, AutomationJob, AutomationRule } from './types';
 import { createAutomationId } from './utils';
+import { ensureAutomationExecutionSettingsForDraft } from './executionSettings';
 
-export async function activateAutomationDraft(draft: AutomationDraft): Promise<void> {
+export type AutomationDraftActivationResult =
+  | {
+      kind: 'rule';
+      rule: AutomationRule;
+    }
+  | {
+      kind: 'job';
+      job: AutomationJob;
+    };
+
+export async function activateAutomationDraft(
+  draft: AutomationDraft,
+): Promise<AutomationDraftActivationResult> {
   if (draft.status !== 'ready' || !draft.schedule || !draft.targetSelector) {
     throw new Error('Only ready drafts can be activated.');
   }
+
+  ensureAutomationExecutionSettingsForDraft(draft);
 
   const timestamp = Date.now();
 
@@ -33,7 +48,10 @@ export async function activateAutomationDraft(draft: AutomationDraft): Promise<v
     };
     await saveAutomationRule(rule);
     scheduleNativeAutomationSync('automation_rule_activated');
-    return;
+    return {
+      kind: 'rule',
+      rule,
+    };
   }
 
   if (draft.schedule.type !== 'one_time') {
@@ -67,4 +85,8 @@ export async function activateAutomationDraft(draft: AutomationDraft): Promise<v
   };
   await saveAutomationJob(job);
   scheduleNativeAutomationSync('automation_job_activated');
+  return {
+    kind: 'job',
+    job,
+  };
 }

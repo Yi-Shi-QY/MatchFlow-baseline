@@ -1,11 +1,16 @@
 import React from 'react';
 import { Button } from '@/src/components/ui/Button';
+import { translateText } from '@/src/i18n/translate';
 import type { CommandCenterSuggestionChip } from './homeLayoutModel';
 
 interface CommandCenterSuggestionBarProps {
   language: 'zh' | 'en';
   chips: CommandCenterSuggestionChip[];
   onSelect: (chip: CommandCenterSuggestionChip) => void;
+}
+
+function tr(language: 'zh' | 'en', key: string, zh: string, en: string) {
+  return translateText(language, key, language === 'zh' ? zh : en);
 }
 
 export function CommandCenterSuggestionBar({
@@ -20,7 +25,7 @@ export function CommandCenterSuggestionBar({
   return (
     <section className="space-y-2">
       <div className="text-[11px] uppercase tracking-[0.24em] text-[var(--mf-text-muted)]">
-        {language === 'zh' ? '建议操作' : 'Suggestions'}
+        {tr(language, 'command_center.sections.suggestions', '建议操作', 'Suggestions')}
       </div>
       <div className="flex flex-wrap gap-2">
         {chips.map((chip) => (

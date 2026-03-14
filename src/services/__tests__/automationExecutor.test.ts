@@ -5,16 +5,19 @@ import { executeAutomationJob } from '@/src/services/automation/executor';
 
 const mocks = vi.hoisted(() => ({
   saveAutomationJob: vi.fn(),
+  listAutomationJobs: vi.fn(),
   saveAutomationRun: vi.fn(),
   assembleAutomationJob: vi.fn(),
   executeAnalysisRun: vi.fn(),
   notifyAutomationRunStarted: vi.fn(),
   notifyAutomationRunCompleted: vi.fn(),
   notifyAutomationRunFailed: vi.fn(),
+  writeAutomationLifecycleToManagerConversation: vi.fn(),
 }));
 
 vi.mock('@/src/services/automation/jobStore', () => ({
   saveAutomationJob: mocks.saveAutomationJob,
+  listAutomationJobs: mocks.listAutomationJobs,
 }));
 
 vi.mock('@/src/services/automation/runStore', () => ({
@@ -29,6 +32,11 @@ vi.mock('@/src/services/automation/notifications', () => ({
   notifyAutomationRunStarted: mocks.notifyAutomationRunStarted,
   notifyAutomationRunCompleted: mocks.notifyAutomationRunCompleted,
   notifyAutomationRunFailed: mocks.notifyAutomationRunFailed,
+}));
+
+vi.mock('@/src/services/manager-workspace/automationWritebackBridge', () => ({
+  writeAutomationLifecycleToManagerConversation:
+    mocks.writeAutomationLifecycleToManagerConversation,
 }));
 
 vi.mock('@/src/services/automation/executionRuntime', async () => {
@@ -146,12 +154,15 @@ function createSnapshot(overrides: Partial<ActiveAnalysis> = {}): ActiveAnalysis
 describe('executeAutomationJob', () => {
   beforeEach(() => {
     mocks.saveAutomationJob.mockReset();
+    mocks.listAutomationJobs.mockReset();
     mocks.saveAutomationRun.mockReset();
     mocks.assembleAutomationJob.mockReset();
     mocks.executeAnalysisRun.mockReset();
     mocks.notifyAutomationRunStarted.mockReset();
     mocks.notifyAutomationRunCompleted.mockReset();
     mocks.notifyAutomationRunFailed.mockReset();
+    mocks.writeAutomationLifecycleToManagerConversation.mockReset();
+    mocks.listAutomationJobs.mockResolvedValue([]);
   });
 
   it('persists running and completed states for a successful automation job', async () => {
@@ -202,6 +213,16 @@ describe('executeAutomationJob', () => {
     expect(mocks.notifyAutomationRunStarted).not.toHaveBeenCalled();
     expect(mocks.notifyAutomationRunCompleted).toHaveBeenCalledTimes(1);
     expect(mocks.notifyAutomationRunFailed).not.toHaveBeenCalled();
+    expect(
+      mocks.writeAutomationLifecycleToManagerConversation.mock.calls.map(
+        (call) => call[0].phase,
+      ),
+    ).toEqual(['started', 'completed']);
+    expect(
+      mocks.writeAutomationLifecycleToManagerConversation.mock.calls.find(
+        (call) => call[0].phase === 'completed',
+      )?.[0].memoryCandidates || [],
+    ).toEqual([]);
 
     expect(onStateChange.mock.calls.map((call) => call[0].phase)).toEqual([
       'started',
@@ -301,6 +322,11 @@ describe('executeAutomationJob', () => {
     expect(lastSavedRun.errorMessage).toBe('Provider timeout');
     expect(mocks.notifyAutomationRunCompleted).not.toHaveBeenCalled();
     expect(mocks.notifyAutomationRunFailed).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.writeAutomationLifecycleToManagerConversation.mock.calls.map(
+        (call) => call[0].phase,
+      ),
+    ).toEqual(['started', 'failed']);
   });
 
   it('notifies when a run starts if the job policy enables start notifications', async () => {
@@ -344,5 +370,81 @@ describe('executeAutomationJob', () => {
     expect(mocks.notifyAutomationRunStarted).toHaveBeenCalledTimes(1);
     expect(mocks.notifyAutomationRunCompleted).not.toHaveBeenCalled();
     expect(mocks.notifyAutomationRunFailed).not.toHaveBeenCalled();
+  });
+
+  it('emits conservative memory candidates when a recurring automation reveals stable preferences', async () => {
+    const job = createJob({
+      id: 'job-schedule-1',
+      sourceRuleId: 'rule-1',
+      triggerType: 'schedule',
+      targetSelector: {
+        mode: 'league_query',
+        leagueKey: 'premier_league',
+        leagueLabel: 'Premier League',
+      },
+      analysisProfile: {
+        selectedSourceIds: ['market', 'custom'],
+        sequencePreference: ['market', 'fundamental', 'prediction'],
+      },
+      state: 'pending',
+    });
+    mocks.assembleAutomationJob.mockResolvedValue({
+      job,
+      targets: [
+        {
+          jobId: job.id,
+          domainId: 'football',
+          subjectId: 'm1',
+          subjectType: 'match',
+          title: 'Arsenal vs Manchester City',
+          match: createSnapshot().match,
+          dataToAnalyze: {},
+        },
+      ],
+      targetSnapshot: [
+        {
+          domainId: 'football',
+          subjectId: 'm1',
+          subjectType: 'match',
+          title: 'Arsenal vs Manchester City',
+        },
+      ],
+    });
+    mocks.executeAnalysisRun.mockResolvedValue({
+      status: 'completed',
+      snapshot: createSnapshot(),
+      historyId: 'football::m1',
+      errorMessage: null,
+    });
+    mocks.listAutomationJobs.mockResolvedValue([
+      createJob({
+        id: 'job-schedule-prev',
+        sourceRuleId: 'rule-1',
+        triggerType: 'schedule',
+        targetSelector: {
+          mode: 'league_query',
+          leagueKey: 'premier_league',
+          leagueLabel: 'Premier League',
+        },
+        analysisProfile: {
+          selectedSourceIds: ['market', 'custom'],
+          sequencePreference: ['market', 'fundamental', 'prediction'],
+        },
+        state: 'completed',
+      }),
+    ]);
+
+    await executeAutomationJob(job);
+
+    const completedCall = mocks.writeAutomationLifecycleToManagerConversation.mock.calls.find(
+      (call) => call[0].phase === 'completed',
+    )?.[0];
+
+    expect(Array.isArray(completedCall?.memoryCandidates)).toBe(true);
+    expect(completedCall.memoryCandidates.map((candidate: { keyText: string }) => candidate.keyText)).toEqual([
+      'analysis-factors',
+      'analysis-sequence',
+      'automation-league-focus-habit',
+    ]);
   });
 });

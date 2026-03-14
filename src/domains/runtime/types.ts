@@ -1,3 +1,5 @@
+import type { DomainAutomationCapability } from './automation';
+
 export type RuntimeIntentType = 'query' | 'analyze' | 'schedule' | 'explain' | 'clarify';
 export type RuntimeTargetType = 'event' | 'subject' | 'group' | 'timeline';
 export type RuntimeFeedBlockType =
@@ -10,6 +12,11 @@ export type RuntimeFeedBlockType =
   | 'error_notice'
   | 'context_notice';
 export type RuntimeMemoryScopeType = 'global' | 'domain' | 'session';
+
+export interface RuntimeLocalizedText {
+  zh?: string;
+  en?: string;
+}
 
 export interface SessionWorkflowStateSnapshot {
   workflowType: string;
@@ -159,6 +166,39 @@ export interface RuntimeToolExecutionResult {
   diagnostics?: Record<string, unknown>;
 }
 
+export interface RuntimeManagerLegacyEffectInput {
+  agentText: string;
+  messageKind: 'text' | 'draft_bundle';
+  draftIds?: string[];
+  action?: unknown;
+  draftsToSave?: Array<{ id: string }>;
+  pendingTask?: Record<string, unknown> | null;
+  shouldRefreshTaskState?: boolean;
+  feedbackMessage?: string;
+  navigation?: {
+    route: string;
+    state?: Record<string, unknown>;
+  };
+  memoryCandidates?: unknown[];
+}
+
+export interface RuntimeManagerCapability {
+  domainId: string;
+  skillIds: string[];
+  plannerHints?: {
+    helpText?: RuntimeLocalizedText;
+    factorsText?: RuntimeLocalizedText;
+    sequenceText?: RuntimeLocalizedText;
+    defaultWorkflowType?: string;
+  };
+  parsePendingTask?(
+    workflow: SessionWorkflowStateSnapshot | null | undefined,
+  ): Record<string, unknown> | null;
+  mapLegacyEffect?(
+    effect: RuntimeManagerLegacyEffectInput,
+  ): RuntimeToolExecutionResult;
+}
+
 export interface ToolEligibilityInput {
   input: string;
   language: 'zh' | 'en';
@@ -263,6 +303,8 @@ export interface DomainRuntimePack {
   manifest: DomainRuntimeManifest;
   resolver: DomainResolver;
   sourceAdapters: DomainSourceAdapter[];
+  automation?: DomainAutomationCapability;
+  manager?: RuntimeManagerCapability;
   contextProviders: DomainContextProvider[];
   tools: DomainToolDefinition[];
   workflows?: DomainWorkflowHandler[];

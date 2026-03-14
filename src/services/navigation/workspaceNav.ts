@@ -66,6 +66,10 @@ const PRIMARY_WORKSPACE_NAV: readonly WorkspaceNavItem[] = [
   },
 ] as const;
 
+const PRIMARY_WORKSPACE_ROUTE_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  '/tasks': ['/automation'],
+};
+
 const SETTINGS_CHILD_ROUTES = ['/settings/connections', '/settings/diagnostics'] as const;
 const SECONDARY_WORKSPACE_ROUTES = [...SETTINGS_CHILD_ROUTES, '/extensions'] as const;
 
@@ -94,7 +98,17 @@ export function getSettingsChildRoutes(): string[] {
 
 export function isPrimaryWorkspaceRoute(route: string): boolean {
   const normalizedRoute = normalizeRoutePath(route);
-  return PRIMARY_WORKSPACE_NAV.some((item) => normalizeRoutePath(item.route) === normalizedRoute);
+  return PRIMARY_WORKSPACE_NAV.some((item) => {
+    const normalizedItemRoute = normalizeRoutePath(item.route);
+    if (normalizedItemRoute === normalizedRoute) {
+      return true;
+    }
+
+    const aliases = PRIMARY_WORKSPACE_ROUTE_ALIASES[normalizedItemRoute];
+    return Array.isArray(aliases)
+      ? aliases.some((alias) => normalizeRoutePath(alias) === normalizedRoute)
+      : false;
+  });
 }
 
 export function isSettingsChildRoute(route: string): boolean {

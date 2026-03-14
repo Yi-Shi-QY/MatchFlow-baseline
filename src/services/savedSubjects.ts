@@ -1,6 +1,8 @@
 import { Capacitor } from '@capacitor/core';
 import { getDB, SAVED_SUBJECTS_TABLE } from './db';
+import { DEFAULT_DOMAIN_ID as BUILTIN_DEFAULT_DOMAIN_ID } from './domains/builtinModules';
 import type { SubjectRefInput } from './history';
+import { getSettings } from './settings';
 import {
   coerceSubjectSnapshotToDisplayMatch,
   type SubjectDisplayMatch,
@@ -8,7 +10,7 @@ import {
 
 const LOCAL_STORAGE_KEY = 'matchflow_saved_subjects_v4';
 const MAX_SAVED_SUBJECT_COUNT = 100;
-const DEFAULT_DOMAIN_ID = 'football';
+const DEFAULT_DOMAIN_ID = BUILTIN_DEFAULT_DOMAIN_ID;
 const DEFAULT_SUBJECT_TYPE = 'match';
 const SUBJECT_KEY_SEPARATOR = '::';
 
@@ -39,10 +41,14 @@ function prefersNativeDB(): boolean {
   return Capacitor.isNativePlatform();
 }
 
-function normalizeDomainId(input: unknown): string {
-  if (typeof input !== 'string') return DEFAULT_DOMAIN_ID;
+function resolveConfiguredDomainId(): string {
+  return getSettings().activeDomainId || DEFAULT_DOMAIN_ID;
+}
+
+function normalizeDomainId(input: unknown, fallback: string = DEFAULT_DOMAIN_ID): string {
+  if (typeof input !== 'string') return fallback;
   const normalized = input.trim();
-  return normalized.length > 0 ? normalized : DEFAULT_DOMAIN_ID;
+  return normalized.length > 0 ? normalized : fallback;
 }
 
 function normalizeSubjectId(input: unknown, fallback: string): string {
@@ -72,7 +78,7 @@ function parseSubjectKey(input: string | null | undefined): { domainId: string; 
 }
 
 function buildSubjectRef(fallbackSubjectId: string, input?: SubjectRefInput): NormalizedSubjectRef {
-  const domainId = normalizeDomainId(input?.domainId);
+  const domainId = normalizeDomainId(input?.domainId, resolveConfiguredDomainId());
   const subjectId = normalizeSubjectId(input?.subjectId, fallbackSubjectId);
   const subjectType = normalizeSubjectType(input?.subjectType);
   return {

@@ -1,0 +1,51 @@
+{
+  "analysis_data": {
+    "page": {
+      "title": "分析与数据",
+      "subtitle": "先确认现在能分析什么，再快速判断数据是否可用以及最近是否更新。",
+      "empty_objects": "当前还没有可进入分析的对象。",
+      "empty_recent": "最近还没有同步或更新记录。",
+      "refresh": "刷新",
+      "scan": "扫描"
+    },
+    "sections": {
+      "status_summary": "顶部状态摘要",
+      "analyzable_objects": "当前可分析对象",
+      "data_availability": "数据可用性",
+      "recent_updates": "最近更新"
+    },
+    "status_card": {
+      "title": "分析与数据",
+      "description": "先看可分析对象，再确认当前数据是否可用。",
+      "metrics": {
+        "objects": "可分析对象",
+        "saved": "已保存主题",
+        "recent": "最近结果"
+      }
+    },
+    "match_status": {
+      "live": "进行中",
+      "finished": "已结束",
+      "upcoming": "待开始"
+    },
+    "object": {
+      "open_analysis": "进入分析"
+    },
+    "recent": {
+      "synced_objects": "已同步 {{count}} 个可分析对象",
+      "live_feed": "实时对象",
+      "recent_result": "最近结果"
+    },
+    "availability": {
+      "title": "数据可用性",
+      "needs_attention": "需要处理",
+      "refreshing": "刷新中",
+      "data_available": "数据可用",
+      "no_live_objects": "暂无实时对象",
+      "refreshing_description": "正在刷新可分析对象与数据状态。",
+      "last_updated": "最近更新：{{timestamp}}",
+      "no_timestamp": "还没有可用的数据更新时间。",
+      "view_details": "查看详情"
+    }
+  }
+}

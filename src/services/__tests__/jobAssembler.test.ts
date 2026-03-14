@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Match } from '@/src/data/matches';
-import type { DomainEvent } from '@/src/domains/runtime/types';
+import type { DomainAutomationResolvedTarget } from '@/src/domains/runtime/automation';
+import type { DomainRuntimePack } from '@/src/domains/runtime/types';
 import type { AutomationJob } from '@/src/services/automation/types';
 import { assembleAutomationJob } from '@/src/services/automation/jobAssembler';
 
@@ -8,9 +9,9 @@ const mocks = vi.hoisted(() => ({
   fetchSubjectAnalysisConfig: vi.fn(),
   resolveSubjectAnalysisConfig: vi.fn(),
   mergeServerPlanningIntoAnalysisPayload: vi.fn(),
-  resolveDomainEventFeed: vi.fn(),
-  getHistory: vi.fn(),
-  getSavedSubjects: vi.fn(),
+  resolveRuntimeDomainPack: vi.fn(),
+  resolveJobTargets: vi.fn(),
+  createSyntheticTarget: vi.fn(),
 }));
 
 vi.mock('@/src/services/analysisConfig', () => ({
@@ -19,22 +20,11 @@ vi.mock('@/src/services/analysisConfig', () => ({
   mergeServerPlanningIntoAnalysisPayload: mocks.mergeServerPlanningIntoAnalysisPayload,
 }));
 
-vi.mock('@/src/services/domainMatchFeed', () => ({
-  resolveDomainEventFeed: mocks.resolveDomainEventFeed,
+vi.mock('@/src/domains/runtime/registry', () => ({
+  resolveRuntimeDomainPack: mocks.resolveRuntimeDomainPack,
 }));
 
-vi.mock('@/src/services/history', () => ({
-  getHistory: mocks.getHistory,
-}));
-
-vi.mock('@/src/services/savedSubjects', () => ({
-  getSavedSubjects: mocks.getSavedSubjects,
-}));
-
-function createMatch(
-  id: string,
-  overrides: Partial<Match> = {},
-): Match {
+function createMatch(id: string, overrides: Partial<Match> = {}): Match {
   return {
     id,
     league: 'Premier League',
@@ -96,17 +86,48 @@ function createJob(overrides: Partial<AutomationJob> = {}): AutomationJob {
   };
 }
 
-function createEvent(match: Match, overrides: Partial<DomainEvent> = {}): DomainEvent {
+function createResolvedTarget(
+  match: Match,
+  overrides: Partial<DomainAutomationResolvedTarget> = {},
+): DomainAutomationResolvedTarget {
   return {
     domainId: 'football',
-    eventType: 'match',
-    eventId: match.id,
+    subjectId: match.id,
+    subjectType: 'match',
     title: `${match.homeTeam.name} vs ${match.awayTeam.name}`,
-    subjectRefs: [],
-    metadata: {
-      matchData: match,
-    },
+    subjectDisplay: match,
     ...overrides,
+  };
+}
+
+function createRuntimePack(): DomainRuntimePack {
+  return {
+    manifest: {
+      domainId: 'football',
+      version: 'test',
+      displayName: 'Football Test Pack',
+      supportedIntentTypes: ['analyze'],
+      supportedEventTypes: ['match'],
+      supportedFactorIds: [],
+    },
+    resolver: {
+      async resolveIntent() {
+        return null;
+      },
+      async resolveSubjects() {
+        return [];
+      },
+      async resolveEvents() {
+        return [];
+      },
+    },
+    sourceAdapters: [],
+    automation: {
+      resolveJobTargets: mocks.resolveJobTargets,
+      createSyntheticTarget: mocks.createSyntheticTarget,
+    },
+    contextProviders: [],
+    tools: [],
   };
 }
 
@@ -115,19 +136,18 @@ describe('assembleAutomationJob', () => {
     mocks.fetchSubjectAnalysisConfig.mockReset();
     mocks.resolveSubjectAnalysisConfig.mockReset();
     mocks.mergeServerPlanningIntoAnalysisPayload.mockReset();
-    mocks.resolveDomainEventFeed.mockReset();
-    mocks.getHistory.mockReset();
-    mocks.getSavedSubjects.mockReset();
+    mocks.resolveRuntimeDomainPack.mockReset();
+    mocks.resolveJobTargets.mockReset();
+    mocks.createSyntheticTarget.mockReset();
 
     mocks.fetchSubjectAnalysisConfig.mockResolvedValue(null);
     mocks.resolveSubjectAnalysisConfig.mockResolvedValue(null);
     mocks.mergeServerPlanningIntoAnalysisPayload.mockImplementation((match) => match);
-    mocks.resolveDomainEventFeed.mockResolvedValue([]);
-    mocks.getHistory.mockResolvedValue([]);
-    mocks.getSavedSubjects.mockResolvedValue([]);
+    mocks.resolveRuntimeDomainPack.mockReturnValue(createRuntimePack());
+    mocks.resolveJobTargets.mockResolvedValue([]);
   });
 
-  it('resolves server_resolve selectors against runtime-backed domain events', async () => {
+  it('delegates single-target resolution to the runtime pack automation capability', async () => {
     const runtimeMatch = createMatch('runtime-arsenal-city', {
       homeTeam: {
         id: 'arsenal',
@@ -142,18 +162,25 @@ describe('assembleAutomationJob', () => {
         form: [],
       },
     });
-    mocks.resolveDomainEventFeed.mockResolvedValue([createEvent(runtimeMatch)]);
+    mocks.resolveJobTargets.mockResolvedValue([createResolvedTarget(runtimeMatch)]);
 
-    const assembled = await assembleAutomationJob(createJob());
+    const job = createJob();
+    const assembled = await assembleAutomationJob(job);
 
-    expect(mocks.resolveDomainEventFeed).toHaveBeenCalledWith({ domainId: 'football' });
+    expect(mocks.resolveRuntimeDomainPack).toHaveBeenCalledWith('football');
+    expect(mocks.resolveJobTargets).toHaveBeenCalledWith(job);
     expect(mocks.fetchSubjectAnalysisConfig).toHaveBeenCalledWith({
       domainId: 'football',
       subjectId: runtimeMatch.id,
       subjectType: 'match',
     });
     expect(assembled.targets).toHaveLength(1);
-    expect(assembled.targets[0].subjectId).toBe(runtimeMatch.id);
+    expect(assembled.targets[0]).toMatchObject({
+      subjectId: runtimeMatch.id,
+      subjectType: 'match',
+      title: 'Arsenal vs Manchester City',
+      match: runtimeMatch,
+    });
     expect(assembled.targetSnapshot).toEqual({
       domainId: 'football',
       subjectId: runtimeMatch.id,
@@ -166,14 +193,12 @@ describe('assembleAutomationJob', () => {
     });
   });
 
-  it('expands league_query selectors from the runtime-backed event feed', async () => {
+  it('preserves multi-target expansion returned by the runtime pack automation capability', async () => {
     const premierA = createMatch('premier-a', { league: 'Premier League' });
-    const laLiga = createMatch('laliga-a', { league: 'La Liga' });
     const premierB = createMatch('premier-b', { league: 'Premier League' });
-    mocks.resolveDomainEventFeed.mockResolvedValue([
-      createEvent(premierA),
-      createEvent(laLiga),
-      createEvent(premierB),
+    mocks.resolveJobTargets.mockResolvedValue([
+      createResolvedTarget(premierA),
+      createResolvedTarget(premierB),
     ]);
 
     const assembled = await assembleAutomationJob(createJob({
@@ -203,5 +228,36 @@ describe('assembleAutomationJob', () => {
         title: 'premier-b Home vs premier-b Away',
       },
     ]);
+    expect(mocks.createSyntheticTarget).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the runtime pack synthetic target when no concrete target resolves', async () => {
+    const syntheticMatch = {
+      ...createMatch('football_job-1'),
+      customInfo: 'Arsenal vs Manchester City',
+    };
+    mocks.createSyntheticTarget.mockResolvedValue(
+      createResolvedTarget(syntheticMatch, {
+        subjectId: 'football_job-1',
+        title: 'Arsenal vs Manchester City',
+      }),
+    );
+
+    const assembled = await assembleAutomationJob(createJob());
+
+    expect(mocks.resolveJobTargets).toHaveBeenCalledTimes(1);
+    expect(mocks.createSyntheticTarget).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'job-1',
+      domainId: 'football',
+    }));
+    expect(assembled.targets).toHaveLength(1);
+    expect(assembled.targets[0].subjectId).toBe('football_job-1');
+    expect(assembled.targets[0].dataToAnalyze.customInfo).toBe('Arsenal vs Manchester City');
+    expect(assembled.targetSnapshot).toEqual({
+      domainId: 'football',
+      subjectId: 'football_job-1',
+      subjectType: 'match',
+      title: 'Arsenal vs Manchester City',
+    });
   });
 });

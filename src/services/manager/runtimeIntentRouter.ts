@@ -1,0 +1,141 @@
+import {
+  getDefaultRuntimeDomainPack,
+  getRuntimeDomainPackById,
+} from '@/src/domains/runtime/registry';
+import type {
+  DomainRuntimePack,
+  RuntimeManagerCapability,
+  RuntimeManagerLegacyEffectInput,
+  RuntimeToolExecutionResult,
+  SessionWorkflowStateSnapshot,
+} from '@/src/domains/runtime/types';
+import type {
+  ManagerConversationEffect,
+  ManagerLanguage,
+  ManagerPendingTask,
+} from './types';
+
+function resolveRuntimePack(
+  runtimePack?: DomainRuntimePack | null,
+  domainId?: string | null,
+): DomainRuntimePack | null {
+  return runtimePack || getRuntimeDomainPackById(domainId) || getDefaultRuntimeDomainPack();
+}
+
+function isPendingTaskStage(value: unknown): value is ManagerPendingTask['stage'] {
+  return value === 'await_factors' || value === 'await_sequence';
+}
+
+function isManagerPendingTask(input: unknown): input is ManagerPendingTask {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return false;
+  }
+
+  const value = input as Record<string, unknown>;
+  return (
+    typeof value.id === 'string' &&
+    typeof value.sourceText === 'string' &&
+    Array.isArray(value.drafts) &&
+    isPendingTaskStage(value.stage)
+  );
+}
+
+export function getRuntimeManagerCapability(input: {
+  runtimePack?: DomainRuntimePack | null;
+  domainId?: string | null;
+}): RuntimeManagerCapability | null {
+  return resolveRuntimePack(input.runtimePack, input.domainId)?.manager || null;
+}
+
+export function runtimeManagerSupportsTool(input: {
+  runtimePack?: DomainRuntimePack | null;
+  domainId?: string | null;
+  toolId: string;
+}): boolean {
+  const capability = getRuntimeManagerCapability(input);
+  return Array.isArray(capability?.skillIds) && capability.skillIds.includes(input.toolId);
+}
+
+export function runtimePackSupportsManagerLlm(input: {
+  runtimePack?: DomainRuntimePack | null;
+  domainId?: string | null;
+}): boolean {
+  const capability = getRuntimeManagerCapability(input);
+  return Boolean(capability?.parsePendingTask && capability?.mapLegacyEffect);
+}
+
+export function parseRuntimeManagerPendingTask(input: {
+  runtimePack?: DomainRuntimePack | null;
+  domainId?: string | null;
+  workflow: SessionWorkflowStateSnapshot | null | undefined;
+}): ManagerPendingTask | null {
+  const capability = getRuntimeManagerCapability(input);
+  const raw = capability?.parsePendingTask?.(input.workflow);
+  return isManagerPendingTask(raw) ? raw : null;
+}
+
+export function mapRuntimeManagerEffect(input: {
+  runtimePack?: DomainRuntimePack | null;
+  domainId?: string | null;
+  effect: ManagerConversationEffect;
+}): RuntimeToolExecutionResult | null {
+  const capability = getRuntimeManagerCapability(input);
+  const mapper = capability?.mapLegacyEffect;
+  if (!mapper) {
+    return null;
+  }
+
+  return mapper(input.effect as unknown as RuntimeManagerLegacyEffectInput);
+}
+
+function readLocalizedText(
+  capability: RuntimeManagerCapability | null,
+  language: ManagerLanguage,
+  key: 'helpText' | 'factorsText' | 'sequenceText',
+): string | null {
+  const text = capability?.plannerHints?.[key]?.[language];
+  return typeof text === 'string' && text.trim().length > 0 ? text.trim() : null;
+}
+
+function buildGenericHelpText(language: ManagerLanguage): string {
+  return language === 'zh'
+    ? '你可以直接告诉我想分析什么、什么时候执行；如果当前领域支持，我也可以先查询本地数据，再生成任务卡片。'
+    : 'Tell me what you want to analyze and when to run it. If this domain supports it, I can also query local data first and then create task cards.';
+}
+
+export function resolveRuntimeManagerHelpText(input: {
+  runtimePack?: DomainRuntimePack | null;
+  domainId?: string | null;
+  language: ManagerLanguage;
+}): string {
+  const capability = getRuntimeManagerCapability(input);
+  return readLocalizedText(capability, input.language, 'helpText') || buildGenericHelpText(input.language);
+}
+
+export function resolveRuntimeManagerCapabilityText(input: {
+  runtimePack?: DomainRuntimePack | null;
+  domainId?: string | null;
+  language: ManagerLanguage;
+  topic: 'factors' | 'sequence' | 'help';
+}): string {
+  const capability = getRuntimeManagerCapability(input);
+  const directText =
+    input.topic === 'factors'
+      ? readLocalizedText(capability, input.language, 'factorsText')
+      : input.topic === 'sequence'
+        ? readLocalizedText(capability, input.language, 'sequenceText')
+        : readLocalizedText(capability, input.language, 'helpText');
+
+  return directText || resolveRuntimeManagerHelpText(input);
+}
+
+export function resolveRuntimeManagerWorkflowType(input: {
+  runtimePack?: DomainRuntimePack | null;
+  domainId?: string | null;
+}): string | null {
+  const capability = getRuntimeManagerCapability(input);
+  const workflowType = capability?.plannerHints?.defaultWorkflowType;
+  return typeof workflowType === 'string' && workflowType.trim().length > 0
+    ? workflowType.trim()
+    : null;
+}

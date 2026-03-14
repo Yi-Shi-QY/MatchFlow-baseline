@@ -5,13 +5,15 @@ import {
 } from './executionRuntime';
 import { assembleAutomationJob } from './jobAssembler';
 import type { AutomationJobExecutionContext } from './jobExecutionContext';
-import { saveAutomationJob } from './jobStore';
+import { listAutomationJobs, saveAutomationJob } from './jobStore';
 import { scheduleNativeAutomationSync } from './nativeScheduler';
 import {
   notifyAutomationRunCompleted,
   notifyAutomationRunFailed,
   notifyAutomationRunStarted,
 } from './notifications';
+import { writeAutomationLifecycleToManagerConversation } from '@/src/services/manager-workspace/automationWritebackBridge';
+import { detectMemoryCandidatesFromAutomationResult } from '@/src/services/memoryCandidateDetectors';
 import { saveAutomationRun } from './runStore';
 import type { AutomationJob, AutomationRun } from './types';
 import { createAutomationId } from './utils';
@@ -107,6 +109,24 @@ async function emitStateChange(
   }
   if (phase === 'failed' && job.notificationPolicy.notifyOnFailure) {
     await notifyAutomationRunFailed(job, run);
+  }
+  const memoryCandidates =
+    phase === 'completed'
+      ? detectMemoryCandidatesFromAutomationResult({
+          job,
+          run,
+          historicalJobs: await listAutomationJobs(),
+        })
+      : [];
+  try {
+    await writeAutomationLifecycleToManagerConversation({
+      phase,
+      job,
+      run,
+      memoryCandidates,
+    });
+  } catch (error) {
+    console.warn('Failed to write automation lifecycle into manager conversation.', error);
   }
   await ctx.onStateChange?.({
     phase,

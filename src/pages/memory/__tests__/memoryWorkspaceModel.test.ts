@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { LoadedMemoryRecord } from '@/src/services/memoryWorkspace';
+import type {
+  LoadedMemoryCandidate,
+  LoadedMemoryRecord,
+} from '@/src/services/memoryWorkspace';
 import type {
   DailySummaryMetadataRecord,
   MemoryMetadataRecord,
@@ -23,6 +26,31 @@ function createMemory(
     source: 'system',
     createdAt: 100,
     updatedAt: 100,
+    ...overrides,
+  };
+}
+
+function createCandidate(
+  id: string,
+  overrides: Partial<LoadedMemoryCandidate> = {},
+): LoadedMemoryCandidate {
+  return {
+    candidateId: id,
+    candidateKey: `domain:football:preference:${id}`,
+    status: 'pending',
+    scopeType: 'domain',
+    scopeId: 'football',
+    memoryType: 'preference',
+    keyText: id,
+    title: id,
+    contentText: `${id} candidate content`,
+    reasoning: 'Candidate reasoning',
+    evidence: ['Candidate detail'],
+    conflictKind: 'none',
+    conflictMemoryId: null,
+    conflictCandidateId: null,
+    createdAt: 150,
+    updatedAt: 150,
     ...overrides,
   };
 }
@@ -65,8 +93,12 @@ function createDailySummary(
 }
 
 describe('memory workspace model', () => {
-  it('keeps the frozen section order and derives state-aware daily summary and pending memory actions', () => {
+  it('keeps the frozen section order and surfaces pending candidates before enabled memories', () => {
     const model = deriveMemoryWorkspaceModel({
+      candidates: [
+        createCandidate('candidate_pending', { status: 'pending', updatedAt: 300 }),
+        createCandidate('candidate_dismissed', { status: 'dismissed', updatedAt: 120 }),
+      ],
       memories: [
         createMemory('memory_pending'),
         createMemory('memory_enabled'),
@@ -88,7 +120,10 @@ describe('memory workspace model', () => {
       'daily_summary',
       'disabled',
     ]);
-    expect(model.dailySummaryCards[0].ctaLabel).toBe('查看提炼结果');
+    expect(model.pendingCards[0].memoryId).toBe('candidate_pending');
     expect(model.pendingCards[0].actions).toContain('查看理由');
+    expect(model.enabledCards[0].memoryId).toBe('memory_enabled');
+    expect(model.disabledCards.map((card) => card.memoryId)).toContain('candidate_dismissed');
+    expect(model.dailySummaryCards[0].ctaLabel).toBe('查看提炼结果');
   });
 });

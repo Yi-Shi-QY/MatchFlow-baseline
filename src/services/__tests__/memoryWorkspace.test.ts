@@ -3,6 +3,12 @@ import {
   clearManagerSessionStoreFallback,
   createManagerSessionStore,
 } from '@/src/services/manager-gateway/sessionStore';
+import {
+  clearMemoryCandidateStoreFallback,
+  dismissMemoryCandidate,
+  enableMemoryCandidate,
+  persistMemoryCandidates,
+} from '@/src/services/memoryCandidateStore';
 import { loadMemoryWorkspace } from '@/src/services/memoryWorkspace';
 
 describe('memory workspace loader', () => {
@@ -33,9 +39,10 @@ describe('memory workspace loader', () => {
     });
     localStorage.clear();
     clearManagerSessionStoreFallback();
+    clearMemoryCandidateStoreFallback();
   });
 
-  it('loads global, domain, and session manager memories while keeping manager memory content as the source of truth', async () => {
+  it('loads pending candidates alongside manager memories while keeping enabled memory content as the source of truth', async () => {
     const store = createManagerSessionStore();
     const session = await store.getOrCreateMainSession({
       domainId: 'football',
@@ -82,6 +89,41 @@ describe('memory workspace loader', () => {
       source: 'system',
       updatedAt: 400,
     });
+    const [pendingCandidate] = await persistMemoryCandidates({
+      candidates: [
+        {
+          sourceKind: 'explicit_preference',
+          origin: 'manager_turn',
+          scopeType: 'domain',
+          scopeId: 'football',
+          memoryType: 'preference',
+          keyText: 'analysis-factors',
+          contentText: 'Prefer fundamentals and market signals.',
+          title: 'Analysis factor preference',
+          reasoning: 'User explicitly stated which analysis factors to prioritize.',
+          evidence: ['fundamentals and market'],
+        },
+      ],
+      sessionStore: store,
+    });
+    const [dismissedCandidate] = await persistMemoryCandidates({
+      candidates: [
+        {
+          sourceKind: 'explicit_constraint',
+          origin: 'manager_turn',
+          scopeType: 'global',
+          scopeId: 'global',
+          memoryType: 'constraint',
+          keyText: 'response-constraint',
+          contentText: 'Do not use emoji in replies.',
+          title: 'Response constraint',
+          reasoning: 'User explicitly stated a response constraint.',
+          evidence: ['Do not use emoji in replies.'],
+        },
+      ],
+      sessionStore: store,
+    });
+    await dismissMemoryCandidate(dismissedCandidate.id);
 
     const workspace = await loadMemoryWorkspace({
       domainId: 'football',
@@ -94,8 +136,38 @@ describe('memory workspace loader', () => {
       'global',
       'session',
     ]);
+    expect(workspace.candidates.map((candidate) => candidate.status)).toEqual([
+      'pending',
+      'dismissed',
+    ]);
     expect(workspace.memories[0].contentText).toBe(
       'Focus on Premier League and Champions League first.',
     );
+
+    await enableMemoryCandidate({
+      candidateId: pendingCandidate.id,
+      sessionStore: store,
+    });
+
+    const nextWorkspace = await loadMemoryWorkspace({
+      domainId: 'football',
+      runtimeDomainVersion: '1.0.0',
+    });
+
+    expect(
+      nextWorkspace.memories.some(
+        (memory) =>
+          memory.memoryType === 'preference' &&
+          memory.keyText === 'analysis-factors' &&
+          memory.contentText === 'Prefer fundamentals and market signals.',
+      ),
+    ).toBe(true);
+    expect(
+      nextWorkspace.candidates.some((candidate) => candidate.candidateId === pendingCandidate.id),
+    ).toBe(false);
+    expect(
+      nextWorkspace.candidates.find((candidate) => candidate.candidateId === dismissedCandidate.id)
+        ?.status,
+    ).toBe('dismissed');
   });
 });

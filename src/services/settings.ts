@@ -3,6 +3,7 @@ import {
   type LocalFootballTestEnv,
   type LocalFootballTestRuntime,
 } from './localFootballTestServer';
+import { DEFAULT_DOMAIN_ID } from './domains/builtinModules';
 
 export type AIProvider = 'gemini' | 'deepseek' | 'openai_compatible';
 export type AgentModelMode = 'global' | 'config';
@@ -39,7 +40,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'gemini',
   model: 'gemini-3-flash-preview',
   agentModelMode: 'global',
-  activeDomainId: 'football',
+  activeDomainId: DEFAULT_DOMAIN_ID,
   skillHttpAllowedHosts: [],
   deepseekApiKey: '',
   geminiApiKey: '',
@@ -49,7 +50,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   matchDataApiKey: '',
   language: 'en',
   theme: 'dark',
-  enableAutomation: false,
+  enableAutomation: true,
   enableBackgroundMode: false,
   enableAutonomousPlanning: false,
   rememberUserPreferences: true,
@@ -96,6 +97,10 @@ export function normalizeSettings(input: unknown): AppSettings {
         ? value.provider
         : 'gemini',
     agentModelMode: value.agentModelMode === 'config' ? 'config' : 'global',
+    activeDomainId:
+      typeof value.activeDomainId === 'string' && value.activeDomainId.trim().length > 0
+        ? value.activeDomainId.trim()
+        : defaults.activeDomainId,
     matchDataServerUrl: normalizedMatchDataServerUrl,
     matchDataApiKey: normalizedMatchDataApiKey,
     skillHttpAllowedHosts: Array.isArray(value.skillHttpAllowedHosts)
@@ -103,9 +108,18 @@ export function normalizeSettings(input: unknown): AppSettings {
       : [],
     language: value.language === 'zh' ? 'zh' : 'en',
     theme: value.theme === 'light' ? 'light' : 'dark',
-    enableAutomation: Boolean(value.enableAutomation),
-    enableBackgroundMode: Boolean(value.enableBackgroundMode),
-    enableAutonomousPlanning: Boolean(value.enableAutonomousPlanning),
+    enableAutomation:
+      typeof value.enableAutomation === 'boolean'
+        ? value.enableAutomation
+        : defaults.enableAutomation,
+    enableBackgroundMode:
+      typeof value.enableBackgroundMode === 'boolean'
+        ? value.enableBackgroundMode
+        : defaults.enableBackgroundMode,
+    enableAutonomousPlanning:
+      typeof value.enableAutonomousPlanning === 'boolean'
+        ? value.enableAutonomousPlanning
+        : defaults.enableAutonomousPlanning,
     rememberUserPreferences:
       typeof value.rememberUserPreferences === 'boolean'
         ? value.rememberUserPreferences

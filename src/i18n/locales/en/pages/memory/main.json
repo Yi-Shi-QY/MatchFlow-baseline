@@ -1,0 +1,79 @@
+{
+  "memory_workspace": {
+    "page": {
+      "title": "Memory",
+      "subtitle": "Review pending memories, enabled preferences, daily summaries, and disabled memories here.",
+      "empty_pending": "No pending memories right now.",
+      "empty_enabled": "No enabled memories yet.",
+      "empty_daily_summary": "No daily summaries yet.",
+      "empty_disabled": "No disabled memories yet."
+    },
+    "sections": {
+      "summary": "Summary",
+      "pending": "Pending",
+      "enabled": "Enabled",
+      "daily_summary": "Daily summary",
+      "disabled": "Disabled"
+    },
+    "summary_card": {
+      "title": "Memory",
+      "description": "Any memory that changes future recommendations or defaults should be visible, explainable, and editable here first.",
+      "metrics": {
+        "enabled": "Enabled",
+        "pending": "Pending",
+        "daily_summary": "Daily summaries",
+        "disabled": "Disabled"
+      }
+    },
+    "scope": {
+      "global": "Global",
+      "session": "Session",
+      "domain": "Domain"
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "pending": "Pending"
+    },
+    "daily_summary_status": {
+      "completed": "Generated",
+      "partial": "Partially generated",
+      "pending": "Not generated"
+    },
+    "actions": {
+      "view_reason": "View reason",
+      "enable": "Enable",
+      "not_now": "Not now",
+      "view_detail": "View detail",
+      "disable": "Disable",
+      "re_enable": "Re-enable"
+    },
+    "daily_summary_cta": {
+      "completed": "View generated memories",
+      "partial": "View extraction result",
+      "generate": "Generate memories"
+    }
+  },
+  "memory_detail": {
+    "title": "Memory Detail",
+    "not_found": "The requested memory or summary could not be found.",
+    "reasoning": "Reasoning and sources",
+    "impact": "Impact",
+    "preview": "Memory content preview",
+    "actions": "Actions",
+    "summary_result": "Extraction result",
+    "edit_enable": "Save and enable",
+    "save_body": "Save content",
+    "disable": "Disable",
+    "not_now": "Not now",
+    "re_enable": "Re-enable",
+    "view_existing": "View existing memory",
+    "merge_enable": "Merge and enable",
+    "save_as_new": "Keep as new memory",
+    "generate_memory": "Generate memories",
+    "view_generated": "View generated memories",
+    "view_extraction": "View extraction result",
+    "current_status": "Current status: {{status}}",
+    "similar_memory_notice": "A similar memory was found. Review or merge it before enabling."
+  }
+}

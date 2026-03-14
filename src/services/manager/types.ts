@@ -3,10 +3,18 @@ import type {
   AutomationCommandComposerMode,
   ImmediateAnalysisNavigationTarget,
 } from '@/src/services/automation/commandCenter';
+import type { MemoryCandidateInput } from '@/src/services/memoryCandidateTypes';
 
 export type ManagerLanguage = 'zh' | 'en';
 export type ManagerSourcePreferenceId = 'fundamental' | 'market' | 'custom';
 export type ManagerSequenceStepId = ManagerSourcePreferenceId | 'prediction';
+export type ManagerClarificationField = 'factors' | 'sequence';
+
+export interface ManagerClarificationSnapshot {
+  recognizedSourceIds: ManagerSourcePreferenceId[];
+  recognizedSequence: ManagerSequenceStepId[] | null;
+  missingFields: ManagerClarificationField[];
+}
 
 export interface ManagerPendingTask {
   id: string;
@@ -16,6 +24,7 @@ export interface ManagerPendingTask {
   stage: 'await_factors' | 'await_sequence';
   selectedSourceIds?: ManagerSourcePreferenceId[];
   sequencePreference?: ManagerSequenceStepId[];
+  clarificationSummary?: ManagerClarificationSnapshot;
   createdAt: number;
 }
 
@@ -50,6 +59,7 @@ export interface ManagerConversationEffect {
   shouldRefreshTaskState?: boolean;
   feedbackMessage?: string;
   navigation?: ImmediateAnalysisNavigationTarget;
+  memoryCandidates?: MemoryCandidateInput[];
 }
 
 export interface ManagerSessionResult extends ManagerSessionSnapshot {

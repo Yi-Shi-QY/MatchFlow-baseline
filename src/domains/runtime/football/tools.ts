@@ -7,8 +7,8 @@ import {
 } from '@/src/services/manager/toolRegistry';
 import type {
   DomainToolDefinition,
-  RuntimeToolExecutionResult,
   RuntimeFeedBlockInput,
+  RuntimeToolExecutionResult,
   SessionWorkflowStateSnapshot,
   ToolExecutionInput,
 } from '../types';
@@ -90,6 +90,7 @@ export function mapLegacyManagerEffectToRuntimeToolResult(effect: {
     route: string;
     state?: Record<string, unknown>;
   };
+  memoryCandidates?: unknown[];
 }): RuntimeToolExecutionResult {
   const draftIds =
     effect.draftIds ||
@@ -114,6 +115,7 @@ export function mapLegacyManagerEffectToRuntimeToolResult(effect: {
       feedbackMessage: effect.feedbackMessage || effect.agentText,
       draftsToSave: effect.draftsToSave,
       navigation: effect.navigation,
+      memoryCandidates: effect.memoryCandidates,
     },
   };
 }
@@ -159,9 +161,10 @@ export const footballRuntimeTools: DomainToolDefinition[] = [
     },
     async execute(input) {
       const normalized = input.input.toLowerCase();
+      const topic = /(sequence|order)/i.test(normalized) ? 'sequence' : 'factors';
       const effect = await executeManagerDescribeCapability({
-        topic:
-          /(sequence|order|椤哄簭|鍏堢湅)/i.test(normalized) ? 'sequence' : 'factors',
+        topic,
+        domainId: input.session.domainId,
         language: resolveLanguage(input),
         signal: input.signal,
       });
@@ -170,7 +173,8 @@ export const footballRuntimeTools: DomainToolDefinition[] = [
   },
   {
     id: 'football_prepare_task_intake',
-    description: 'Prepare football analysis task intake and start workflow when clarification is needed.',
+    description:
+      'Prepare football analysis task intake and start workflow when clarification is needed.',
     canHandle(input) {
       return input.intent?.intentType === 'analyze' || input.intent?.intentType === 'schedule';
     },
@@ -193,6 +197,7 @@ export const footballRuntimeTools: DomainToolDefinition[] = [
     },
     async execute(input) {
       const effect = await executeManagerHelp({
+        domainId: input.session.domainId,
         language: resolveLanguage(input),
         signal: input.signal,
       });

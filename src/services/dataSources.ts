@@ -1,4 +1,4 @@
-import type { SubjectDisplayMatch } from "@/src/services/subjectDisplayMatch";
+import type { SubjectDisplay } from "@/src/services/subjectDisplay";
 
 // Source ids are intentionally open-ended so each domain can define its own set.
 export type SourceId = string;
@@ -9,7 +9,7 @@ export type SourceIconKey = "layout" | "trending" | "file";
 type Path = string[];
 
 export interface SourceContext {
-  subjectDisplay: SubjectDisplayMatch;
+  subjectDisplay: SubjectDisplay;
   importedData?: any;
 }
 
@@ -317,7 +317,7 @@ export const ANALYSIS_DATA_SOURCES: DataSourceDefinition[] = [
 ];
 
 export function resolveSourceSelection(
-  subjectDisplay: SubjectDisplayMatch,
+  subjectDisplay: SubjectDisplay,
   importedData: any,
   previousSelection?: Partial<SourceSelection>,
 ): SourceSelection {

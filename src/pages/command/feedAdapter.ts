@@ -13,6 +13,16 @@ export interface CommandCenterFeedItem {
   createdAt: number;
   draftIds?: string[];
   action?: ManagerConversationAction;
+  automationEvent?: {
+    source: 'automation_executor';
+    phase: 'started' | 'completed' | 'failed' | 'cancelled';
+    route: string;
+    title: string;
+    provider?: string | null;
+    model?: string | null;
+    errorMessage?: string | null;
+    totalTokens?: number | null;
+  };
   navigationIntent?: {
     route: string;
     state?: Record<string, unknown>;
@@ -58,6 +68,45 @@ function parseDraftIds(payload: Record<string, unknown> | null): string[] | unde
   return draftIds.length > 0 ? draftIds : undefined;
 }
 
+function parseAutomationEvent(
+  payload: Record<string, unknown> | null,
+): CommandCenterFeedItem['automationEvent'] {
+  if (
+    !payload?.automationEvent ||
+    typeof payload.automationEvent !== 'object' ||
+    Array.isArray(payload.automationEvent)
+  ) {
+    return undefined;
+  }
+
+  const event = payload.automationEvent as Record<string, unknown>;
+  const phase = event.phase;
+  const route = typeof event.route === 'string' ? event.route.trim() : '';
+  const title = typeof event.title === 'string' ? event.title.trim() : '';
+  if (
+    event.source !== 'automation_executor' ||
+    (phase !== 'started' &&
+      phase !== 'completed' &&
+      phase !== 'failed' &&
+      phase !== 'cancelled') ||
+    route.length === 0 ||
+    title.length === 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    source: 'automation_executor',
+    phase,
+    route,
+    title,
+    provider: typeof event.provider === 'string' ? event.provider : null,
+    model: typeof event.model === 'string' ? event.model : null,
+    errorMessage: typeof event.errorMessage === 'string' ? event.errorMessage : null,
+    totalTokens: typeof event.totalTokens === 'number' ? event.totalTokens : null,
+  };
+}
+
 function parseNavigationIntent(
   blockType: ManagerMessageBlockType,
   payload: Record<string, unknown> | null,
@@ -83,7 +132,9 @@ function hasDisplayableContent(item: CommandCenterFeedItem): boolean {
   return Boolean(
     (typeof item.text === 'string' && item.text.trim().length > 0) ||
       (item.draftIds && item.draftIds.length > 0) ||
-      item.action,
+      item.action ||
+      item.automationEvent ||
+      item.navigationIntent,
   );
 }
 
@@ -99,6 +150,7 @@ export function projectManagerFeedBlockToCommandCenterItem(
     createdAt: block.createdAt,
     draftIds: parseDraftIds(payload),
     action: parseAction(payload),
+    automationEvent: parseAutomationEvent(payload),
     navigationIntent: parseNavigationIntent(block.blockType, payload),
   };
 

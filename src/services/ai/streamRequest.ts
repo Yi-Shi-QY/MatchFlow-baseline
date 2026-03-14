@@ -42,6 +42,102 @@ function convertToOpenAITools(declarations: any[]) {
   });
 }
 
+export interface OpenAIToolCallDeltaChunk {
+  index?: number;
+  id?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+}
+
+export interface OpenAIToolCallMessage {
+  id?: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+export function mergeOpenAIToolCallDeltas(
+  existing: OpenAIToolCallMessage[],
+  deltas: OpenAIToolCallDeltaChunk[],
+): OpenAIToolCallMessage[] {
+  const next = existing.map((entry) => ({
+    ...entry,
+    function: { ...entry.function },
+  }));
+  let lastResolvedIndex = next.length > 0 ? next.length - 1 : -1;
+
+  for (const delta of deltas) {
+    if (!delta || typeof delta !== "object") {
+      continue;
+    }
+
+    const normalizedId =
+      typeof delta.id === "string" && delta.id.trim().length > 0
+        ? delta.id.trim()
+        : "";
+    let resolvedIndex =
+      typeof delta.index === "number" &&
+      Number.isFinite(delta.index) &&
+      delta.index >= 0
+        ? Math.floor(delta.index)
+        : -1;
+
+    if (resolvedIndex < 0 && normalizedId) {
+      resolvedIndex = next.findIndex((entry) => entry?.id === normalizedId);
+    }
+
+    if (resolvedIndex < 0 && lastResolvedIndex >= 0) {
+      resolvedIndex = lastResolvedIndex;
+    }
+
+    if (resolvedIndex < 0) {
+      resolvedIndex = next.length;
+    }
+
+    if (!next[resolvedIndex]) {
+      next[resolvedIndex] = {
+        id: normalizedId || undefined,
+        type: "function",
+        function: {
+          name: "",
+          arguments: "",
+        },
+      };
+    }
+
+    const current = next[resolvedIndex];
+    if (!current.id && normalizedId) {
+      current.id = normalizedId;
+    }
+
+    const nameChunk =
+      typeof delta.function?.name === "string" ? delta.function.name : "";
+    if (nameChunk) {
+      current.function.name = current.function.name
+        ? current.function.name.endsWith(nameChunk)
+          ? current.function.name
+          : `${current.function.name}${nameChunk}`
+        : nameChunk;
+    }
+
+    const argumentChunk =
+      typeof delta.function?.arguments === "string"
+        ? delta.function.arguments
+        : "";
+    if (argumentChunk) {
+      current.function.arguments += argumentChunk;
+    }
+
+    lastResolvedIndex = resolvedIndex;
+  }
+
+  return next.filter(Boolean);
+}
+
 type TokenUsageSource = "provider" | "estimated";
 
 export type StreamRequestTelemetryEvent =
@@ -383,7 +479,7 @@ export async function* streamAIRequest(
         }
 
         let currentContent = "";
-        let toolCalls: any[] = [];
+        let toolCalls: OpenAIToolCallMessage[] = [];
         let pendingLine = "";
 
         function* processSseLine(rawLine: string): Generator<string, void, unknown> {
@@ -428,18 +524,10 @@ export async function* streamAIRequest(
             }
 
             if (delta?.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                if (!toolCalls[tc.index]) {
-                  toolCalls[tc.index] = {
-                    id: tc.id,
-                    type: "function",
-                    function: { name: tc.function?.name || "", arguments: "" },
-                  };
-                }
-                if (tc.function?.arguments) {
-                  toolCalls[tc.index].function.arguments += tc.function.arguments;
-                }
-              }
+              toolCalls = mergeOpenAIToolCallDeltas(
+                toolCalls,
+                delta.tool_calls as OpenAIToolCallDeltaChunk[],
+              );
             }
           } catch (_e) {
             // Ignore parse errors for incomplete/corrupted lines

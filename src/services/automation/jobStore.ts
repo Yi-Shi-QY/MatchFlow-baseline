@@ -12,56 +12,16 @@ import {
   writeAutomationRecords,
 } from './storageFallback';
 import type {
-  AutomationAnalysisProfile,
   AutomationJob,
   AutomationJobQueryOptions,
   AutomationTargetSnapshot,
   AutomationTargetSnapshotItem,
-  AutomationTargetSelector,
 } from './types';
+import {
+  normalizeAutomationAnalysisProfile,
+  normalizeAutomationTargetSelector,
+} from './recordNormalizers';
 import { sortByScheduledForAsc } from './utils';
-
-function normalizeTargetSelector(input: unknown): AutomationTargetSelector | undefined {
-  const value = normalizeObject<Record<string, unknown>>(input);
-  if (!value || typeof value.mode !== 'string') return undefined;
-  if (value.mode === 'league_query' && typeof value.leagueKey === 'string' && typeof value.leagueLabel === 'string') {
-    return { mode: 'league_query', leagueKey: value.leagueKey, leagueLabel: value.leagueLabel };
-  }
-  if (value.mode === 'server_resolve' && typeof value.queryText === 'string' && typeof value.displayLabel === 'string') {
-    return { mode: 'server_resolve', queryText: value.queryText, displayLabel: value.displayLabel };
-  }
-  if (value.mode === 'fixed_subject' && typeof value.subjectId === 'string' && typeof value.subjectLabel === 'string') {
-    return { mode: 'fixed_subject', subjectId: value.subjectId, subjectLabel: value.subjectLabel };
-  }
-  return undefined;
-}
-
-function normalizeAnalysisProfile(input: unknown): AutomationAnalysisProfile | undefined {
-  const value = normalizeObject<Record<string, unknown>>(input);
-  if (!value) return undefined;
-  const selectedSourceIds = Array.isArray(value.selectedSourceIds)
-    ? value.selectedSourceIds.filter(
-        (entry): entry is AutomationAnalysisProfile['selectedSourceIds'][number] =>
-          entry === 'fundamental' || entry === 'market' || entry === 'custom',
-      )
-    : [];
-  const sequencePreference = Array.isArray(value.sequencePreference)
-    ? value.sequencePreference.filter(
-        (entry): entry is AutomationAnalysisProfile['sequencePreference'][number] =>
-          entry === 'fundamental' ||
-          entry === 'market' ||
-          entry === 'custom' ||
-          entry === 'prediction',
-      )
-    : [];
-  if (selectedSourceIds.length === 0 && sequencePreference.length === 0) {
-    return undefined;
-  }
-  return {
-    selectedSourceIds,
-    sequencePreference,
-  };
-}
 
 function normalizeTargetSnapshotItem(input: unknown): AutomationTargetSnapshotItem | null {
   const value = normalizeObject<Record<string, unknown>>(input);
@@ -100,7 +60,7 @@ function normalizeJob(raw: unknown): AutomationJob | null {
   const state = normalizeString(value.state);
   const triggerType = normalizeString(value.triggerType);
   const scheduledFor = normalizeString(value.scheduledFor);
-  const targetSelector = normalizeTargetSelector(value.targetSelector);
+  const targetSelector = normalizeAutomationTargetSelector(value.targetSelector);
   if (!id || !title || !scheduledFor || !targetSelector) return null;
   if (
     state !== 'pending' &&
@@ -167,7 +127,7 @@ function normalizeJob(raw: unknown): AutomationJob | null {
             )
           : DEFAULT_AUTOMATION_NOTIFICATION_POLICY.notifyOnFailure,
     },
-    analysisProfile: normalizeAnalysisProfile(value.analysisProfile),
+    analysisProfile: normalizeAutomationAnalysisProfile(value.analysisProfile),
     scheduledFor,
     state,
     retryCount: normalizeTimestamp(value.retryCount, 0),

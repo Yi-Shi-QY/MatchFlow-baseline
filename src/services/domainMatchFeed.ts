@@ -107,7 +107,7 @@ function normalizeLegacyMatchesToEvents(input: {
 }
 
 function resolveLegacyMatches(domainId: string): Match[] {
-  const domainCases = getBuiltinDomainLocalSubjectSnapshots(domainId);
+  const domainCases = getBuiltinDomainLocalSubjectSnapshots<Match>(domainId);
   if (domainCases.length > 0) {
     return domainCases;
   }
@@ -149,7 +149,7 @@ export async function resolveDomainEventFeed(
     }
   }
 
-  const domainCases = getBuiltinDomainLocalSubjectSnapshots(input.domainId);
+  const domainCases = getBuiltinDomainLocalSubjectSnapshots<Match>(input.domainId);
   const builtinEvents = normalizeLegacyMatchesToEvents({
     matches: domainCases,
     domainId: input.domainId,

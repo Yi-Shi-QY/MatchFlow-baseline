@@ -1,0 +1,177 @@
+{
+  "settings_home": {
+    "overview": {
+      "title": "Settings Overview",
+      "description": "Changes apply immediately. Use this home to reach the formal settings flow for connections, memory strategy, and system status.",
+      "needs_attention": "Needs attention",
+      "healthy": "Healthy",
+      "issues": "{{count}} items need attention"
+    },
+    "tags": {
+      "ai": "AI",
+      "data": "Data",
+      "memory": "Memory"
+    },
+    "sections": {
+      "general": "General",
+      "execution": "Execution & Reminders",
+      "memory": "Memory & Recommendations",
+      "connections": "Connections & Data",
+      "diagnostics": "Diagnostics"
+    },
+    "boolean": {
+      "on": "On",
+      "off": "Off"
+    },
+    "general": {
+      "language_label": "Language",
+      "language_description": "Change the interface language immediately.",
+      "language_zh": "Chinese",
+      "language_en": "English",
+      "theme_label": "Appearance",
+      "theme_description": "Switch between light and dark theme.",
+      "theme_dark": "Dark",
+      "theme_light": "Light",
+      "domain_label": "Default Analysis Domain",
+      "domain_description": "Choose the default domain for new analysis flows."
+    },
+    "execution": {
+      "automation_label": "Automation",
+      "automation_description": "Allow the system to advance eligible tasks automatically.",
+      "background_label": "Background Mode",
+      "background_description": "Keep reminders and automation active in the background.",
+      "planning_label": "Autonomous Planning",
+      "planning_description": "Allow the system to fill in planning details when needed."
+    },
+    "memory": {
+      "remember_label": "Remember Preferences",
+      "remember_description": "Keep long-term preferences that affect future defaults and recommendations.",
+      "confirmation_label": "Confirm Inferred Memories First",
+      "confirmation_description": "Review inferred habits before they affect future behavior.",
+      "daily_summary_label": "Daily Memory Summary",
+      "daily_summary_description": "Show daily summaries in Memory without turning them into long-term rules automatically.",
+      "suggestions_label": "Suggestion Replies",
+      "suggestions_description": "Show suggested replies and quick suggestions in the conversation workspace.",
+      "open_label": "Open Memory Workspace",
+      "open_description": "Review and manage formal memory content.",
+      "open_action": "Open"
+    },
+    "connections": {
+      "ai_label": "AI Service",
+      "ai_description": "Open Connections & Data to configure provider, model, and API details.",
+      "data_label": "Data Source",
+      "data_description": "Review the data service status and configuration entry.",
+      "not_configured": "Not configured"
+    },
+    "diagnostics": {
+      "label": "Advanced Diagnostics",
+      "description": "Open checks, sync, extensions, and maintenance tools.",
+      "open_action": "Open"
+    },
+    "primary_action": "Done"
+  },
+  "settings_connections": {
+    "page": {
+      "title": "Connections & Data",
+      "subtitle": "Edit AI and data-source settings directly in the current version and run formal connection checks here."
+    },
+    "status": {
+      "configured": "Configured",
+      "needs_setup": "Needs setup",
+      "not_checked": "Not checked yet"
+    },
+    "sections": {
+      "status": "Status",
+      "ai_service": "AI Service",
+      "data_source": "Data Source"
+    },
+    "status_card": {
+      "title": "Connections & Data",
+      "description": "The current version exposes AI and data-source settings directly and supports instant connection checks."
+    },
+    "fields": {
+      "provider": "Provider",
+      "model": "Model",
+      "base_url": "Base URL",
+      "api_key": "AI API Key",
+      "server_url": "Server URL",
+      "data_api_key": "Data API Key"
+    },
+    "descriptions": {
+      "provider": "The active AI provider.",
+      "model": "The model used for formal responses.",
+      "base_url": "The compatible API base URL exposed directly in this version.",
+      "api_key": "The API key for the currently selected provider.",
+      "server_url": "The base URL for match and extension services.",
+      "data_api_key": "The API key used for the data service."
+    },
+    "actions": {
+      "test_ai": "Test AI connection",
+      "test_data": "Test data connection"
+    },
+    "checks": {
+      "ai_passed": "AI connection passed",
+      "ai_failed": "AI connection failed",
+      "ai_not_checked": "AI connection has not been checked yet",
+      "data_passed": "Data connection passed",
+      "data_failed": "Data connection failed",
+      "data_not_checked": "Data connection has not been checked yet"
+    }
+  },
+  "settings_diagnostics": {
+    "page": {
+      "title": "Advanced & Diagnostics",
+      "subtitle": "This page keeps the formal checks, sync actions, extension entry, and maintenance tools.",
+      "sync_now": "Sync now",
+      "open_connections": "Open Connections & Data",
+      "open_extensions": "Open Extensions",
+      "clear_domain_data": "Clear current domain data",
+      "clear_extensions": "Clear extension cache"
+    },
+    "sections": {
+      "connection_checks": {
+        "title": "Connection Checks",
+        "description": "Return to Connections & Data to run AI and data checks."
+      },
+      "sync_status": {
+        "title": "Sync Status",
+        "description": "Review and trigger the formal sync actions exposed in this version."
+      },
+      "extensions_sync": {
+        "title": "Extensions & Sync",
+        "description": "Sync recommended extensions and open Extension Management."
+      },
+      "notification_checks": {
+        "title": "Notification Checks",
+        "description": "Review notification permissions and reminder readiness."
+      },
+      "automation_checks": {
+        "title": "Automation Checks",
+        "description": "Confirm automation, background behavior, and scheduler sync state."
+      },
+      "maintenance": {
+        "title": "Maintenance",
+        "description": "Keep destructive maintenance actions isolated at the bottom."
+      }
+    },
+    "notification_status": {
+      "unknown": "Unknown",
+      "browser": "Browser environment",
+      "prompt": "Prompt",
+      "granted": "Granted",
+      "denied": "Denied"
+    },
+    "sync": {
+      "syncing": "Syncing...",
+      "sync_success": "Recommended extensions synced.",
+      "sync_failed": "Sync failed: {{message}}",
+      "domain_cleared": "Current domain data cleared.",
+      "not_run": "No sync has been run yet.",
+      "extension_cache_cleared": "Extension cache cleared."
+    },
+    "automation": {
+      "automation": "Automation",
+      "background": "Background"
+    }
+  }
+}

@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Brain,
@@ -17,6 +16,7 @@ import {
   getPrimaryWorkspaceNav,
   type WorkspaceNavId,
 } from '@/src/services/navigation/workspaceNav';
+import { useWorkspaceNavigation } from '@/src/services/navigation/useWorkspaceNavigation';
 
 interface WorkspaceShellProps {
   language: 'zh' | 'en';
@@ -38,39 +38,6 @@ const navIconMap = {
   settings: Settings,
 } satisfies Record<string, React.ComponentType<{ className?: string }>>;
 
-const navFallbackCopy = {
-  chat: {
-    title: { zh: '对话中心', en: 'Chat Center' },
-    hint: { zh: '继续协作与新输入', en: 'Continue flows and new input' },
-  },
-  tasks: {
-    title: { zh: '任务中心', en: 'Task Center' },
-    hint: { zh: '待办、执行中与最近完成', en: 'Waiting, running, and recent completions' },
-  },
-  sources: {
-    title: { zh: '分析与数据', en: 'Analysis & Data' },
-    hint: { zh: '可分析对象与数据状态', en: 'Analyzable objects and data status' },
-  },
-  history: {
-    title: { zh: '历史', en: 'History' },
-    hint: { zh: '最近结果与可恢复主题', en: 'Recent results and resumable topics' },
-  },
-  memory: {
-    title: { zh: '记忆', en: 'Memory' },
-    hint: { zh: '长期上下文与摘要', en: 'Long-term context and summaries' },
-  },
-  settings: {
-    title: { zh: '设置', en: 'Settings' },
-    hint: { zh: '系统行为与连接入口', en: 'System behavior and connection entry' },
-  },
-} satisfies Record<
-  WorkspaceNavId,
-  {
-    title: Record<'zh' | 'en', string>;
-    hint: Record<'zh' | 'en', string>;
-  }
->;
-
 export function WorkspaceShell({
   language,
   section,
@@ -81,27 +48,30 @@ export function WorkspaceShell({
   contentClassName,
   hideHeader = false,
 }: WorkspaceShellProps) {
-  const navigate = useNavigate();
+  const { openPrimaryRoute } = useWorkspaceNavigation();
   const { t } = useTranslation();
   const [navOpen, setNavOpen] = React.useState(false);
   const navItems = React.useMemo(() => getPrimaryWorkspaceNav(), []);
-  const copy =
-    language === 'zh'
-      ? {
-          open: '展开侧栏',
-          close: '收起侧栏',
-          brand: 'MatchFlow 工作台',
-          mobile: '移动工作台',
-        }
-      : {
-          open: 'Open sidebar',
-          close: 'Close sidebar',
-          brand: 'MatchFlow Workspace',
-          mobile: 'Mobile Workspace',
-        };
+  const copy = React.useMemo(
+    () => ({
+      open: t('workspace.shell.open_sidebar', {
+        defaultValue: language === 'zh' ? '展开侧栏' : 'Open sidebar',
+      }),
+      close: t('workspace.shell.close_sidebar', {
+        defaultValue: language === 'zh' ? '收起侧栏' : 'Close sidebar',
+      }),
+      brand: t('workspace.shell.brand', {
+        defaultValue: language === 'zh' ? 'MatchFlow 工作区' : 'MatchFlow Workspace',
+      }),
+      mobile: t('workspace.shell.mobile', {
+        defaultValue: language === 'zh' ? '移动工作区' : 'Mobile Workspace',
+      }),
+    }),
+    [language, t],
+  );
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[var(--mf-bg)] text-[var(--mf-text)]">
+    <div className="relative min-h-screen overflow-x-hidden bg-[var(--mf-bg)] text-[var(--mf-text)]">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute left-[-10%] top-[-6rem] h-72 w-72 rounded-full bg-[var(--mf-accent-soft)] blur-3xl" />
         <div className="absolute bottom-[-8rem] right-[-10%] h-80 w-80 rounded-full bg-white/5 blur-3xl" />
@@ -144,7 +114,6 @@ export function WorkspaceShell({
           {navItems.map((item) => {
             const Icon = navIconMap[item.iconKey] ?? Settings;
             const active = item.id === section;
-            const fallbackCopy = navFallbackCopy[item.id];
             return (
               <button
                 key={item.id}
@@ -156,7 +125,7 @@ export function WorkspaceShell({
                     : 'border-[var(--mf-border)] bg-[var(--mf-surface-strong)] text-[var(--mf-text-muted)] hover:bg-[var(--mf-surface-muted)]',
                 )}
                 onClick={() => {
-                  navigate(item.route);
+                  openPrimaryRoute(item.route);
                   setNavOpen(false);
                 }}
               >
@@ -164,16 +133,8 @@ export function WorkspaceShell({
                   <Icon className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-medium">
-                    {t(item.titleKey, {
-                      defaultValue: fallbackCopy.title[language],
-                    })}
-                  </div>
-                  <div className="text-[11px] text-[var(--mf-text-muted)]">
-                    {t(item.hintKey, {
-                      defaultValue: fallbackCopy.hint[language],
-                    })}
-                  </div>
+                  <div className="text-sm font-medium">{t(item.titleKey)}</div>
+                  <div className="text-[11px] text-[var(--mf-text-muted)]">{t(item.hintKey)}</div>
                 </div>
               </button>
             );

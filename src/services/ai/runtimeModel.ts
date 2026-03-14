@@ -25,6 +25,44 @@ function resolveFallbackModel(provider: AIProvider, model: any): string {
   return "gemini-3-flash-preview";
 }
 
+function hasGeminiConnection(settings: Partial<AppSettings>): boolean {
+  if (
+    typeof settings?.geminiApiKey === "string" &&
+    settings.geminiApiKey.trim().length > 0
+  ) {
+    return true;
+  }
+
+  return Boolean(process.env.GEMINI_API_KEY);
+}
+
+function hasDeepSeekConnection(settings: Partial<AppSettings>): boolean {
+  return (
+    typeof settings?.deepseekApiKey === "string" &&
+    settings.deepseekApiKey.trim().length > 0
+  );
+}
+
+function hasOpenAICompatibleConnection(settings: Partial<AppSettings>): boolean {
+  return (
+    typeof settings?.openaiCompatibleBaseUrl === "string" &&
+    settings.openaiCompatibleBaseUrl.trim().length > 0
+  );
+}
+
+function isProviderRouteUsable(
+  provider: AIProvider,
+  settings: Partial<AppSettings>,
+): boolean {
+  if (provider === "gemini") {
+    return hasGeminiConnection(settings);
+  }
+  if (provider === "deepseek") {
+    return hasDeepSeekConnection(settings);
+  }
+  return hasOpenAICompatibleConnection(settings);
+}
+
 export function resolveRuntimeModelRoute(
   settings: Partial<AppSettings>,
   agentId?: string,
@@ -34,18 +72,20 @@ export function resolveRuntimeModelRoute(
     : "gemini";
   const fallbackModel = resolveFallbackModel(fallbackProvider, settings?.model);
 
+  const globalRoute: RuntimeModelRoute = {
+    provider: fallbackProvider,
+    model: fallbackModel,
+    source: "global",
+  };
+
   if (settings?.agentModelMode !== "config") {
-    return {
-      provider: fallbackProvider,
-      model: fallbackModel,
-      source: "global",
-    };
+    return globalRoute;
   }
 
   if (!agentId) {
     return {
-      provider: fallbackProvider,
-      model: fallbackModel,
+      provider: globalRoute.provider,
+      model: globalRoute.model,
       source: "global_fallback",
     };
   }
@@ -57,16 +97,19 @@ export function resolveRuntimeModelRoute(
     typeof configured.model === "string" &&
     configured.model.trim().length > 0
   ) {
-    return {
+    const configuredRoute: RuntimeModelRoute = {
       provider: configured.provider,
       model: configured.model.trim(),
       source: "config",
     };
+    if (isProviderRouteUsable(configuredRoute.provider, settings)) {
+      return configuredRoute;
+    }
   }
 
   return {
-    provider: fallbackProvider,
-    model: fallbackModel,
+    provider: globalRoute.provider,
+    model: globalRoute.model,
     source: "global_fallback",
   };
 }

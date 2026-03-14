@@ -6,9 +6,10 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import type { Match } from '@/src/data/matches';
 import type { AnalysisRequestPayload } from '@/src/services/ai/contracts';
+import { DEFAULT_DOMAIN_ID } from '@/src/services/domains/builtinModules';
 import { getSettings } from '@/src/services/settings';
+import type { SubjectDisplay } from '@/src/services/subjectDisplay';
 import {
   executeAnalysisRun,
   finalizeRunMetrics,
@@ -30,7 +31,7 @@ export type { ActiveAnalysis };
 interface AnalysisContextType {
   activeAnalyses: Record<string, ActiveAnalysis>;
   startAnalysis: (
-    match: Match,
+    subjectDisplay: SubjectDisplay,
     dataToAnalyze: AnalysisRequestPayload,
     includeAnimations: boolean,
     isResume?: boolean,
@@ -48,7 +49,7 @@ function appendStopNote(thoughts: string): string {
 }
 
 function resolveContextSubjectRef(
-  match: Match,
+  subjectDisplay: SubjectDisplay,
   dataToAnalyze: AnalysisRequestPayload,
 ): AnalysisSubjectRef {
   const sourceContextDomainId =
@@ -56,11 +57,15 @@ function resolveContextSubjectRef(
     dataToAnalyze.sourceContext.domainId.trim().length > 0
       ? dataToAnalyze.sourceContext.domainId.trim()
       : '';
-  const domainId = sourceContextDomainId || getSettings().activeDomainId || 'football';
+  const subjectType =
+    typeof subjectDisplay.subjectType === 'string' && subjectDisplay.subjectType.trim().length > 0
+      ? subjectDisplay.subjectType.trim()
+      : 'match';
+  const domainId = sourceContextDomainId || getSettings().activeDomainId || DEFAULT_DOMAIN_ID;
   return {
     domainId,
-    subjectId: match.id,
-    subjectType: 'match',
+    subjectId: subjectDisplay.id,
+    subjectType,
   };
 }
 
@@ -139,12 +144,12 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   }, [updateAnalysis]);
 
   const startAnalysis = useCallback((
-    match: Match,
+    subjectDisplay: SubjectDisplay,
     dataToAnalyze: AnalysisRequestPayload,
     includeAnimations: boolean,
     isResume: boolean = false,
   ) => {
-    const subjectRef = resolveContextSubjectRef(match, dataToAnalyze);
+    const subjectRef = resolveContextSubjectRef(subjectDisplay, dataToAnalyze);
     const subjectKey = buildAnalysisSubjectKey(subjectRef);
     const previousController = analysisAbortControllersRef.current[subjectKey];
     if (previousController && !previousController.signal.aborted) {
@@ -183,8 +188,8 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     };
 
     void executeAnalysisRun({
-      match,
-      subjectSnapshot: match,
+      subjectDisplay,
+      subjectSnapshot: subjectDisplay,
       dataToAnalyze,
       includeAnimations,
       isResume,

@@ -7,6 +7,7 @@ import {
   saveResumeState,
   type SavedResumeState,
 } from '@/src/services/history';
+import { DEFAULT_SETTINGS, saveSettings } from '@/src/services/settings';
 
 const basePlan: NormalizedPlanSegment[] = [
   {
@@ -148,5 +149,37 @@ describe('history resume recoverability', () => {
     });
 
     expect(recoverable.map((item) => item.subjectId)).toEqual(['match_1']);
+  });
+
+  it('uses the active configured domain when a resume state omits domainId', async () => {
+    saveSettings({
+      ...DEFAULT_SETTINGS,
+      activeDomainId: 'project_ops',
+    });
+
+    await saveResumeState(
+      'task_1',
+      {
+        plan: basePlan,
+        completedSegmentIndices: [],
+        fullAnalysisText: 'unfinished project task',
+      },
+      'unfinished project task',
+      {
+        subjectId: 'task_1',
+        subjectType: 'task',
+      },
+    );
+
+    const recoverable = await getRecoverableResumeStates({
+      domainId: 'project_ops',
+    });
+
+    expect(recoverable).toHaveLength(1);
+    expect(recoverable[0]).toMatchObject({
+      domainId: 'project_ops',
+      subjectId: 'task_1',
+      subjectType: 'task',
+    });
   });
 });

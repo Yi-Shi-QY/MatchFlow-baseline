@@ -1,3 +1,4 @@
+import { translateText } from '@/src/i18n/translate';
 import type {
   ManagerRunRecord,
   ManagerSessionProjection,
@@ -16,6 +17,16 @@ export interface CommandCenterRunStatusModel {
   description: string;
   metrics: CommandCenterRunStatusMetric[];
   actionLabel?: string;
+}
+
+function tr(
+  language: 'zh' | 'en',
+  key: string,
+  zh: string,
+  en: string,
+  options: Record<string, unknown> = {},
+): string {
+  return translateText(language, key, language === 'zh' ? zh : en, options);
 }
 
 function formatTimestamp(
@@ -55,32 +66,17 @@ function getStatusLabel(
   status: CommandCenterRunStatusModel['state'],
   language: 'zh' | 'en',
 ): string {
-  if (language === 'zh') {
-    switch (status) {
-      case 'submitting':
-        return '提交中';
-      case 'queued':
-        return '排队中';
-      case 'running':
-        return '运行中';
-      case 'failed':
-        return '失败';
-      case 'cancelled':
-        return '已取消';
-    }
-  }
-
   switch (status) {
     case 'submitting':
-      return 'Submitting';
+      return tr(language, 'command_center.run_model.states.submitting', '提交中', 'Submitting');
     case 'queued':
-      return 'Queued';
+      return tr(language, 'command_center.run_model.states.queued', '排队中', 'Queued');
     case 'running':
-      return 'Running';
+      return tr(language, 'command_center.run_model.states.running', '运行中', 'Running');
     case 'failed':
-      return 'Failed';
+      return tr(language, 'command_center.run_model.states.failed', '失败', 'Failed');
     case 'cancelled':
-      return 'Cancelled';
+      return tr(language, 'command_center.run_model.states.cancelled', '已取消', 'Cancelled');
   }
 }
 
@@ -88,28 +84,15 @@ function getTriggerLabel(
   triggerType: ManagerRunRecord['triggerType'] | undefined,
   language: 'zh' | 'en',
 ): string {
-  if (language === 'zh') {
-    switch (triggerType) {
-      case 'resume':
-        return '恢复';
-      case 'system':
-        return '系统';
-      case 'compaction':
-        return '压缩';
-      default:
-        return '用户';
-    }
-  }
-
   switch (triggerType) {
     case 'resume':
-      return 'Resume';
+      return tr(language, 'command_center.run_model.trigger.resume', '恢复', 'Resume');
     case 'system':
-      return 'System';
+      return tr(language, 'command_center.run_model.trigger.system', '系统', 'System');
     case 'compaction':
-      return 'Compaction';
+      return tr(language, 'command_center.run_model.trigger.compaction', '压缩', 'Compaction');
     default:
-      return 'User';
+      return tr(language, 'command_center.run_model.trigger.user', '用户', 'User');
   }
 }
 
@@ -121,24 +104,18 @@ function getPlannerLabel(
     return '-';
   }
 
-  if (language === 'zh') {
-    switch (plannerMode) {
-      case 'workflow':
-        return '工作流';
-      case 'llm_assisted':
-        return 'LLM';
-      default:
-        return '确定性';
-    }
-  }
-
   switch (plannerMode) {
     case 'workflow':
-      return 'Workflow';
+      return tr(language, 'command_center.run_model.planner.workflow', '工作流', 'Workflow');
     case 'llm_assisted':
-      return 'LLM';
+      return tr(language, 'command_center.run_model.planner.llm', 'LLM', 'LLM');
     default:
-      return 'Deterministic';
+      return tr(
+        language,
+        'command_center.run_model.planner.deterministic',
+        '确定性',
+        'Deterministic',
+      );
   }
 }
 
@@ -153,50 +130,50 @@ function buildRunMetrics(
   return [
     {
       id: 'run_id',
-      label: language === 'zh' ? 'Run ID' : 'Run ID',
+      label: tr(language, 'command_center.run_model.metrics.run_id', 'Run ID', 'Run ID'),
       value: shortenId(run.id),
     },
     {
       id: 'status',
-      label: language === 'zh' ? '状态' : 'Status',
+      label: tr(language, 'command_center.run_model.metrics.status', '状态', 'Status'),
       value: getStatusLabel(
         run.status === 'queued' ||
           run.status === 'running' ||
           run.status === 'failed' ||
           run.status === 'cancelled'
           ? run.status
-        : 'running',
+          : 'running',
         language,
       ),
     },
     {
       id: 'trigger',
-      label: language === 'zh' ? '触发' : 'Trigger',
+      label: tr(language, 'command_center.run_model.metrics.trigger', '触发', 'Trigger'),
       value: getTriggerLabel(run.triggerType, language),
     },
     {
       id: 'planner',
-      label: language === 'zh' ? '路径' : 'Planner',
+      label: tr(language, 'command_center.run_model.metrics.planner', '路径', 'Planner'),
       value: getPlannerLabel(run.plannerMode, language),
     },
     {
       id: 'tool',
-      label: language === 'zh' ? '工具' : 'Tool',
+      label: tr(language, 'command_center.run_model.metrics.tool', '工具', 'Tool'),
       value: run.toolPath || '-',
     },
     {
       id: 'intent',
-      label: language === 'zh' ? '意图' : 'Intent',
+      label: tr(language, 'command_center.run_model.metrics.intent', '意图', 'Intent'),
       value: run.intentType || '-',
     },
     {
       id: 'started',
-      label: language === 'zh' ? '开始' : 'Started',
+      label: tr(language, 'command_center.run_model.metrics.started', '开始', 'Started'),
       value: formatTimestamp(run.startedAt || run.createdAt, language),
     },
     {
       id: 'updated',
-      label: language === 'zh' ? '更新' : 'Updated',
+      label: tr(language, 'command_center.run_model.metrics.updated', '更新', 'Updated'),
       value: formatTimestamp(run.updatedAt, language),
     },
   ];
@@ -216,13 +193,25 @@ export function projectManagerSessionProjectionToRunStatusModel(input: {
     return {
       state: 'queued',
       badgeLabel: getStatusLabel('queued', language),
-      title: language === 'zh' ? '当前会话已有任务排队' : 'This session already has queued work',
-      description:
-        language === 'zh'
-          ? '另一个 run 仍在占用该会话。当前输入会在前一个 run 结束后自动开始。'
-          : 'Another run is still occupying this session. The pending turn will start automatically when it finishes.',
+      title: tr(
+        language,
+        'command_center.run_model.queued.title',
+        '正在等待上一条请求完成',
+        'Waiting for the previous step to finish',
+      ),
+      description: tr(
+        language,
+        'command_center.run_model.queued.description',
+        '当前会话还有一个请求在执行，这次请求会在它结束后自动开始。',
+        'Another request in this conversation is still running. This one will start automatically next.',
+      ),
       metrics: buildRunMetrics(activeRun, language),
-      actionLabel: language === 'zh' ? '取消排队' : 'Cancel queued turn',
+      actionLabel: tr(
+        language,
+        'command_center.run_model.queued.action',
+        '取消待开始请求',
+        'Cancel pending request',
+      ),
     };
   }
 
@@ -230,52 +219,25 @@ export function projectManagerSessionProjectionToRunStatusModel(input: {
     return {
       state: 'running',
       badgeLabel: getStatusLabel('running', language),
-      title: language === 'zh' ? 'Manager 正在处理当前回合' : 'Manager is processing this turn',
-      description:
-        language === 'zh'
-          ? '当前 run 已进入执行阶段，正在组装上下文、恢复工作流或执行工具。'
-          : 'The active run is executing. The manager may be assembling context, resuming a workflow, or running a tool.',
+      title: tr(
+        language,
+        'command_center.run_model.running.title',
+        '正在处理你的最新请求',
+        'Working on your latest request',
+      ),
+      description: tr(
+        language,
+        'command_center.run_model.running.description',
+        '系统正在处理这次请求，可能会拉取上下文、恢复流程或调用工具。',
+        'The manager is processing your request and may gather context, resume a workflow, or call a tool.',
+      ),
       metrics: buildRunMetrics(activeRun, language),
-      actionLabel: language === 'zh' ? '停止运行' : 'Stop run',
-    };
-  }
-
-  if (latestRun?.status === 'failed') {
-    return {
-      state: 'failed',
-      badgeLabel: getStatusLabel('failed', language),
-      title:
-        language === 'zh'
-          ? '最近一次 run 执行失败'
-          : 'The most recent run failed',
-      description:
-        latestRun.errorMessage ||
-        latestRun.errorCode ||
-        (language === 'zh' ? '未返回更多错误信息。' : 'No additional error details were returned.'),
-      metrics: buildRunMetrics(latestRun, language),
-    };
-  }
-
-  if (latestRun?.status === 'cancelled') {
-    const wasInterrupted = latestRun.errorCode === 'aborted_by_user';
-
-    return {
-      state: 'cancelled',
-      badgeLabel: getStatusLabel('cancelled', language),
-      title:
-        language === 'zh'
-          ? '最近一次排队 run 已取消'
-          : wasInterrupted
-            ? 'The most recent run was interrupted'
-            : 'The most recent queued run was cancelled',
-      description:
-        latestRun.errorMessage ||
-        (language === 'zh'
-          ? '该 run 在真正开始执行之前被取消。'
-          : wasInterrupted
-            ? 'This run was interrupted during execution.'
-            : 'This run was cancelled before execution started.'),
-      metrics: buildRunMetrics(latestRun, language),
+      actionLabel: tr(
+        language,
+        'command_center.run_model.running.action',
+        '停止这次请求',
+        'Stop request',
+      ),
     };
   }
 
@@ -283,12 +245,17 @@ export function projectManagerSessionProjectionToRunStatusModel(input: {
     return {
       state: 'failed',
       badgeLabel: getStatusLabel('failed', language),
-      title: language === 'zh' ? '本次提交失败' : 'This turn failed',
+      title: tr(
+        language,
+        'command_center.run_model.submit_failed.title',
+        '这次请求未能启动',
+        'This request could not be started',
+      ),
       description: submitError.trim(),
       metrics: [
         {
           id: 'status',
-          label: language === 'zh' ? '状态' : 'Status',
+          label: tr(language, 'command_center.run_model.metrics.status', '状态', 'Status'),
           value: getStatusLabel('failed', language),
         },
       ],
@@ -299,26 +266,40 @@ export function projectManagerSessionProjectionToRunStatusModel(input: {
     return {
       state: 'submitting',
       badgeLabel: getStatusLabel('submitting', language),
-      title: language === 'zh' ? '正在发起本次提交' : 'Submitting this turn',
-      description:
-        language === 'zh'
-          ? '页面已发出请求，正在等待 run 生命周期进入稳定状态。'
-          : 'The page has sent the request and is waiting for the run lifecycle to settle.',
+      title: tr(
+        language,
+        'command_center.run_model.submitting.title',
+        '正在启动这次请求',
+        'Starting your request',
+      ),
+      description: tr(
+        language,
+        'command_center.run_model.submitting.description',
+        '请求已经发出，正在等待进入稳定的执行状态。',
+        'The request has been sent. Waiting for execution to enter a stable running state.',
+      ),
       metrics: projection?.session
         ? [
             {
               id: 'session',
-              label: language === 'zh' ? '会话' : 'Session',
+              label: tr(language, 'command_center.run_model.metrics.session', '会话', 'Session'),
               value: projection.session.title,
             },
             {
               id: 'domain',
-              label: language === 'zh' ? '领域' : 'Domain',
+              label: tr(language, 'command_center.run_model.metrics.domain', '领域', 'Domain'),
               value: projection.runtimeDomainId,
             },
           ]
         : [],
     };
+  }
+
+  // Historical failed/cancelled runs already surface in the conversation feed
+  // and summary cards. Keeping a persistent status panel for them makes the
+  // home chat feel heavier than necessary.
+  if (latestRun?.status === 'failed' || latestRun?.status === 'cancelled') {
+    return null;
   }
 
   return null;

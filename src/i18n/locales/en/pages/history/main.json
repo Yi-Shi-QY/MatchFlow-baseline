@@ -1,0 +1,46 @@
+{
+  "history_workspace": {
+    "page": {
+      "title": "History",
+      "subtitle": "Review recent completed results, resume older topics, or reopen long-lived saved topics from here.",
+      "empty_completed": "No completed results yet.",
+      "empty_resumable": "No resumable topics are available right now.",
+      "empty_saved": "No saved topics yet."
+    },
+    "sections": {
+      "summary": "Summary",
+      "recent_completed": "Recent completed",
+      "resumable_topics": "Resumable topics",
+      "saved_topics": "Saved topics"
+    },
+    "summary_card": {
+      "title": "History",
+      "description": "Start with recent completed results, then decide whether to resume an older topic or reopen a saved one.",
+      "metrics": {
+        "completed": "Completed",
+        "resumable": "Resumable",
+        "saved": "Saved"
+      }
+    },
+    "match_status": {
+      "live": "Live",
+      "finished": "Finished",
+      "upcoming": "Upcoming"
+    },
+    "meta": {
+      "completed": "Completed",
+      "last_active": "Last active",
+      "saved": "Saved"
+    },
+    "actions": {
+      "view_result": "View result",
+      "continue_topic": "Continue topic",
+      "open_topic": "Open topic"
+    },
+    "defaults": {
+      "result_summary": "Reopen the result details here before deciding on the next step.",
+      "resume_reason": "This topic still has recoverable analysis context.",
+      "saved_summary": "Keep this topic handy so it can be reopened quickly later."
+    }
+  }
+}

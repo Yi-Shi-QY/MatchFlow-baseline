@@ -1,0 +1,129 @@
+{
+  "task_center": {
+    "schedule": {
+      "time_needed": "Time needed",
+      "daily": "Daily at {{time}}",
+      "invalid": "Invalid time"
+    },
+    "clarification": {
+      "time_prompt": "Add a run time, for example \"tonight 20:00\" or \"daily 09:00\".",
+      "time_placeholder": "Example: tonight 20:00",
+      "target_prompt": "Add the target, such as a league, a matchup, or a query scope.",
+      "target_placeholder": "Example: all Premier League matches"
+    },
+    "sections": {
+      "waiting_title": "Waiting",
+      "waiting_empty": "There is nothing that needs your action right now."
+    },
+    "composer": {
+      "title": "Unified Natural Language Entry",
+      "subtitle": "Describe the target and timing in one sentence. MatchFlow will decide whether this should run now or become automation, then prepare structured drafts for confirmation.",
+      "placeholder": "Example: analyze Real Madrid vs Barcelona now; tonight at 20:00 analyze Real Madrid vs Barcelona",
+      "action_smart": "Understand Command",
+      "action_analyze_now": "Prepare Instant Run",
+      "action_automation": "Generate Automation Drafts",
+      "examples": "Examples",
+      "mode_label": "Mode",
+      "smart": "Smart",
+      "analyze_now": "Analyze Now",
+      "automation": "Automation"
+    },
+    "draft_card": {
+      "ready": "Ready",
+      "clarify": "Needs clarification",
+      "target": "Target",
+      "schedule": "Schedule",
+      "intent": "Type",
+      "activate": "Confirm and Save",
+      "run_now": "Analyze now",
+      "delete": "Delete",
+      "answer": "Submit answer",
+      "recurring": "Recurring",
+      "one_time": "One-time",
+      "immediate": "Instant",
+      "all_matches": "Expand all matches",
+      "single_target": "Single target",
+      "target_needed": "Target needed"
+    },
+    "cards": {
+      "target_needed": "Target needed",
+      "approval": {
+        "eyebrow": "Approval needed",
+        "action": "Confirm run"
+      },
+      "clarification": {
+        "eyebrow": "Needs clarification",
+        "description_fallback": "Some required details are still missing before this can proceed.",
+        "action": "Continue"
+      },
+      "rejected": {
+        "eyebrow": "Issue detected",
+        "description_fallback": "This draft cannot proceed in its current form.",
+        "action": "Handle issue"
+      },
+      "failed": {
+        "eyebrow": "Issue detected",
+        "description_fallback": "The most recent run failed and needs review.",
+        "action": "Handle issue"
+      },
+      "running": {
+        "eyebrow": "Running",
+        "description": "This task is already running. Open it to review the latest progress.",
+        "action": "View progress"
+      },
+      "scheduled_rule": {
+        "eyebrow": "Scheduled rule",
+        "action": "View schedule"
+      },
+      "scheduled_job": {
+        "eyebrow": "Scheduled job",
+        "action": "View schedule"
+      },
+      "completed": {
+        "eyebrow": "Recent result",
+        "description": "This task is complete. Open it to review the result.",
+        "action": "View result"
+      }
+    },
+    "summary": {
+      "waiting": "Waiting",
+      "running": "Running",
+      "scheduled": "Scheduled",
+      "completed": "Completed"
+    },
+    "feedback": {
+      "draft_updated": "Draft updated.",
+      "draft_completed": "Draft completed.",
+      "immediate_unsupported": "This command cannot run as an immediate analysis yet.",
+      "immediate_missing_target": "Add one clear target before running an immediate analysis.",
+      "immediate_recurring": "Recurring commands should be saved in Automation mode, not run as immediate analysis.",
+      "immediate_multi_target": "This command expands to multiple targets. Narrow it down or switch to Automation mode.",
+      "enabled_recurring": "Enabled recurring rule \"{{title}}\".",
+      "scheduled_job": "Scheduled \"{{title}}\".",
+      "draft_deleted_named": "Deleted \"{{title}}\" draft.",
+      "draft_deleted_unnamed": "Deleted that draft.",
+      "job_not_found": "Job not found.",
+      "job_started": "Job started.",
+      "job_completed": "Completed \"{{title}}\".",
+      "job_cancelled": "Cancelled \"{{title}}\".",
+      "job_failed": "Failed to run \"{{title}}\"."
+    },
+    "examples": {
+      "analyze_now": {
+        "0": "Analyze Real Madrid vs Barcelona now",
+        "1": "Run Manchester United vs Liverpool now",
+        "2": "Analyze today's key Premier League match now"
+      },
+      "automation": {
+        "0": "Tonight at 20:00 analyze Real Madrid vs Barcelona and notify me",
+        "1": "Every day at 09:00 analyze all Premier League and La Liga matches",
+        "2": "Tomorrow at 19:30 automatically analyze key Premier League matches"
+      },
+      "smart": {
+        "0": "Analyze Real Madrid vs Barcelona now",
+        "1": "Tonight at 20:00 analyze Real Madrid vs Barcelona and notify me",
+        "2": "Every day at 09:00 analyze all Premier League and La Liga matches"
+      }
+    }
+  }
+}

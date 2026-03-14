@@ -26,4 +26,18 @@ describe('automation parser', () => {
     expect(drafts[0].status).toBe('needs_clarification');
     expect(drafts[0].clarificationState.lastQuestion?.field).toBe('time');
   });
+
+  it('keeps football league parsing available even when the default domain differs', () => {
+    const drafts = parseAutomationCommand('Every day 09:00 analyze Premier League', {
+      defaultDomainId: 'stocks',
+      now: new Date('2026-03-11T09:00:00.000Z'),
+    });
+
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].domainId).toBe('football');
+    expect(drafts[0].targetSelector).toMatchObject({
+      mode: 'league_query',
+      leagueLabel: 'Premier League',
+    });
+  });
 });

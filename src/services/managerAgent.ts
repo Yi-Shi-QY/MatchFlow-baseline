@@ -37,6 +37,11 @@ export interface ManagerPendingTask {
   stage: 'await_factors' | 'await_sequence';
   selectedSourceIds?: SourcePreferenceId[];
   sequencePreference?: SequenceStepId[];
+  clarificationSummary?: {
+    recognizedSourceIds: SourcePreferenceId[];
+    recognizedSequence: SequenceStepId[] | null;
+    missingFields: Array<'factors' | 'sequence'>;
+  };
   createdAt: number;
 }
 
@@ -85,6 +90,20 @@ function translateSequenceLabel(id: SequenceStepId, language: Language): string 
     return language === 'zh' ? '结论输出' : 'final prediction';
   }
   return translateSourceLabel(id, language);
+}
+
+export function formatManagerSourcePreferences(
+  language: Language,
+  sourceIds: SourcePreferenceId[],
+): string {
+  return sourceIds.map((id) => translateSourceLabel(id, language)).join(language === 'zh' ? '、' : ', ');
+}
+
+export function formatManagerSequencePreference(
+  language: Language,
+  sequence: SequenceStepId[],
+): string {
+  return sequence.map((id) => translateSequenceLabel(id, language)).join(' -> ');
 }
 
 export function describeAvailableFactors(language: Language): string {

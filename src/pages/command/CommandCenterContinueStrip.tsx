@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '@/src/components/ui/Button';
+import { translateText } from '@/src/i18n/translate';
 import type {
   CommandCenterContinueAction,
   CommandCenterContinueCard,
@@ -9,6 +10,10 @@ interface CommandCenterContinueStripProps {
   language: 'zh' | 'en';
   cards: CommandCenterContinueCard[];
   onAction: (action: CommandCenterContinueAction) => void;
+}
+
+function tr(language: 'zh' | 'en', key: string, zh: string, en: string) {
+  return translateText(language, key, language === 'zh' ? zh : en);
 }
 
 export function CommandCenterContinueStrip({
@@ -23,7 +28,7 @@ export function CommandCenterContinueStrip({
   return (
     <section className="space-y-2">
       <div className="text-[11px] uppercase tracking-[0.24em] text-[var(--mf-text-muted)]">
-        {language === 'zh' ? '继续区' : 'Continue'}
+        {tr(language, 'command_center.sections.continue', '继续区', 'Continue')}
       </div>
 
       <div className="flex snap-x gap-3 overflow-x-auto pb-1">

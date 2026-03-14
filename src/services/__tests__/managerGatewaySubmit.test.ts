@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AnalysisIntent,
   DomainRuntimePack,
@@ -8,6 +8,10 @@ import type {
   WorkflowResumeResult,
 } from '@/src/domains/runtime/types';
 import { createManagerGateway } from '@/src/services/manager-gateway/gateway';
+import {
+  clearMemoryCandidateStoreFallback,
+  listMemoryCandidates,
+} from '@/src/services/memoryCandidateStore';
 import type {
   ManagerGatewayLlmPlanner,
   ManagerGatewaySessionStore,
@@ -369,6 +373,13 @@ async function waitForCondition(
 }
 
 describe('manager gateway submit', () => {
+  beforeEach(() => {
+    clearMemoryCandidateStoreFallback();
+    if (typeof localStorage !== 'undefined') {
+      localStorage.clear();
+    }
+  });
+
   it('appends the user turn, executes a deterministic tool, and returns the updated projection', async () => {
     const toolBlocks: RuntimeFeedBlockInput[] = [
       {
@@ -495,7 +506,78 @@ describe('manager gateway submit', () => {
     expect(runtime.toolExecute).not.toHaveBeenCalled();
   });
 
-  it('uses the llm planner in strict mode before any workflow or deterministic tool path', async () => {
+  it('resumes the active workflow before the strict-mode llm planner', async () => {
+    const workflowState: SessionWorkflowStateSnapshot = {
+      workflowType: 'ops_workflow',
+      stateData: {
+        step: 'await_confirmation',
+      },
+    };
+    const runtime = createRuntimePack({
+      workflowState,
+      workflowResult: {
+        workflowHandled: true,
+        blocks: [
+          {
+            blockType: 'assistant_text',
+            role: 'assistant',
+            text: 'Workflow handled the clarification.',
+          },
+        ],
+        sessionPatch: {
+          activeWorkflow: null,
+        },
+        diagnostics: {
+          feedbackMessage: 'Workflow handled.',
+        },
+      },
+    });
+    const llmPlanner: ManagerGatewayLlmPlanner = {
+      planTurn: vi.fn(async () => ({
+        blocks: [
+          {
+            blockType: 'assistant_text' as const,
+            role: 'assistant' as const,
+            text: 'Planned by LLM.',
+          },
+        ] satisfies RuntimeFeedBlockInput[],
+      })),
+    };
+
+    const gateway = createManagerGateway({
+      sessionStore: createMutableSessionStore({
+        activeWorkflowType: 'ops_workflow',
+        activeWorkflowStateData: JSON.stringify(workflowState.stateData),
+      }),
+      runtimeDomainRegistry: {
+        resolve: () => runtime.pack,
+      },
+      llmPlanner,
+    });
+
+    const result = await gateway.submitMainSessionTurn({
+      input: 'default order',
+      language: 'en',
+      domainId: 'ops',
+      title: 'Ops session',
+      allowHeuristicFallback: false,
+    });
+
+    expect(result.plannerMode).toBe('workflow');
+    expect(result.workflowType).toBe('ops_workflow');
+    expect(result.feedbackMessage).toBe('Workflow handled.');
+    expect(result.projection.feed.map((entry) => entry.blockType)).toEqual([
+      'user_text',
+      'assistant_text',
+    ]);
+    expect(result.projection.feed[1].text).toBe('Workflow handled the clarification.');
+    expect(runtime.workflowResume).toHaveBeenCalledTimes(1);
+    expect(llmPlanner.planTurn).not.toHaveBeenCalled();
+    expect(runtime.resolveIntent).not.toHaveBeenCalled();
+    expect(runtime.toolExecute).not.toHaveBeenCalled();
+  });
+
+  it('uses the llm planner in strict mode before the deterministic tool path when no workflow handles the turn', async () => {
     const runtime = createRuntimePack({
       resolverIntent: {
         domainId: 'ops',
@@ -545,6 +627,58 @@ describe('manager gateway submit', () => {
     expect(runtime.workflowResume).not.toHaveBeenCalled();
     expect(runtime.resolveIntent).toHaveBeenCalledTimes(1);
     expect(runtime.toolExecute).not.toHaveBeenCalled();
+  });
+
+  it('falls back to deterministic execution in strict mode when the llm planner returns null', async () => {
+    const runtime = createRuntimePack({
+      resolverIntent: {
+        domainId: 'ops',
+        intentType: 'query',
+        rawInput: 'show system status',
+      },
+      toolResult: {
+        blocks: [
+          {
+            blockType: 'assistant_text',
+            role: 'assistant',
+            text: 'Deterministic fallback answered.',
+          },
+        ],
+        diagnostics: {
+          feedbackMessage: 'Fallback handled.',
+        },
+      },
+    });
+    const llmPlanner: ManagerGatewayLlmPlanner = {
+      planTurn: vi.fn(async () => null),
+    };
+
+    const gateway = createManagerGateway({
+      sessionStore: createMutableSessionStore(),
+      runtimeDomainRegistry: {
+        resolve: () => runtime.pack,
+      },
+      llmPlanner,
+    });
+
+    const result = await gateway.submitMainSessionTurn({
+      input: 'show system status',
+      language: 'en',
+      domainId: 'ops',
+      title: 'Ops session',
+      allowHeuristicFallback: false,
+    });
+
+    expect(result.plannerMode).toBe('deterministic');
+    expect(result.feedbackMessage).toBe('Fallback handled.');
+    expect(result.projection.feed.map((entry) => entry.blockType)).toEqual([
+      'user_text',
+      'assistant_text',
+    ]);
+    expect(result.projection.feed[1].text).toBe('Deterministic fallback answered.');
+    expect(llmPlanner.planTurn).toHaveBeenCalledTimes(1);
+    expect(runtime.resolveIntent).toHaveBeenCalledTimes(1);
+    expect(runtime.toolExecute).toHaveBeenCalledTimes(1);
   });
 
   it('assembles context, persists memory writes, and stores a rolling summary after a deterministic turn', async () => {
@@ -645,6 +779,73 @@ describe('manager gateway submit', () => {
         limit: 10,
       }),
     ).resolves.toHaveLength(1);
+  });
+
+  it('persists memory candidates from runtime diagnostics without writing them directly into manager memory', async () => {
+    const runtime = createRuntimePack({
+      resolverIntent: {
+        domainId: 'ops',
+        intentType: 'query',
+        rawInput: 'prefer fundamentals and market',
+      },
+      toolResult: {
+        blocks: [
+          {
+            blockType: 'assistant_text',
+            role: 'assistant',
+            text: 'Preference noted.',
+          },
+        ],
+        diagnostics: {
+          feedbackMessage: 'Preference noted.',
+          memoryCandidates: [
+            {
+              sourceKind: 'explicit_preference',
+              origin: 'manager_turn',
+              scopeType: 'domain',
+              scopeId: 'ops',
+              memoryType: 'preference',
+              keyText: 'analysis-factors',
+              contentText: 'Prefer fundamentals and market signals.',
+              title: 'Analysis factor preference',
+              reasoning: 'User explicitly stated which analysis factors to prioritize.',
+              evidence: ['prefer fundamentals and market'],
+            },
+          ],
+        },
+      },
+    });
+    const store = createMutableSessionStore();
+    const gateway = createManagerGateway({
+      sessionStore: store,
+      runtimeDomainRegistry: {
+        resolve: () => runtime.pack,
+      },
+    });
+
+    const result = await gateway.submitMainSessionTurn({
+      input: 'prefer fundamentals and market',
+      language: 'en',
+      domainId: 'ops',
+      title: 'Ops session',
+    });
+    const candidates = await listMemoryCandidates();
+    const persistedMemories =
+      (await store.listMemories?.({
+        scopeType: 'domain',
+        scopeId: 'ops',
+        limit: 10,
+      })) || [];
+
+    expect(result.feedbackMessage).toBe('Preference noted.');
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      status: 'pending',
+      scopeType: 'domain',
+      scopeId: 'ops',
+      keyText: 'analysis-factors',
+    });
+    expect(persistedMemories).toHaveLength(0);
   });
 
   it('queues same-session submissions and preserves grouped message ordering', async () => {
@@ -827,10 +1028,14 @@ describe('manager gateway submit', () => {
 
     expect(cancelResult.outcome).toBe('cancelled');
     expect(cancelResult.runId).toBe(queuedRun.id);
-    expect(cancelResult.projection.latestRun).toMatchObject({
+    expect(store.getRunsSnapshot().find((entry) => entry.id === queuedRun.id)).toMatchObject({
       id: queuedRun.id,
       status: 'cancelled',
       errorCode: 'cancelled_by_user',
+    });
+    expect(cancelResult.projection.activeRun).toMatchObject({
+      id: 'run_1',
+      status: 'running',
     });
 
     releaseFirstTool.resolve();

@@ -1,7 +1,7 @@
 import { Type, type FunctionDeclaration } from '@google/genai';
 import type { Match } from '@/src/data/matches';
+import { getDefaultRuntimeDomainPack } from '@/src/domains/runtime/registry';
 import { extractMatchesFromRuntimeEvents } from '@/src/domains/runtime/sourceQueries';
-import type { BuiltinSkillEntry } from '@/src/skills/types';
 import {
   finalizeAutomationDraftsForComposer,
   summarizeManagerResponse,
@@ -11,15 +11,25 @@ import { parseAutomationCommand } from '@/src/services/automation/parser';
 import type { AutomationDraft } from '@/src/services/automation/types';
 import { createAutomationId } from '@/src/services/automation/utils';
 import {
+  buildManagerClarificationFollowUp,
+  summarizeManagerClarification,
+  toManagerClarificationSnapshot,
+} from '@/src/services/manager-workspace/clarificationSummary';
+import { detectMemoryCandidatesFromManagerInput } from '@/src/services/memoryCandidateDetectors';
+import type { MemoryCandidateDetectionMode } from '@/src/services/memoryCandidateTypes';
+import { ensureExecutionTicketForDraft } from '@/src/services/manager-workspace/executionTicketStore';
+import {
   applyAnalysisProfileToDrafts,
-  buildFactorsFollowUp,
   buildSequenceFollowUp,
-  describeAvailableFactors,
-  describeDefaultSequence,
   parseSequencePreference,
   parseSourcePreferenceIds,
 } from '@/src/services/managerAgent';
 import { resolveDomainEventFeed } from '@/src/services/domainMatchFeed';
+import {
+  runtimeManagerSupportsTool,
+  resolveRuntimeManagerCapabilityText,
+  resolveRuntimeManagerHelpText,
+} from './runtimeIntentRouter';
 import type {
   ManagerConversationEffect,
   ManagerLanguage,
@@ -101,6 +111,59 @@ function createPendingTask(
     stage: 'await_factors',
     createdAt: Date.now(),
   };
+}
+
+function buildManagerTurnMemoryCandidates(args: {
+  text: string;
+  domainId: string;
+  detectionMode?: MemoryCandidateDetectionMode;
+  recentUserMessages?: string[];
+}) {
+  return detectMemoryCandidatesFromManagerInput({
+    text: args.text,
+    domainId: args.domainId,
+    detectionMode: args.detectionMode,
+    recentUserMessages: args.recentUserMessages,
+  });
+}
+
+function resolveDefaultDomainId(): string {
+  return getDefaultRuntimeDomainPack().manifest.domainId;
+}
+
+function buildUnsupportedToolEffect(args: {
+  domainId: string;
+  language: ManagerLanguage;
+}): ManagerConversationEffect {
+  const agentText = args.domainId
+    ? resolveRuntimeManagerHelpText({
+        domainId: args.domainId,
+        language: args.language,
+      })
+    : buildFallbackHelpText(args.language);
+
+  return {
+    agentText,
+    messageKind: 'text',
+    pendingTask: null,
+  };
+}
+
+function ensureSupportedManagerTool(args: {
+  domainId: string;
+  language: ManagerLanguage;
+  toolId: string;
+}): ManagerConversationEffect | null {
+  if (
+    runtimeManagerSupportsTool({
+      domainId: args.domainId,
+      toolId: args.toolId,
+    })
+  ) {
+    return null;
+  }
+
+  return buildUnsupportedToolEffect(args);
 }
 
 function buildFallbackHelpText(language: ManagerLanguage): string {
@@ -241,11 +304,22 @@ function formatMatchReply(
     : `I queried the football runtime sources and found ${matches.length} ${scopeLabel}:\n${lines.join('\n')}`;
 }
 
-function buildDraftBundleEffect(
+async function buildDraftBundleEffect(
   drafts: AutomationDraft[],
   composerMode: AutomationCommandComposerMode,
   language: ManagerLanguage,
-): ManagerConversationEffect {
+): Promise<ManagerConversationEffect> {
+  await Promise.all(
+    drafts
+      .filter((draft) => draft.status === 'ready')
+      .map((draft) =>
+        ensureExecutionTicketForDraft({
+          draft,
+          source: 'command_center',
+        }),
+      ),
+  );
+
   const summary = summarizeManagerResponse(drafts, {
     composerMode,
     language,
@@ -293,6 +367,15 @@ export async function executeManagerQueryLocalMatches(args: {
   signal?: AbortSignal;
 }): Promise<ManagerConversationEffect> {
   throwIfAborted(args.signal);
+  const unsupported = ensureSupportedManagerTool({
+    domainId: args.domainId,
+    language: args.language,
+    toolId: managerQueryLocalMatchesDeclaration.name,
+  });
+  if (unsupported) {
+    return unsupported;
+  }
+
   const resolution = resolveMatchQuery(args.sourceText, args.language, args.domainId);
   const events = await resolveDomainEventFeed({
     domainId: args.domainId,
@@ -306,6 +389,11 @@ export async function executeManagerQueryLocalMatches(args: {
     agentText: formatMatchReply(args.language, resolution.scopeLabel, matches),
     messageKind: 'text',
     pendingTask: null,
+    memoryCandidates: buildManagerTurnMemoryCandidates({
+      text: args.sourceText,
+      domainId: args.domainId,
+      detectionMode: 'freeform',
+    }),
   };
 }
 
@@ -320,27 +408,40 @@ export const managerDescribeCapabilityDeclaration: FunctionDeclaration = {
         type: Type.STRING,
         description: 'One of "factors", "sequence", or "help".',
       },
+      domainId: {
+        type: Type.STRING,
+        description: 'The active analysis domain for manager capability hints.',
+      },
       language: {
         type: Type.STRING,
         description: 'Reply language. Use "zh" for Chinese and "en" for English.',
       },
     },
-    required: ['topic', 'language'],
+    required: ['topic', 'domainId', 'language'],
   },
 };
 
 export async function executeManagerDescribeCapability(args: {
   topic: 'factors' | 'sequence' | 'help';
+  domainId: string;
   language: ManagerLanguage;
   signal?: AbortSignal;
 }): Promise<ManagerConversationEffect> {
   throwIfAborted(args.signal);
-  const agentText =
-    args.topic === 'factors'
-      ? describeAvailableFactors(args.language)
-      : args.topic === 'sequence'
-        ? describeDefaultSequence(args.language)
-        : buildFallbackHelpText(args.language);
+  const unsupported = ensureSupportedManagerTool({
+    domainId: args.domainId,
+    language: args.language,
+    toolId: managerDescribeCapabilityDeclaration.name,
+  });
+  if (unsupported) {
+    return unsupported;
+  }
+
+  const agentText = resolveRuntimeManagerCapabilityText({
+    domainId: args.domainId,
+    language: args.language,
+    topic: args.topic,
+  });
 
   return {
     agentText,
@@ -390,6 +491,15 @@ export async function executeManagerPrepareTaskIntake(args: {
   signal?: AbortSignal;
 }): Promise<ManagerConversationEffect> {
   throwIfAborted(args.signal);
+  const unsupported = ensureSupportedManagerTool({
+    domainId: args.defaultDomainId,
+    language: args.language,
+    toolId: managerPrepareTaskIntakeDeclaration.name,
+  });
+  if (unsupported) {
+    return unsupported;
+  }
+
   const now =
     typeof args.nowIso === 'string' && args.nowIso.trim().length > 0
       ? new Date(args.nowIso)
@@ -405,35 +515,57 @@ export async function executeManagerPrepareTaskIntake(args: {
       now,
     },
   );
-  const selectedSourceIds = parseSourcePreferenceIds(args.sourceText);
-  const sequencePreference = parseSequencePreference(args.sourceText);
+  const pendingTask = createPendingTask(args.sourceText, args.composerMode, drafts);
+  const clarification = summarizeManagerClarification({
+    pendingTask,
+    answer: args.sourceText,
+  });
+  const memoryCandidateMode: MemoryCandidateDetectionMode =
+    clarification.sequencePreference && clarification.selectedSourceIds.length > 0
+      ? 'analysis_profile'
+      : clarification.sequencePreference
+        ? 'analysis_sequence'
+        : clarification.selectedSourceIds.length > 0
+          ? 'analysis_factors'
+          : 'freeform';
+  const memoryCandidates = buildManagerTurnMemoryCandidates({
+    text: args.sourceText,
+    domainId: drafts[0]?.domainId || args.defaultDomainId,
+    detectionMode: memoryCandidateMode,
+  });
 
-  if (selectedSourceIds && sequencePreference) {
+  if (clarification.isComplete && clarification.sequencePreference) {
     throwIfAborted(args.signal);
-    return buildDraftBundleEffect(
+    const effect = await buildDraftBundleEffect(
       applyAnalysisProfileToDrafts(drafts, {
-        selectedSourceIds,
-        sequencePreference,
+        selectedSourceIds: clarification.selectedSourceIds,
+        sequencePreference: clarification.sequencePreference,
       }),
       args.composerMode,
       args.language,
     );
+    return {
+      ...effect,
+      memoryCandidates,
+    };
   }
 
-  const pendingTask = createPendingTask(args.sourceText, args.composerMode, drafts);
-  pendingTask.selectedSourceIds = selectedSourceIds || undefined;
-  pendingTask.sequencePreference = sequencePreference || undefined;
-  pendingTask.stage = selectedSourceIds ? 'await_sequence' : 'await_factors';
+  pendingTask.selectedSourceIds =
+    clarification.selectedSourceIds.length > 0 ? clarification.selectedSourceIds : undefined;
+  pendingTask.sequencePreference = clarification.sequencePreference || undefined;
+  pendingTask.stage = clarification.nextStage || 'await_factors';
+  pendingTask.clarificationSummary = toManagerClarificationSnapshot(clarification);
+  const followUp = buildManagerClarificationFollowUp({
+    language: args.language,
+    summary: clarification,
+  });
 
   return {
-    agentText: selectedSourceIds
-      ? buildSequenceFollowUp(args.language, selectedSourceIds)
-      : buildFactorsFollowUp(args.language),
+    agentText: followUp,
     messageKind: 'text',
     pendingTask,
-    feedbackMessage: selectedSourceIds
-      ? buildSequenceFollowUp(args.language, selectedSourceIds)
-      : buildFactorsFollowUp(args.language),
+    feedbackMessage: followUp,
+    memoryCandidates,
   };
 }
 
@@ -468,6 +600,82 @@ export async function executeManagerContinueTaskIntake(args: {
   signal?: AbortSignal;
 }): Promise<ManagerConversationEffect> {
   throwIfAborted(args.signal);
+  const domainId = args.pendingTask.drafts[0]?.domainId || resolveDefaultDomainId();
+  const unsupported = ensureSupportedManagerTool({
+    domainId,
+    language: args.language,
+    toolId: managerContinueTaskIntakeDeclaration.name,
+  });
+  if (unsupported) {
+    return unsupported;
+  }
+
+  const clarification = summarizeManagerClarification({
+    pendingTask: args.pendingTask,
+    answer: args.answer,
+  });
+  const memoryCandidateMode: MemoryCandidateDetectionMode =
+    clarification.sequencePreference && clarification.selectedSourceIds.length > 0
+      ? 'analysis_profile'
+      : clarification.sequencePreference
+        ? 'analysis_sequence'
+        : clarification.selectedSourceIds.length > 0
+          ? 'analysis_factors'
+          : args.pendingTask.stage === 'await_sequence'
+            ? 'analysis_sequence'
+            : args.pendingTask.stage === 'await_factors'
+              ? 'analysis_factors'
+              : 'freeform';
+  const memoryCandidates = buildManagerTurnMemoryCandidates({
+    text: args.answer,
+    domainId,
+    detectionMode: memoryCandidateMode,
+  });
+
+  if (!clarification.isComplete || !clarification.sequencePreference) {
+    const nextPendingTask: ManagerPendingTask = {
+      ...args.pendingTask,
+      stage: clarification.nextStage || args.pendingTask.stage,
+      selectedSourceIds:
+        clarification.selectedSourceIds.length > 0
+          ? clarification.selectedSourceIds
+          : undefined,
+      sequencePreference: clarification.sequencePreference || undefined,
+      clarificationSummary: toManagerClarificationSnapshot(clarification),
+    };
+    const followUp = buildManagerClarificationFollowUp({
+      language: args.language,
+      summary: clarification,
+    });
+    return {
+      agentText: followUp,
+      messageKind: 'text',
+      pendingTask: nextPendingTask,
+      feedbackMessage: followUp,
+      memoryCandidates,
+    };
+  }
+
+  const completedSourceIds =
+    clarification.selectedSourceIds.length > 0
+      ? clarification.selectedSourceIds
+      : DEFAULT_SOURCE_PREFERENCES;
+  const completedDrafts = applyAnalysisProfileToDrafts(args.pendingTask.drafts, {
+    selectedSourceIds: completedSourceIds,
+    sequencePreference: clarification.sequencePreference as ManagerSequenceStepId[],
+  });
+  throwIfAborted(args.signal);
+
+  const effect = await buildDraftBundleEffect(
+    completedDrafts,
+    args.pendingTask.composerMode,
+    args.language,
+  );
+  return {
+    ...effect,
+    memoryCandidates,
+  };
+
   if (args.pendingTask.stage === 'await_factors') {
     const selectedSourceIds = parseSourcePreferenceIds(args.answer);
     if (!selectedSourceIds) {
@@ -533,64 +741,40 @@ export const managerHelpDeclaration: FunctionDeclaration = {
   parameters: {
     type: Type.OBJECT,
     properties: {
+      domainId: {
+        type: Type.STRING,
+        description: 'The active analysis domain for manager guidance.',
+      },
       language: {
         type: Type.STRING,
         description: 'Reply language. Use "zh" for Chinese and "en" for English.',
       },
     },
-    required: ['language'],
+    required: ['domainId', 'language'],
   },
 };
 
 export async function executeManagerHelp(args: {
+  domainId: string;
   language: ManagerLanguage;
   signal?: AbortSignal;
 }): Promise<ManagerConversationEffect> {
   throwIfAborted(args.signal);
+  const unsupported = ensureSupportedManagerTool({
+    domainId: args.domainId,
+    language: args.language,
+    toolId: managerHelpDeclaration.name,
+  });
+  if (unsupported) {
+    return unsupported;
+  }
+
   return {
-    agentText: buildFallbackHelpText(args.language),
+    agentText: resolveRuntimeManagerHelpText({
+      domainId: args.domainId,
+      language: args.language,
+    }),
     messageKind: 'text',
     pendingTask: null,
   };
 }
-
-export const MANAGER_TOOL_IDS = [
-  managerQueryLocalMatchesDeclaration.name,
-  managerDescribeCapabilityDeclaration.name,
-  managerPrepareTaskIntakeDeclaration.name,
-  managerContinueTaskIntakeDeclaration.name,
-  managerHelpDeclaration.name,
-] as const;
-
-export const MANAGER_BUILTIN_SKILL_ENTRIES: BuiltinSkillEntry[] = [
-  {
-    id: managerQueryLocalMatchesDeclaration.name,
-    declaration: managerQueryLocalMatchesDeclaration,
-    execute: executeManagerQueryLocalMatches,
-    version: '1.0.0',
-  },
-  {
-    id: managerDescribeCapabilityDeclaration.name,
-    declaration: managerDescribeCapabilityDeclaration,
-    execute: executeManagerDescribeCapability,
-    version: '1.0.0',
-  },
-  {
-    id: managerPrepareTaskIntakeDeclaration.name,
-    declaration: managerPrepareTaskIntakeDeclaration,
-    execute: executeManagerPrepareTaskIntake,
-    version: '1.0.0',
-  },
-  {
-    id: managerContinueTaskIntakeDeclaration.name,
-    declaration: managerContinueTaskIntakeDeclaration,
-    execute: executeManagerContinueTaskIntake,
-    version: '1.0.0',
-  },
-  {
-    id: managerHelpDeclaration.name,
-    declaration: managerHelpDeclaration,
-    execute: executeManagerHelp,
-    version: '1.0.0',
-  },
-];

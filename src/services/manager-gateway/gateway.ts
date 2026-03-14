@@ -10,6 +10,8 @@ import type {
 import {
   resolveRuntimeDomainPack,
 } from '@/src/domains/runtime/registry';
+import type { MemoryCandidateInput } from '@/src/services/memoryCandidateTypes';
+import { persistMemoryCandidates } from '@/src/services/memoryCandidateStore';
 import { createManagerContextAssembler } from './contextAssembler';
 import { createManagerMemoryService } from './memoryService';
 import { createManagerRunCoordinator } from './runCoordinator';
@@ -160,6 +162,32 @@ function extractShouldRefreshTaskState(
   result: RuntimeToolExecutionResult | WorkflowResumeResult,
 ): boolean {
   return Boolean(result.diagnostics?.shouldRefreshTaskState);
+}
+
+function extractMemoryCandidates(
+  result: RuntimeToolExecutionResult | WorkflowResumeResult,
+): MemoryCandidateInput[] {
+  const raw = result.diagnostics?.memoryCandidates;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw.filter((entry): entry is MemoryCandidateInput => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      return false;
+    }
+
+    const value = entry as Record<string, unknown>;
+    return (
+      (value.scopeType === 'global' ||
+        value.scopeType === 'domain' ||
+        value.scopeType === 'session') &&
+      typeof value.scopeId === 'string' &&
+      typeof value.memoryType === 'string' &&
+      typeof value.keyText === 'string' &&
+      typeof value.contentText === 'string'
+    );
+  });
 }
 
 function createAbortError(): Error & { name: string } {
@@ -421,29 +449,7 @@ export function createManagerGateway(args: {
           let plannerMode: ManagerGatewayTurnResult['plannerMode'] = 'deterministic';
           let toolId: string | undefined;
           let workflowType: string | undefined;
-
-          if (!allowHeuristicFallback) {
-            if (!args.llmPlanner) {
-              throw new Error('Strict manager gateway turn requires an LLM planner.');
-            }
-            const contextInput = await ensureIntentAndContext();
-            executionResult = await args.llmPlanner.planTurn({
-              input: normalized,
-              language: input.language,
-              requireLlm: true,
-              projection: afterUserProjection,
-              runtimePack,
-              intent: contextInput.intent,
-              contextFragments: contextInput.assembledContext.fragments,
-              recentMessages,
-              signal,
-            });
-            throwIfAborted(signal);
-            if (!executionResult) {
-              throw new Error('Strict manager gateway turn did not receive an LLM planner result.');
-            }
-            plannerMode = 'llm_assisted';
-          }
+          let strictLlmAttempted = false;
 
           if (!executionResult && activeWorkflow && Array.isArray(runtimePack.workflows)) {
             const workflowHandler = runtimePack.workflows.find((entry) => entry.canResume(activeWorkflow));
@@ -464,7 +470,31 @@ export function createManagerGateway(args: {
             }
           }
 
-          if (!executionResult && args.llmPlanner) {
+          if (!executionResult && !allowHeuristicFallback) {
+            if (!args.llmPlanner) {
+              throw new Error('Strict manager gateway turn requires an LLM planner.');
+            }
+            strictLlmAttempted = true;
+            const contextInput = await ensureIntentAndContext();
+            const strictLlmResult = await args.llmPlanner.planTurn({
+              input: normalized,
+              language: input.language,
+              requireLlm: true,
+              projection: afterUserProjection,
+              runtimePack,
+              intent: contextInput.intent,
+              contextFragments: contextInput.assembledContext.fragments,
+              recentMessages,
+              signal,
+            });
+            throwIfAborted(signal);
+            if (strictLlmResult) {
+              executionResult = strictLlmResult;
+              plannerMode = 'llm_assisted';
+            }
+          }
+
+          if (!executionResult && args.llmPlanner && !strictLlmAttempted) {
             const contextInput = await ensureIntentAndContext();
             const llmResult = await args.llmPlanner.planTurn({
               input: normalized,
@@ -545,6 +575,15 @@ export function createManagerGateway(args: {
               session: runtimeSession,
               runtimePack,
               writes: executionResult.memoryWrites,
+            });
+          }
+
+          const memoryCandidates = extractMemoryCandidates(executionResult);
+          if (memoryCandidates.length > 0) {
+            throwIfAborted(signal);
+            await persistMemoryCandidates({
+              candidates: memoryCandidates,
+              sessionStore: args.sessionStore,
             });
           }
 

@@ -1,0 +1,124 @@
+{
+  "command_center": {
+    "sections": {
+      "continue": "继续区",
+      "last_summary": "上次摘要",
+      "suggestions": "建议操作",
+      "run_status": "运行状态"
+    },
+    "status_bar": {
+      "pending": "待继续",
+      "running": "进行中"
+    },
+    "composer": {
+      "placeholder": "直接问今天有哪些比赛，或者说明要分析哪场比赛以及什么时间分析。",
+      "send": "发送"
+    },
+    "conversation": {
+      "draft_bundle_empty": "这批卡片已经处理完了。"
+    },
+    "run_status": {
+      "cancelling": "取消中..."
+    },
+    "home": {
+      "target_needed": "待补充目标",
+      "approval": {
+        "analyze_now": "立即分析",
+        "confirm_run": "确认执行",
+        "eyebrow": "待确认任务"
+      },
+      "clarification": {
+        "description_fallback": "还缺少继续执行所需的关键信息。",
+        "action": "继续补充",
+        "eyebrow": "待回复问题"
+      },
+      "exception": {
+        "review_title": "上一次执行需要处理",
+        "action": "查看异常",
+        "eyebrow": "异常待处理",
+        "failed_title": "最近一次执行失败",
+        "description_fallback": "需要回到对话里查看失败原因。"
+      },
+      "resumable": {
+        "status_running": "正在推进",
+        "status_queued": "排队中",
+        "title_fallback": "继续当前主题",
+        "description": "{{status}} - 返回会话查看最新进展。",
+        "action": "查看进展",
+        "eyebrow": "可继续主题"
+      },
+      "last_summary": {
+        "title": "上次已完成",
+        "action": "查看对话",
+        "empty_summary": "上一条流程已经结束，可以直接开始新的输入。"
+      },
+      "status": {
+        "approval_needed": "有待确认任务",
+        "details_needed": "需要补充信息",
+        "issue_needs_review": "有异常待处理",
+        "continue_active_thread": "可以继续当前协作",
+        "last_flow_completed": "上次流程已完成",
+        "ready_new_request": "准备开始新的输入"
+      }
+    },
+    "run_model": {
+      "states": {
+        "submitting": "提交中",
+        "queued": "排队中",
+        "running": "运行中",
+        "failed": "失败",
+        "cancelled": "已取消"
+      },
+      "trigger": {
+        "resume": "恢复",
+        "system": "系统",
+        "compaction": "压缩",
+        "user": "用户"
+      },
+      "planner": {
+        "workflow": "工作流",
+        "llm": "LLM",
+        "deterministic": "确定性"
+      },
+      "metrics": {
+        "run_id": "Run ID",
+        "status": "状态",
+        "trigger": "触发",
+        "planner": "路径",
+        "tool": "工具",
+        "intent": "意图",
+        "started": "开始",
+        "updated": "更新",
+        "session": "会话",
+        "domain": "领域"
+      },
+      "queued": {
+        "title": "正在等待上一步完成",
+        "description": "当前会话还有一个请求在执行，这次请求会在它结束后自动开始。",
+        "action": "取消待开始请求"
+      },
+      "running": {
+        "title": "正在处理你的最新请求",
+        "description": "系统正在处理这次请求，可能会拉取上下文、恢复流程或调用工具。",
+        "action": "停止这次请求"
+      },
+      "failed": {
+        "title": "最近一次请求未能完成",
+        "no_details": "未返回更多错误信息。"
+      },
+      "cancelled": {
+        "interrupted_title": "最近一次请求已停止",
+        "queued_title": "最近一次待开始请求已取消",
+        "interrupted_description": "这次请求在执行过程中被中断。",
+        "queued_description": "这次请求在正式开始前已被取消。"
+      },
+      "submit_failed": {
+        "title": "这次请求未能启动"
+      },
+      "submitting": {
+        "title": "正在启动这次请求",
+        "description": "页面已发出请求，正在等待进入稳定的执行状态。"
+      }
+    }
+  }
+}

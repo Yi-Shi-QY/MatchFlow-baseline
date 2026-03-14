@@ -50,6 +50,25 @@ function createProjection(): ManagerSessionProjection {
         createdAt: 200,
       },
       {
+        id: 'msg_tool_1',
+        role: 'assistant',
+        blockType: 'tool_result',
+        text: 'Completed "Analyze Arsenal vs Chelsea tonight". The result is ready to review.',
+        payloadData: JSON.stringify({
+          schemaVersion: 1,
+          automationEvent: {
+            source: 'automation_executor',
+            phase: 'completed',
+            route: '/subject/football/match-1',
+            title: 'Analyze Arsenal vs Chelsea tonight',
+            provider: 'openai',
+            model: 'gpt-5',
+            totalTokens: 320,
+          },
+        }),
+        createdAt: 250,
+      },
+      {
         id: 'msg_nav_1',
         role: 'system',
         blockType: 'navigation_intent',
@@ -70,7 +89,7 @@ describe('command center feed adapter', () => {
 
     expect((projection as unknown as Record<string, unknown>).messages).toBeUndefined();
 
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(4);
     expect(items[0]).toMatchObject({
       id: 'msg_user_1',
       role: 'user',
@@ -86,6 +105,28 @@ describe('command center feed adapter', () => {
       action: {
         type: 'open_settings',
         label: 'Open Settings',
+      },
+    });
+    expect(items[2]).toMatchObject({
+      id: 'msg_tool_1',
+      role: 'assistant',
+      blockType: 'tool_result',
+      automationEvent: {
+        source: 'automation_executor',
+        phase: 'completed',
+        route: '/subject/football/match-1',
+        title: 'Analyze Arsenal vs Chelsea tonight',
+        provider: 'openai',
+        model: 'gpt-5',
+        totalTokens: 320,
+      },
+    });
+    expect(items[3]).toMatchObject({
+      id: 'msg_nav_1',
+      role: 'system',
+      blockType: 'navigation_intent',
+      navigationIntent: {
+        route: '/subject/football/match-1',
       },
     });
   });

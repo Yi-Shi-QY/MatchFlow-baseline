@@ -1,11 +1,8 @@
 import type { SummaryDistributionItem } from "@/src/services/analysisSummary";
 import type { MatchAnalysis } from "@/src/services/ai";
-import type {
-  SubjectDisplayMatch,
-  SubjectDisplayStatus,
-} from "@/src/services/subjectDisplayMatch";
+import type { SubjectDisplay, SubjectDisplayStatus } from "@/src/services/subjectDisplay";
 
-export type DomainSubjectDisplay = SubjectDisplayMatch;
+export type DomainSubjectDisplay = SubjectDisplay;
 export type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 
 export interface HomePresenterContext {

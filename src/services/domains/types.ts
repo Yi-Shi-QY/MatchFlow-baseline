@@ -1,8 +1,8 @@
 import type { DataSourceDefinition, SourceSelection } from "@/src/services/dataSources";
-import type { SubjectDisplayMatch } from "@/src/services/subjectDisplayMatch";
+import type { SubjectDisplay } from "@/src/services/subjectDisplay";
 
 export interface AnalysisDomainContext {
-  subjectDisplay: SubjectDisplayMatch;
+  subjectDisplay: SubjectDisplay;
   importedData?: any;
 }
 
@@ -21,7 +21,7 @@ export interface AnalysisDomain {
   dataSources: DataSourceDefinition[];
   getAvailableDataSources: (context: AnalysisDomainContext) => DataSourceDefinition[];
   resolveSourceSelection: (
-    subjectDisplay: SubjectDisplayMatch,
+    subjectDisplay: SubjectDisplay,
     importedData?: any,
     previousSelection?: Partial<SourceSelection>,
   ) => SourceSelection;

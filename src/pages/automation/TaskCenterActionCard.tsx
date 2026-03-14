@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '@/src/components/ui/Button';
+import { ExecutionApprovalCard } from '@/src/pages/command/ExecutionApprovalCard';
 import {
   getTaskCenterAnchorId,
   type TaskCenterAction,
@@ -9,7 +10,7 @@ import {
 interface TaskCenterActionCardProps {
   card: TaskCenterCard;
   isSelected?: boolean;
-  onPrimaryAction: (action: TaskCenterAction) => void;
+  onAction: (action: TaskCenterAction) => void;
 }
 
 function getTone(card: TaskCenterCard): string {
@@ -31,8 +32,23 @@ function getTone(card: TaskCenterCard): string {
 export function TaskCenterActionCard({
   card,
   isSelected = false,
-  onPrimaryAction,
+  onAction,
 }: TaskCenterActionCardProps) {
+  if (card.kind === 'approval' && card.approval) {
+    return (
+      <ExecutionApprovalCard
+        model={card.approval}
+        isSelected={isSelected}
+        primaryAnchorId={getTaskCenterAnchorId(card.target)}
+        secondaryAnchorId={`execution-approval-${card.approval.approvalId}`}
+        onPrimaryAction={() => onAction(card.primaryAction.action)}
+        onSecondaryAction={
+          card.secondaryAction ? () => onAction(card.secondaryAction.action) : undefined
+        }
+      />
+    );
+  }
+
   return (
     <article
       id={getTaskCenterAnchorId(card.target)}
@@ -60,7 +76,7 @@ export function TaskCenterActionCard({
       <Button
         size="sm"
         className="mt-4 w-full rounded-2xl"
-        onClick={() => onPrimaryAction(card.primaryAction.action)}
+        onClick={() => onAction(card.primaryAction.action)}
       >
         {card.primaryAction.label}
       </Button>

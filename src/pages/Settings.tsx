@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { WorkspaceShell } from '@/src/components/layout/WorkspaceShell';
 import { Button } from '@/src/components/ui/Button';
@@ -8,11 +7,12 @@ import { SettingsOverviewCard } from '@/src/pages/settings/SettingsOverviewCard'
 import { SettingsSection } from '@/src/pages/settings/SettingsSection';
 import { deriveSettingsHomeModel } from '@/src/pages/settings/settingsHomeModel';
 import { useSettingsState } from '@/src/pages/settings/useSettingsState';
+import { useWorkspaceNavigation } from '@/src/services/navigation/useWorkspaceNavigation';
 
 export default function Settings() {
-  const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const language = i18n.language.startsWith('zh') ? 'zh' : 'en';
+  const { goBack, openRoute } = useWorkspaceNavigation();
   const state = useSettingsState();
   const model = React.useMemo(
     () =>
@@ -44,6 +44,13 @@ export default function Settings() {
     [state],
   );
 
+  const handleNavigate = React.useCallback(
+    (route: string) => {
+      openRoute(route);
+    },
+    [openRoute],
+  );
+
   return (
     <WorkspaceShell
       language={language}
@@ -51,12 +58,12 @@ export default function Settings() {
       title={t('settings.workspace_title')}
       subtitle={t('settings.workspace_subtitle')}
       headerActions={
-        <Button variant="secondary" size="sm" className="rounded-2xl" onClick={() => navigate(-1)}>
+        <Button variant="secondary" size="sm" className="rounded-2xl" onClick={() => void goBack('/')}>
           {model.primaryAction.label}
         </Button>
       }
     >
-      <SettingsOverviewCard model={model.overviewCard} onNavigate={navigate} />
+      <SettingsOverviewCard model={model.overviewCard} onNavigate={handleNavigate} />
 
       {model.sections
         .filter((section) => section.id !== 'diagnostics_entry')
@@ -68,7 +75,7 @@ export default function Settings() {
                 item={item}
                 onToggle={handleToggle}
                 onSelect={handleSelect}
-                onNavigate={navigate}
+                onNavigate={handleNavigate}
               />
             ))}
           </SettingsSection>
@@ -81,7 +88,7 @@ export default function Settings() {
             item={item}
             onToggle={handleToggle}
             onSelect={handleSelect}
-            onNavigate={navigate}
+            onNavigate={handleNavigate}
           />
         ))}
       </SettingsSection>

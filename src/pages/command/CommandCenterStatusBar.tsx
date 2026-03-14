@@ -1,5 +1,6 @@
 import React from 'react';
 import { Activity, CircleCheck, CircleDot, TriangleAlert } from 'lucide-react';
+import { translateText } from '@/src/i18n/translate';
 import type { CommandCenterHomeLayout } from './homeLayoutModel';
 
 interface CommandCenterStatusBarProps {
@@ -45,52 +46,54 @@ function getStatusIcon(tone: CommandCenterHomeLayout['statusTone']) {
   return CircleDot;
 }
 
+function tr(language: 'zh' | 'en', key: string, zh: string, en: string) {
+  return translateText(language, key, language === 'zh' ? zh : en);
+}
+
 export function CommandCenterStatusBar({
   language,
   layout,
 }: CommandCenterStatusBarProps) {
   const tone = getToneClasses(layout.statusTone);
   const Icon = getStatusIcon(layout.statusTone);
-  const copy =
-    language === 'zh'
-      ? {
-          pending: '待继续',
-          running: '进行中',
-        }
-      : {
-          pending: 'Pending',
-          running: 'Running',
-        };
+  const copy = {
+    pending: tr(language, 'command_center.status_bar.pending', '待继续', 'Pending'),
+    running: tr(language, 'command_center.status_bar.running', '进行中', 'Running'),
+  };
 
   return (
-    <section className="sticky top-[calc(1rem+env(safe-area-inset-top))] z-20 pl-14">
+    <section className="w-full pl-14">
       <div
-        className={`flex items-center justify-between gap-3 rounded-[1.4rem] border px-4 py-3 shadow-lg backdrop-blur-xl ${tone.shell}`}
+        className={`relative overflow-hidden rounded-[1.35rem] border px-3.5 py-2.5 shadow-[0_18px_50px_rgba(3,7,18,0.22)] backdrop-blur-xl ${tone.shell}`}
       >
-        <div className="min-w-0 flex items-center gap-3">
-          <div
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/10 ${tone.icon}`}
-          >
-            <Icon className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--mf-text-muted)]">
-              MatchFlow
-            </div>
-            <div className="truncate text-sm font-semibold text-[var(--mf-text)]">
-              {layout.statusLabel}
-            </div>
-          </div>
-        </div>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white/10 to-transparent" />
 
-        <div className="flex shrink-0 gap-2 text-[11px]">
-          <div className="rounded-full border border-white/10 bg-black/10 px-3 py-1.5 text-[var(--mf-text)]">
-            <span className="text-[var(--mf-text-muted)]">{copy.pending}: </span>
-            <span>{layout.pendingCount}</span>
+        <div className="relative flex items-center justify-between gap-3">
+          <div className="min-w-0 flex items-center gap-3">
+            <div
+              className={`flex h-[2.125rem] w-[2.125rem] shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/15 ${tone.icon}`}
+            >
+              <Icon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[9px] uppercase tracking-[0.24em] text-[var(--mf-text-muted)]">
+                MatchFlow
+              </div>
+              <div className="truncate text-sm font-semibold text-[var(--mf-text)]">
+                {layout.statusLabel}
+              </div>
+            </div>
           </div>
-          <div className="rounded-full border border-white/10 bg-black/10 px-3 py-1.5 text-[var(--mf-text)]">
-            <span className="text-[var(--mf-text-muted)]">{copy.running}: </span>
-            <span>{layout.runningCount}</span>
+
+          <div className="flex shrink-0 gap-1.5 text-[11px]">
+            <div className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-[var(--mf-text)]">
+              <span className="text-[var(--mf-text-muted)]">{copy.pending}: </span>
+              <span>{layout.pendingCount}</span>
+            </div>
+            <div className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-[var(--mf-text)]">
+              <span className="text-[var(--mf-text-muted)]">{copy.running}: </span>
+              <span>{layout.runningCount}</span>
+            </div>
           </div>
         </div>
       </div>

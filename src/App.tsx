@@ -3,14 +3,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, Component, ErrorInfo, ReactNode, lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import React, {
+  useEffect,
+  useRef,
+  Component,
+  ErrorInfo,
+  ReactNode,
+  lazy,
+  Suspense,
+} from 'react';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+} from 'react-router-dom';
 import { AnalysisProvider } from './contexts/AnalysisContext';
 import { App as CapacitorApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { getSettings } from './services/settings';
 import { buildSubjectRoute } from './services/navigation/subjectRoute';
+import {
+  normalizeWorkspaceRoutePath,
+  resolveWorkspaceBackTarget,
+} from './services/navigation/workspaceBackNavigation';
 import {
   kickAutomationRuntime,
   setAutomationRuntimeAppActive,
@@ -23,8 +42,9 @@ import {
   scheduleNativeAutomationSync,
 } from './services/automation/nativeScheduler';
 import { startAndroidAutomationForegroundHost } from './services/automation/androidAutomationHost';
+import { repairLegacyAutomationExecutionSettings } from './services/automation/executionSettings';
 
-const MatchDetail = lazy(() => import('./pages/MatchDetail'));
+const SubjectDetailPage = lazy(() => import('./pages/subject/SubjectDetailPage'));
 const Share = lazy(() => import('./pages/Share'));
 const Scan = lazy(() => import('./pages/Scan'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -76,18 +96,74 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 
 function AppRoutes() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const navigationType = useNavigationType();
   const routeFallback = (
     <div className="min-h-screen bg-black text-zinc-400 flex items-center justify-center text-sm">
       Loading page...
     </div>
   );
+  const currentLocationRef = useRef({
+    pathname: location.pathname,
+    state: location.state,
+  });
+  const previousLocationRef = useRef<{
+    pathname: string;
+    state: unknown;
+  } | null>(null);
+  const isCorrectingPopRef = useRef(false);
 
   useEffect(() => {
+    currentLocationRef.current = {
+      pathname: location.pathname,
+      state: location.state,
+    };
+  }, [location.pathname, location.state]);
+
+  useEffect(() => {
+    const previousLocation = previousLocationRef.current;
+
+    if (navigationType === 'POP' && previousLocation && !isCorrectingPopRef.current) {
+      const semanticTarget = resolveWorkspaceBackTarget(previousLocation);
+      if (
+        semanticTarget &&
+        normalizeWorkspaceRoutePath(location.pathname) !==
+          normalizeWorkspaceRoutePath(semanticTarget)
+      ) {
+        isCorrectingPopRef.current = true;
+        navigate(semanticTarget, { replace: true });
+        return;
+      }
+    }
+
+    isCorrectingPopRef.current = false;
+    previousLocationRef.current = {
+      pathname: location.pathname,
+      state: location.state,
+    };
+  }, [location.pathname, location.state, navigate, navigationType]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     startAutomationRuntime();
     scheduleNativeAutomationSync('app_startup');
     setAutomationRuntimeAppActive(
       typeof document === 'undefined' ? true : document.visibilityState !== 'hidden',
     );
+
+    void repairLegacyAutomationExecutionSettings()
+      .then((result) => {
+        if (cancelled || !result.changed) {
+          return;
+        }
+
+        scheduleNativeAutomationSync('automation_settings_repaired');
+        kickAutomationRuntime('automation_settings_repaired');
+      })
+      .catch((error) => {
+        console.warn('Failed to repair legacy automation execution settings.', error);
+      });
 
     const stopAutomationForegroundHost = startAndroidAutomationForegroundHost();
 
@@ -118,11 +194,25 @@ function AppRoutes() {
 
     // Handle hardware back button on Android
     const backButtonListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      const currentLocation = currentLocationRef.current;
+      const semanticTarget = resolveWorkspaceBackTarget(currentLocation);
+
+      if (semanticTarget) {
+        navigate(semanticTarget);
+        return;
+      }
+
+      if (normalizeWorkspaceRoutePath(currentLocation.pathname) === '/') {
+        CapacitorApp.exitApp();
+        return;
+      }
+
       if (canGoBack) {
         navigate(-1);
-      } else {
-        CapacitorApp.exitApp();
+        return;
       }
+
+      CapacitorApp.exitApp();
     });
 
     const notificationTapListener = LocalNotifications.addListener(
@@ -162,6 +252,7 @@ function AppRoutes() {
     });
 
     return () => {
+      cancelled = true;
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
@@ -183,7 +274,7 @@ function AppRoutes() {
         <Route path="/history" element={<History />} />
         <Route path="/memory" element={<Memory />} />
         <Route path="/memory/:memoryId" element={<MemoryDetail />} />
-        <Route path="/subject/:domainId/:subjectId" element={<MatchDetail />} />
+        <Route path="/subject/:domainId/:subjectId" element={<SubjectDetailPage />} />
         <Route path="/share" element={<Share />} />
         <Route path="/scan" element={<Scan />} />
         <Route path="/settings" element={<Settings />} />

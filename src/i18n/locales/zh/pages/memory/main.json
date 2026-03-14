@@ -1,0 +1,79 @@
+{
+  "memory_workspace": {
+    "page": {
+      "title": "记忆",
+      "subtitle": "在这里查看候选记忆、已启用偏好、每日摘要和已停用记忆。",
+      "empty_pending": "当前没有待确认记忆。",
+      "empty_enabled": "当前还没有已启用记忆。",
+      "empty_daily_summary": "当前还没有每日摘要。",
+      "empty_disabled": "当前还没有已停用记忆。"
+    },
+    "sections": {
+      "summary": "摘要区",
+      "pending": "待确认",
+      "enabled": "已启用",
+      "daily_summary": "每日摘要",
+      "disabled": "已停用"
+    },
+    "summary_card": {
+      "title": "记忆",
+      "description": "任何会影响未来推荐和默认行为的记忆，都应先在这里可见、可解释、可编辑。",
+      "metrics": {
+        "enabled": "已启用",
+        "pending": "待确认",
+        "daily_summary": "今日摘要",
+        "disabled": "已停用"
+      }
+    },
+    "scope": {
+      "global": "全局",
+      "session": "当前会话",
+      "domain": "当前领域"
+    },
+    "status": {
+      "enabled": "已启用",
+      "disabled": "已停用",
+      "pending": "待确认"
+    },
+    "daily_summary_status": {
+      "completed": "已提炼",
+      "partial": "部分提炼",
+      "pending": "未提炼"
+    },
+    "actions": {
+      "view_reason": "查看理由",
+      "enable": "确认启用",
+      "not_now": "暂不使用",
+      "view_detail": "查看详情",
+      "disable": "停用",
+      "re_enable": "重新启用"
+    },
+    "daily_summary_cta": {
+      "completed": "查看已生成记忆",
+      "partial": "查看提炼结果",
+      "generate": "生成记忆"
+    }
+  },
+  "memory_detail": {
+    "title": "记忆详情",
+    "not_found": "没有找到对应的记忆或摘要。",
+    "reasoning": "判断依据与来源",
+    "impact": "影响说明",
+    "preview": "记忆正文预览",
+    "actions": "操作区",
+    "summary_result": "提炼结果",
+    "edit_enable": "编辑后启用",
+    "save_body": "保存正文",
+    "disable": "停用",
+    "not_now": "暂不使用",
+    "re_enable": "重新启用",
+    "view_existing": "查看现有记忆",
+    "merge_enable": "合并后启用",
+    "save_as_new": "仍作为新记忆保存",
+    "generate_memory": "生成记忆",
+    "view_generated": "查看已生成记忆",
+    "view_extraction": "查看提炼结果",
+    "current_status": "当前状态：{{status}}",
+    "similar_memory_notice": "检测到相近记忆，启用前可以先查看或合并。"
+  }
+}

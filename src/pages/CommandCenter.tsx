@@ -22,56 +22,68 @@ export default function CommandCenter() {
       title={t('home.command_center.title')}
       subtitle={t('home.command_center.subtitle')}
       hideHeader
-      contentClassName="min-h-screen gap-4"
+      contentClassName="min-h-screen gap-4 pt-[4rem] pb-[calc(8.5rem+env(safe-area-inset-bottom))]"
     >
-      <CommandCenterStatusBar language={language} layout={state.homeLayout} />
+      <div className="flex min-h-full flex-col gap-4">
+        {state.homeLayout.mode === 'continue_first' ? (
+          <CommandCenterContinueStrip
+            language={language}
+            cards={state.homeLayout.continueCards}
+            onAction={state.handleContinueAction}
+          />
+        ) : (
+          <CommandCenterSummaryStrip
+            language={language}
+            card={state.homeLayout.lastSummaryCard}
+            onOpenConversation={state.handleOpenConversation}
+          />
+        )}
 
-      {state.homeLayout.mode === 'continue_first' ? (
-        <CommandCenterContinueStrip
+        <CommandCenterConversation
           language={language}
-          cards={state.homeLayout.continueCards}
-          onAction={state.handleContinueAction}
+          items={state.feedItems}
+          drafts={state.drafts}
+          executionTickets={state.executionTickets}
+          onActivateDraft={state.handleActivateDraft}
+          onDeleteDraft={state.handleDeleteDraft}
+          onClarificationAnswer={state.handleClarificationAnswer}
+          onOpenSettings={state.handleOpenSettings}
+          onOpenAutomationEventRoute={state.handleOpenAutomationEventRoute}
         />
-      ) : (
-        <CommandCenterSummaryStrip
+
+        <CommandCenterRunStatus
           language={language}
-          card={state.homeLayout.lastSummaryCard}
-          onOpenConversation={state.handleOpenConversation}
+          projection={state.projection}
+          isSubmitting={state.isSubmitting}
+          isCancellingRun={state.isCancellingRun}
+          submitError={state.submitError}
+          onCancelRun={state.handleCancelRun}
         />
-      )}
 
-      <CommandCenterConversation
-        language={language}
-        items={state.feedItems}
-        drafts={state.drafts}
-        onActivateDraft={state.handleActivateDraft}
-        onDeleteDraft={state.handleDeleteDraft}
-        onClarificationAnswer={state.handleClarificationAnswer}
-        onOpenSettings={state.handleOpenSettings}
-      />
+        <CommandCenterSuggestionBar
+          language={language}
+          chips={state.homeLayout.suggestionChips}
+          onSelect={state.handleSuggestionSelect}
+        />
+      </div>
 
-      <CommandCenterRunStatus
-        language={language}
-        projection={state.projection}
-        isSubmitting={state.isSubmitting}
-        isCancellingRun={state.isCancellingRun}
-        submitError={state.submitError}
-        onCancelRun={state.handleCancelRun}
-      />
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-20 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))]">
+        <div className="pointer-events-auto mx-auto max-w-md">
+          <CommandCenterStatusBar language={language} layout={state.homeLayout} />
+        </div>
+      </div>
 
-      <CommandCenterSuggestionBar
-        language={language}
-        chips={state.homeLayout.suggestionChips}
-        onSelect={state.handleSuggestionSelect}
-      />
-
-      <CommandCenterComposer
-        language={language}
-        commandText={state.commandText}
-        isSubmitting={state.isSubmitting}
-        onCommandTextChange={state.setCommandText}
-        onSubmit={state.handleParseCommand}
-      />
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+        <div className="pointer-events-auto mx-auto max-w-md">
+          <CommandCenterComposer
+            language={language}
+            commandText={state.commandText}
+            isSubmitting={state.isSubmitting}
+            onCommandTextChange={state.setCommandText}
+            onSubmit={state.handleParseCommand}
+          />
+        </div>
+      </div>
     </WorkspaceShell>
   );
 }

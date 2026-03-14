@@ -3,6 +3,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { buildSubjectRoute } from '@/src/services/navigation/subjectRoute';
 import { getSettings } from '@/src/services/settings';
 import { detectAutomationHostType } from './concurrencyBudget';
+import { getAutomationTargetSelectorSubjectId } from './targetSelector';
 import type {
   AutomationDraft,
   AutomationJob,
@@ -62,8 +63,9 @@ function parseHistorySubjectKey(
 }
 
 function resolveSingleSubjectRoute(job: AutomationJob, run?: AutomationRun): string | null {
-  if (job.targetSelector.mode === 'fixed_subject') {
-    return buildSubjectRoute(job.domainId, job.targetSelector.subjectId);
+  const subjectId = getAutomationTargetSelectorSubjectId(job.targetSelector);
+  if (subjectId) {
+    return buildSubjectRoute(job.domainId, subjectId);
   }
 
   if (isSubjectSnapshotArray(job.targetSnapshot)) {

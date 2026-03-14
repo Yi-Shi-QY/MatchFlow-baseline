@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Database, RefreshCw, ScanLine, Sparkles } from 'lucide-react';
 import { WorkspaceShell } from '@/src/components/layout/WorkspaceShell';
@@ -10,35 +9,47 @@ import { AnalyzableObjectCard } from '@/src/pages/dataSources/AnalyzableObjectCa
 import { DataAvailabilityCard } from '@/src/pages/dataSources/DataAvailabilityCard';
 import { RecentSyncCard } from '@/src/pages/dataSources/RecentSyncCard';
 import { useAnalysisDataWorkspaceState } from '@/src/pages/dataSources/useAnalysisDataWorkspaceState';
+import { useWorkspaceNavigation } from '@/src/services/navigation/useWorkspaceNavigation';
+import { withWorkspaceBackContext } from '@/src/services/navigation/workspaceBackNavigation';
 
 export default function DataSources() {
-  const navigate = useNavigate();
-  const { i18n } = useTranslation();
+  const { openRoute } = useWorkspaceNavigation();
+  const { t, i18n } = useTranslation();
   const language = i18n.language.startsWith('zh') ? 'zh' : 'en';
   const state = useAnalysisDataWorkspaceState(language);
   const sectionTitles = Object.fromEntries(
     state.model.sections.map((section) => [section.id, section.title]),
   ) as Record<string, string>;
 
-  const copy =
-    language === 'zh'
-      ? {
-          title: '分析与数据',
-          subtitle: '先确认现在能分析什么，再快速判断数据是否可用和最近是否更新。',
-          emptyObjects: '当前还没有可进入分析的对象。',
-          emptyRecent: '最近还没有同步或更新记录。',
-          refresh: '刷新',
-          scan: '扫描',
-        }
-      : {
-          title: 'Analysis & Data',
-          subtitle:
-            'Start with what can be analyzed right now, then confirm whether the data is available and recently updated.',
-          emptyObjects: 'No analyzable objects are available right now.',
-          emptyRecent: 'No recent sync or update events yet.',
-          refresh: 'Refresh',
-          scan: 'Scan',
-        };
+  const copy = {
+    title: t('analysis_data.page.title', {
+      defaultValue: language === 'zh' ? '分析与数据' : 'Analysis & Data',
+    }),
+    subtitle: t('analysis_data.page.subtitle', {
+      defaultValue:
+        language === 'zh'
+          ? '先确认现在能分析什么，再快速判断数据是否可用以及最近是否更新。'
+          : 'Start with what can be analyzed right now, then confirm whether the data is available and recently updated.',
+    }),
+    emptyObjects: t('analysis_data.page.empty_objects', {
+      defaultValue:
+        language === 'zh'
+          ? '当前还没有可进入分析的对象。'
+          : 'No analyzable objects are available right now.',
+    }),
+    emptyRecent: t('analysis_data.page.empty_recent', {
+      defaultValue:
+        language === 'zh'
+          ? '最近还没有同步或更新记录。'
+          : 'No recent sync or update events yet.',
+    }),
+    refresh: t('analysis_data.page.refresh', {
+      defaultValue: language === 'zh' ? '刷新' : 'Refresh',
+    }),
+    scan: t('analysis_data.page.scan', {
+      defaultValue: language === 'zh' ? '扫描' : 'Scan',
+    }),
+  };
 
   return (
     <WorkspaceShell
@@ -52,7 +63,11 @@ export default function DataSources() {
             variant="secondary"
             size="icon"
             className="h-10 w-10 rounded-2xl"
-            onClick={() => navigate('/scan')}
+            onClick={() =>
+              openRoute('/scan', {
+                state: withWorkspaceBackContext(undefined, '/sources'),
+              })
+            }
             title={copy.scan}
             aria-label={copy.scan}
           >
@@ -91,7 +106,11 @@ export default function DataSources() {
               <AnalyzableObjectCard
                 key={card.id}
                 model={card}
-                onOpen={(route, routeState) => navigate(route, { state: routeState })}
+                onOpen={(route, routeState) =>
+                  openRoute(route, {
+                    state: withWorkspaceBackContext(routeState, '/sources'),
+                  })
+                }
               />
             ))}
           </div>

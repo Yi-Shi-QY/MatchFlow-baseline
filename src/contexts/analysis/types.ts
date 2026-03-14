@@ -1,4 +1,3 @@
-import type { Match } from '@/src/data/matches';
 import type { MatchAnalysis } from '@/src/services/ai';
 import type {
   AnalysisRequestPayload,
@@ -6,6 +5,7 @@ import type {
 } from '@/src/services/ai/contracts';
 import type { AgentResult } from '@/src/services/agentParser';
 import type { PlannerRuntimeState } from '@/src/services/planner/runtime';
+import type { SubjectDisplay } from '@/src/services/subjectDisplay';
 
 export type AnalysisRunTokenSource = 'none' | 'provider' | 'estimated' | 'mixed';
 
@@ -46,8 +46,8 @@ export interface ActiveAnalysis {
   subjectId: string;
   subjectType: string;
   subjectSnapshot?: unknown;
-  subjectDisplay?: Match;
-  match: Match;
+  subjectDisplay?: SubjectDisplay;
+  match: SubjectDisplay;
   dataToAnalyze: AnalysisRequestPayload;
   plan: NormalizedPlanSegment[];
   includeAnimations: boolean;

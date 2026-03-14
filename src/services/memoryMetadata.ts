@@ -1,4 +1,7 @@
-import type { LoadedMemoryRecord } from './memoryWorkspace';
+import type {
+  LoadedMemoryCandidate,
+  LoadedMemoryRecord,
+} from './memoryWorkspace';
 
 const MEMORY_METADATA_STORAGE_KEY = 'matchflow_memory_metadata_v1';
 
@@ -69,7 +72,9 @@ function normalizeStringArray(input: unknown): string[] {
     return [];
   }
 
-  return input.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+  return input.filter(
+    (entry): entry is string => typeof entry === 'string' && entry.trim().length > 0,
+  );
 }
 
 function normalizeMemoryMetadataRecord(input: unknown): MemoryMetadataRecord | null {
@@ -202,30 +207,57 @@ function normalizeContentFingerprint(input: string): string {
 
 export function buildDefaultMemoryMetadata(memory: LoadedMemoryRecord): MemoryMetadataRecord {
   const sourceText = typeof memory.source === 'string' ? memory.source.toLowerCase() : '';
-  const status: MemoryMetadataStatus =
-    sourceText.includes('user') ? 'enabled' : 'pending';
-  const reasoning =
-    status === 'enabled'
-      ? '这是用户明确表达或已经确认启用的长期记忆。'
-      : '这是系统推断出的候选记忆，启用前需要先查看理由。';
-  const impactSummary =
-    status === 'enabled'
-      ? '后续推荐和默认行为会继续参考这条记忆。'
-      : '如果确认启用，后续推荐和默认行为会开始参考这条记忆。';
+  const status: MemoryMetadataStatus = sourceText.includes('user') ? 'enabled' : 'pending';
 
   return {
     memoryId: memory.memoryId,
     memoryKey: memory.memoryKey,
     title: memory.title,
     status,
-    reasoning,
+    reasoning:
+      status === 'enabled'
+        ? '这是用户明确表达或已经确认启用的长期记忆。'
+        : '这是系统推断出的候选记忆，启用前需要先查看理由。',
     reasoningDetails: [memory.contentText],
-    impactSummary,
+    impactSummary:
+      status === 'enabled'
+        ? '后续推荐和默认行为会继续参考这条记忆。'
+        : '如果确认启用，后续推荐和默认行为会开始参考这条记忆。',
     sourceChain: memory.source ? [String(memory.source)] : [],
     similarMemoryIds: [],
     structuredKey: `${memory.memoryType}:${memory.keyText}`,
     createdAt: memory.createdAt,
     updatedAt: memory.updatedAt,
+  };
+}
+
+export function buildDefaultCandidateMetadata(
+  candidate: LoadedMemoryCandidate,
+): MemoryMetadataRecord {
+  const status: MemoryMetadataStatus =
+    candidate.status === 'dismissed'
+      ? 'disabled'
+      : candidate.status === 'enabled'
+        ? 'enabled'
+        : 'pending';
+
+  return {
+    memoryId: candidate.candidateId,
+    memoryKey: candidate.candidateKey,
+    title: candidate.title,
+    status,
+    reasoning: candidate.reasoning,
+    reasoningDetails:
+      candidate.evidence.length > 0 ? [...candidate.evidence] : [candidate.contentText],
+    impactSummary:
+      status === 'disabled'
+        ? '这条候选记忆已被暂时停用，不会影响后续推荐或默认行为。'
+        : '如果确认启用，后续推荐和默认行为会开始参考这条记忆。',
+    sourceChain: [`candidate:${candidate.memoryType}:${candidate.keyText}`],
+    similarMemoryIds: candidate.conflictMemoryId ? [candidate.conflictMemoryId] : [],
+    structuredKey: `${candidate.memoryType}:${candidate.keyText}`,
+    createdAt: candidate.createdAt,
+    updatedAt: candidate.updatedAt,
   };
 }
 

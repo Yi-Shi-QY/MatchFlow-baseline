@@ -1,9 +1,9 @@
-import type { Match } from "@/src/data/matches";
 import type { BuiltinDomainModule, BuiltinDomainModuleFactory } from "./modules/types";
-import { cloneMatch } from "./modules/shared/cloneMatch";
 import type { DomainPlanningStrategy } from "./planning/types";
 import type { AnalysisDomain } from "./types";
 import { assertBuiltinDomainUiPresenter, assertBuiltinDomainUiTheme } from "./ui/presenter";
+import { cloneSubjectSnapshot } from "@/src/services/subjectDisplay";
+import type { SubjectDisplay } from "@/src/services/subjectDisplay";
 
 const LOCAL_DOMAIN_CASE_MINIMUM = 3;
 const DOMAIN_ANALYSIS_AGENT_MINIMUM = 3;
@@ -36,6 +36,15 @@ function resolveDefaultDomainId(modules: BuiltinDomainModule[]): string {
 }
 
 export const DEFAULT_DOMAIN_ID = resolveDefaultDomainId(BUILTIN_DOMAIN_MODULES);
+
+export interface BuiltinDomainOnboardingCoverage {
+  domainId: string;
+  hasRuntimePack: boolean;
+  hasDetailAdapter: boolean;
+  hasAnalysisConfigAdapter: boolean;
+  hasAutomationParser: boolean;
+  hasContractTests: boolean;
+}
 
 let modulesValidated = false;
 
@@ -188,6 +197,10 @@ export function listBuiltinDomainModules(): BuiltinDomainModule[] {
   return BUILTIN_DOMAIN_MODULES;
 }
 
+export function listBuiltinDomainIds(): string[] {
+  return listBuiltinDomainModules().map((moduleItem) => moduleItem.domain.id);
+}
+
 export function listBuiltinDomains(): AnalysisDomain[] {
   return listBuiltinDomainModules().map((moduleItem) => moduleItem.domain);
 }
@@ -196,16 +209,18 @@ export function listBuiltinPlanningStrategies(): DomainPlanningStrategy[] {
   return listBuiltinDomainModules().map((moduleItem) => moduleItem.planningStrategy);
 }
 
-export function getBuiltinDomainLocalSubjectSnapshots(domainId: string): Match[] {
+export function getBuiltinDomainLocalSubjectSnapshots<T extends SubjectDisplay = SubjectDisplay>(
+  domainId: string,
+): T[] {
   const moduleItem = listBuiltinDomainModules().find((item) => item.domain.id === domainId);
   if (!moduleItem) return [];
-  return moduleItem.localSubjectSnapshots.map(cloneMatch);
+  return moduleItem.localSubjectSnapshots.map((snapshot) => cloneSubjectSnapshot(snapshot) as T);
 }
 
-export function findBuiltinDomainLocalSubjectSnapshotById(input: {
+export function findBuiltinDomainLocalSubjectSnapshotById<T extends SubjectDisplay = SubjectDisplay>(input: {
   subjectId: string;
   domainId?: string;
-}): Match | null {
+}): T | null {
   const subjectId = typeof input.subjectId === 'string' ? input.subjectId.trim() : '';
   if (!subjectId) return null;
   const modules = input.domainId
@@ -213,7 +228,37 @@ export function findBuiltinDomainLocalSubjectSnapshotById(input: {
     : listBuiltinDomainModules();
   for (const moduleItem of modules) {
     const found = moduleItem.localSubjectSnapshots.find((match) => match?.id === subjectId);
-    if (found) return cloneMatch(found);
+    if (found) return cloneSubjectSnapshot(found) as T;
   }
   return null;
+}
+
+export function validateBuiltinDomainOnboardingCoverage(
+  checks: BuiltinDomainOnboardingCoverage[],
+): void {
+  const expectedDomainIds = new Set(listBuiltinDomainIds());
+  const coverageByDomainId = new Map(
+    checks.map((check) => [check.domainId, check] satisfies [string, BuiltinDomainOnboardingCoverage]),
+  );
+
+  expectedDomainIds.forEach((domainId) => {
+    const coverage = coverageByDomainId.get(domainId);
+    if (!coverage) {
+      throw new Error(`Built-in domain ${domainId} is missing onboarding coverage metadata.`);
+    }
+
+    const missingCapabilities = [
+      coverage.hasRuntimePack ? null : 'runtime pack',
+      coverage.hasDetailAdapter ? null : 'detail adapter',
+      coverage.hasAnalysisConfigAdapter ? null : 'analysis config adapter',
+      coverage.hasAutomationParser ? null : 'automation parser',
+      coverage.hasContractTests ? null : 'contract tests',
+    ].filter((value): value is string => Boolean(value));
+
+    if (missingCapabilities.length > 0) {
+      throw new Error(
+        `Built-in domain ${domainId} is missing onboarding requirements: ${missingCapabilities.join(', ')}.`,
+      );
+    }
+  });
 }

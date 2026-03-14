@@ -1,4 +1,5 @@
 import type { AnalysisRequestPayload } from '@/src/services/ai/contracts';
+import { translateText } from '@/src/i18n/translate';
 import { buildSubjectRoute } from '@/src/services/navigation/subjectRoute';
 import { getNextClarificationQuestion } from './clarification';
 import { assembleAutomationJob } from './jobAssembler';
@@ -39,6 +40,16 @@ export interface AutomationManagerResponseSummary {
   message: string;
 }
 
+function tr(
+  language: 'zh' | 'en',
+  key: string,
+  zh: string,
+  en: string,
+  options: Record<string, unknown> = {},
+): string {
+  return translateText(language, key, language === 'zh' ? zh : en, options);
+}
+
 function detectLanguage(sourceText: string): 'zh' | 'en' {
   return /[\u4e00-\u9fa5]/.test(sourceText) ? 'zh' : 'en';
 }
@@ -63,20 +74,20 @@ export function summarizeManagerResponse(
       drafts.length === 0
         ? '总管暂时没有整理出可执行任务。'
         : runNowCount > 0 && saveOnlyCount === 0
-          ? `总管已安排 ${drafts.length} 个立即分析任务。`
+          ? `总管已整理 ${drafts.length} 个等待确认的立即分析请求。`
           : `总管已整理 ${drafts.length} 个待执行任务草稿。`;
     const parts = [
-      readyCount > 0 ? `可直接确认 ${readyCount} 个` : null,
-      clarificationCount > 0 ? `待补充 ${clarificationCount} 个` : null,
-      rejectedCount > 0 ? `未接受 ${rejectedCount} 个` : null,
+      readyCount > 0 ? `${readyCount} 个可直接确认` : null,
+      clarificationCount > 0 ? `${clarificationCount} 个待补充` : null,
+      rejectedCount > 0 ? `${rejectedCount} 个未接纳` : null,
     ].filter(Boolean);
     const tail =
       clarificationCount > 0
         ? '待编辑卡片已放到对话里，请先补充关键信息。'
         : runNowCount > 0 && saveOnlyCount === 0
-          ? '确认后会立刻启动分析。'
+          ? '确认卡片后会立刻启动分析。'
           : options.composerMode === 'analyze_now' && saveOnlyCount > 0
-            ? '这次我已改写为自动化草稿，待确认卡片已放到对话里。'
+            ? '这次我已改写成自动化草稿，待确认卡片已放到对话里。'
             : '待确认卡片已放到对话里。';
 
     return {
@@ -86,7 +97,7 @@ export function summarizeManagerResponse(
       rejectedCount,
       runNowCount,
       saveOnlyCount,
-      message: [lead, parts.length > 0 ? parts.join('，') + '。' : null, tail]
+      message: [lead, parts.length > 0 ? `${parts.join('，')}。` : null, tail]
         .filter(Boolean)
         .join(' '),
     };
@@ -96,7 +107,7 @@ export function summarizeManagerResponse(
     drafts.length === 0
       ? 'The manager could not prepare an actionable task yet.'
       : runNowCount > 0 && saveOnlyCount === 0
-        ? `The manager has queued ${drafts.length} instant analysis task(s).`
+        ? `The manager prepared ${drafts.length} instant analysis request(s) pending confirmation.`
         : `The manager has prepared ${drafts.length} task draft(s).`;
   const parts = [
     readyCount > 0 ? `${readyCount} ready to confirm` : null,
@@ -107,7 +118,7 @@ export function summarizeManagerResponse(
     clarificationCount > 0
       ? 'Editable cards are now in the conversation. Fill in the missing details first.'
       : runNowCount > 0 && saveOnlyCount === 0
-        ? 'Confirm and the analysis will start immediately.'
+        ? 'Confirm the card and the analysis will start immediately.'
         : options.composerMode === 'analyze_now' && saveOnlyCount > 0
           ? 'This command was converted into automation drafts, and the editable cards are now in the conversation.'
           : 'Review cards are now in the conversation.';
@@ -237,23 +248,28 @@ function buildImmediateModeUnsupportedMessage(
   language: 'zh' | 'en',
   reason: 'missing_target' | 'multi_target' | 'recurring',
 ): string {
-  if (language === 'zh') {
-    if (reason === 'missing_target') {
-      return '请先补充一个明确的分析目标，再执行立即分析。';
-    }
-    if (reason === 'recurring') {
-      return '周期任务请切到“自动化”模式保存，不支持作为立即分析执行。';
-    }
-    return '该指令会展开成多个目标。请改成一个具体对象，或切到“自动化”模式。';
-  }
-
   if (reason === 'missing_target') {
-    return 'Add one clear target before running an immediate analysis.';
+    return tr(
+      language,
+      'task_center.feedback.immediate_missing_target',
+      '请先补充一个明确的分析目标，再执行立即分析。',
+      'Add one clear target before running an immediate analysis.',
+    );
   }
   if (reason === 'recurring') {
-    return 'Recurring commands should be saved in Automation mode, not run as immediate analysis.';
+    return tr(
+      language,
+      'task_center.feedback.immediate_recurring',
+      '周期任务请切到“自动化”模式保存，不支持作为立即分析执行。',
+      'Recurring commands should be saved in Automation mode, not run as immediate analysis.',
+    );
   }
-  return 'This command expands to multiple targets. Narrow it down or switch to Automation mode.';
+  return tr(
+    language,
+    'task_center.feedback.immediate_multi_target',
+    '这条指令会展开成多个目标。请改成一个具体对象，或切到“自动化”模式。',
+    'This command expands to multiple targets. Narrow it down or switch to Automation mode.',
+  );
 }
 
 export async function resolveImmediateAnalysisNavigation(
@@ -302,42 +318,69 @@ export function getCommandComposerExamples(
   composerMode: AutomationCommandComposerMode,
 ): string[] {
   if (composerMode === 'analyze_now') {
-    return language === 'zh'
-      ? [
-          '现在分析皇马 vs 巴萨',
-          '马上分析曼联 vs 利物浦',
-          '分析今天的英超焦点战',
-        ]
-      : [
-          'Analyze Real Madrid vs Barcelona now',
-          'Run Manchester United vs Liverpool now',
-          'Analyze today’s key Premier League match now',
-        ];
+    return [
+      tr(
+        language,
+        'task_center.examples.analyze_now.0',
+        '现在分析皇马 vs 巴萨',
+        'Analyze Real Madrid vs Barcelona now',
+      ),
+      tr(
+        language,
+        'task_center.examples.analyze_now.1',
+        '马上分析曼联 vs 利物浦',
+        'Run Manchester United vs Liverpool now',
+      ),
+      tr(
+        language,
+        'task_center.examples.analyze_now.2',
+        '分析今天的英超焦点战',
+        "Analyze today's key Premier League match now",
+      ),
+    ];
   }
 
   if (composerMode === 'automation') {
-    return language === 'zh'
-      ? [
-          '今晚 20:00 分析皇马 vs 巴萨，完成后提醒我',
-          '每天 09:00 分析英超和西甲全部比赛',
-          '明晚 19:30 自动分析英超重点比赛',
-        ]
-      : [
-          'Tonight at 20:00 analyze Real Madrid vs Barcelona and notify me',
-          'Every day at 09:00 analyze all Premier League and La Liga matches',
-          'Tomorrow at 19:30 automatically analyze key Premier League matches',
-        ];
+    return [
+      tr(
+        language,
+        'task_center.examples.automation.0',
+        '今晚 20:00 分析皇马 vs 巴萨，完成后提醒我',
+        'Tonight at 20:00 analyze Real Madrid vs Barcelona and notify me',
+      ),
+      tr(
+        language,
+        'task_center.examples.automation.1',
+        '每天 09:00 分析英超和西甲全部比赛',
+        'Every day at 09:00 analyze all Premier League and La Liga matches',
+      ),
+      tr(
+        language,
+        'task_center.examples.automation.2',
+        '明晚 19:30 自动分析英超重点比赛',
+        'Tomorrow at 19:30 automatically analyze key Premier League matches',
+      ),
+    ];
   }
 
-  return language === 'zh'
-    ? [
-        '现在分析皇马 vs 巴萨',
-        '今晚 20:00 分析皇马 vs 巴萨，完成后提醒我',
-        '每天 09:00 分析英超和西甲全部比赛',
-      ]
-    : [
-        'Analyze Real Madrid vs Barcelona now',
-        'Tonight at 20:00 analyze Real Madrid vs Barcelona and notify me',
-        'Every day at 09:00 analyze all Premier League and La Liga matches',
-      ];
+  return [
+    tr(
+      language,
+      'task_center.examples.smart.0',
+      '现在分析皇马 vs 巴萨',
+      'Analyze Real Madrid vs Barcelona now',
+    ),
+    tr(
+      language,
+      'task_center.examples.smart.1',
+      '今晚 20:00 分析皇马 vs 巴萨，完成后提醒我',
+      'Tonight at 20:00 analyze Real Madrid vs Barcelona and notify me',
+    ),
+    tr(
+      language,
+      'task_center.examples.smart.2',
+      '每天 09:00 分析英超和西甲全部比赛',
+      'Every day at 09:00 analyze all Premier League and La Liga matches',
+    ),
+  ];
 }

@@ -1,6 +1,16 @@
-import type { DailySummaryMetadataRecord, MemoryMetadataRecord } from '@/src/services/memoryMetadata';
-import { buildDefaultMemoryMetadata } from '@/src/services/memoryMetadata';
-import type { LoadedMemoryRecord } from '@/src/services/memoryWorkspace';
+import { translateText } from '@/src/i18n/translate';
+import type {
+  DailySummaryMetadataRecord,
+  MemoryMetadataRecord,
+} from '@/src/services/memoryMetadata';
+import {
+  buildDefaultCandidateMetadata,
+  buildDefaultMemoryMetadata,
+} from '@/src/services/memoryMetadata';
+import type {
+  LoadedMemoryCandidate,
+  LoadedMemoryRecord,
+} from '@/src/services/memoryWorkspace';
 
 type MemorySectionId =
   | 'summary'
@@ -52,121 +62,208 @@ export interface MemoryWorkspacePageModel {
   disabledCards: WorkspaceMemoryCardModel[];
 }
 
+type WorkspaceItem =
+  | { kind: 'memory'; record: LoadedMemoryRecord }
+  | { kind: 'candidate'; record: LoadedMemoryCandidate };
+
+function tr(
+  language: 'zh' | 'en',
+  key: string,
+  zh: string,
+  en: string,
+  options: Record<string, unknown> = {},
+): string {
+  return translateText(language, key, language === 'zh' ? zh : en, options);
+}
+
 function truncateText(input: string, maxLength = 120): string {
   const normalized = input.trim();
   if (normalized.length <= maxLength) {
     return normalized;
   }
-  return `${normalized.slice(0, maxLength - 1).trim()}…`;
+  return `${normalized.slice(0, maxLength - 1).trim()}...`;
 }
 
-function getScopeLabel(memory: LoadedMemoryRecord, language: 'zh' | 'en'): string {
-  if (language === 'zh') {
-    if (memory.scopeType === 'global') return '全局';
-    if (memory.scopeType === 'session') return '当前会话';
-    return '当前领域';
+function getScopeLabel(
+  item: Pick<LoadedMemoryRecord, 'scopeType'> | Pick<LoadedMemoryCandidate, 'scopeType'>,
+  language: 'zh' | 'en',
+): string {
+  if (item.scopeType === 'global') {
+    return tr(language, 'memory_workspace.scope.global', '全局', 'Global');
   }
-
-  if (memory.scopeType === 'global') return 'Global';
-  if (memory.scopeType === 'session') return 'Session';
-  return 'Domain';
+  if (item.scopeType === 'session') {
+    return tr(language, 'memory_workspace.scope.session', '当前会话', 'Session');
+  }
+  return tr(language, 'memory_workspace.scope.domain', '当前领域', 'Domain');
 }
 
 function getStatusLabel(
   status: MemoryMetadataRecord['status'],
   language: 'zh' | 'en',
 ): string {
-  if (language === 'zh') {
-    if (status === 'enabled') return '已启用';
-    if (status === 'disabled') return '已停用';
-    return '待确认';
+  if (status === 'enabled') {
+    return tr(language, 'memory_workspace.status.enabled', '已启用', 'Enabled');
   }
-
-  if (status === 'enabled') return 'Enabled';
-  if (status === 'disabled') return 'Disabled';
-  return 'Pending';
+  if (status === 'disabled') {
+    return tr(language, 'memory_workspace.status.disabled', '已停用', 'Disabled');
+  }
+  return tr(language, 'memory_workspace.status.pending', '待确认', 'Pending');
 }
 
 function getSummaryStatusLabel(
   status: DailySummaryMetadataRecord['extractionStatus'],
   language: 'zh' | 'en',
 ): string {
-  if (language === 'zh') {
-    if (status === 'completed') return '已提炼';
-    if (status === 'partial') return '部分提炼';
-    return '未提炼';
+  if (status === 'completed') {
+    return tr(language, 'memory_workspace.daily_summary_status.completed', '已提炼', 'Generated');
   }
-
-  if (status === 'completed') return 'Generated';
-  if (status === 'partial') return 'Partially generated';
-  return 'Not generated';
+  if (status === 'partial') {
+    return tr(
+      language,
+      'memory_workspace.daily_summary_status.partial',
+      '部分提炼',
+      'Partially generated',
+    );
+  }
+  return tr(language, 'memory_workspace.daily_summary_status.pending', '未提炼', 'Not generated');
 }
 
 function getDailySummaryCtaLabel(
   status: DailySummaryMetadataRecord['extractionStatus'],
   language: 'zh' | 'en',
 ): string {
-  if (language === 'zh') {
-    if (status === 'completed') return '查看已生成记忆';
-    if (status === 'partial') return '查看提炼结果';
-    return '生成记忆';
+  if (status === 'completed') {
+    return tr(
+      language,
+      'memory_workspace.daily_summary_cta.completed',
+      '查看已生成记忆',
+      'View generated memories',
+    );
   }
-
-  if (status === 'completed') return 'View generated memories';
-  if (status === 'partial') return 'View extraction result';
-  return 'Generate memories';
+  if (status === 'partial') {
+    return tr(
+      language,
+      'memory_workspace.daily_summary_cta.partial',
+      '查看提炼结果',
+      'View extraction result',
+    );
+  }
+  return tr(
+    language,
+    'memory_workspace.daily_summary_cta.generate',
+    '生成记忆',
+    'Generate memories',
+  );
 }
 
-function buildMemoryCard(
-  memory: LoadedMemoryRecord,
+function buildCardActions(args: {
+  kind: WorkspaceItem['kind'];
+  status: MemoryMetadataRecord['status'];
+  language: 'zh' | 'en';
+}): string[] {
+  if (args.status === 'pending') {
+    return [
+      tr(args.language, 'memory_workspace.actions.view_reason', '查看理由', 'View reason'),
+      tr(args.language, 'memory_workspace.actions.enable', '确认启用', 'Enable'),
+      tr(args.language, 'memory_workspace.actions.not_now', '暂不使用', 'Not now'),
+    ];
+  }
+
+  if (args.status === 'enabled') {
+    return [
+      tr(args.language, 'memory_workspace.actions.view_detail', '查看详情', 'View detail'),
+      tr(args.language, 'memory_workspace.actions.disable', '停用', 'Disable'),
+    ];
+  }
+
+  return [
+    tr(
+      args.language,
+      args.kind === 'candidate'
+        ? 'memory_workspace.actions.view_reason'
+        : 'memory_workspace.actions.view_detail',
+      args.kind === 'candidate' ? '查看理由' : '查看详情',
+      args.kind === 'candidate' ? 'View reason' : 'View detail',
+    ),
+    tr(args.language, 'memory_workspace.actions.re_enable', '重新启用', 'Re-enable'),
+  ];
+}
+
+function buildWorkspaceCard(
+  item: WorkspaceItem,
   metadata: MemoryMetadataRecord,
   language: 'zh' | 'en',
 ): WorkspaceMemoryCardModel {
-  const actions =
-    metadata.status === 'pending'
-      ? [
-          language === 'zh' ? '查看理由' : 'View reason',
-          language === 'zh' ? '确认启用' : 'Enable',
-          language === 'zh' ? '暂不使用' : 'Not now',
-        ]
-      : metadata.status === 'enabled'
-        ? [
-            language === 'zh' ? '查看详情' : 'View detail',
-            language === 'zh' ? '停用' : 'Disable',
-          ]
-        : [
-            language === 'zh' ? '查看详情' : 'View detail',
-            language === 'zh' ? '重新启用' : 'Re-enable',
-          ];
+  const record = item.record;
+  const primaryText =
+    metadata.reasoning ||
+    ('contentText' in record ? record.contentText : '');
 
   return {
-    memoryId: memory.memoryId,
-    title: metadata.title || memory.title,
+    memoryId: item.kind === 'candidate' ? item.record.candidateId : item.record.memoryId,
+    title: metadata.title || record.title,
     statusLabel: getStatusLabel(metadata.status, language),
-    summary: truncateText(metadata.reasoning || memory.contentText),
-    scopeLabel: getScopeLabel(memory, language),
-    actions,
+    summary: truncateText(primaryText),
+    scopeLabel: getScopeLabel(record, language),
+    actions: buildCardActions({
+      kind: item.kind,
+      status: metadata.status,
+      language,
+    }),
   };
 }
 
 export function deriveMemoryWorkspaceModel(input: {
+  candidates?: LoadedMemoryCandidate[];
   memories: LoadedMemoryRecord[];
   metadataRecords: MemoryMetadataRecord[];
   dailySummaries: DailySummaryMetadataRecord[];
   language: 'zh' | 'en';
 }): MemoryWorkspacePageModel {
-  const { memories, metadataRecords, dailySummaries, language } = input;
+  const {
+    candidates = [],
+    memories,
+    metadataRecords,
+    dailySummaries,
+    language,
+  } = input;
   const metadataByMemoryId = new Map(
     metadataRecords.map((record) => [record.memoryId, record]),
   );
 
-  const pendingCards: WorkspaceMemoryCardModel[] = [];
+  const pendingCandidateCards: WorkspaceMemoryCardModel[] = [];
+  const pendingMemoryCards: WorkspaceMemoryCardModel[] = [];
   const enabledCards: WorkspaceMemoryCardModel[] = [];
   const disabledCards: WorkspaceMemoryCardModel[] = [];
 
+  candidates
+    .slice()
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .forEach((candidate) => {
+      if (candidate.status === 'enabled') {
+        return;
+      }
+
+      const metadata =
+        metadataByMemoryId.get(candidate.candidateId) ||
+        buildDefaultCandidateMetadata(candidate);
+      const card = buildWorkspaceCard(
+        { kind: 'candidate', record: candidate },
+        metadata,
+        language,
+      );
+
+      if (metadata.status === 'disabled') {
+        disabledCards.push(card);
+        return;
+      }
+
+      pendingCandidateCards.push(card);
+    });
+
   memories.forEach((memory) => {
     const metadata = metadataByMemoryId.get(memory.memoryId) || buildDefaultMemoryMetadata(memory);
-    const card = buildMemoryCard(memory, metadata, language);
+    const card = buildWorkspaceCard({ kind: 'memory', record: memory }, metadata, language);
     if (metadata.status === 'enabled') {
       enabledCards.push(card);
       return;
@@ -175,9 +272,10 @@ export function deriveMemoryWorkspaceModel(input: {
       disabledCards.push(card);
       return;
     }
-    pendingCards.push(card);
+    pendingMemoryCards.push(card);
   });
 
+  const pendingCards = [...pendingCandidateCards, ...pendingMemoryCards];
   const dailySummaryCards = dailySummaries
     .slice()
     .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -193,50 +291,77 @@ export function deriveMemoryWorkspaceModel(input: {
     sections: [
       {
         id: 'summary',
-        title: language === 'zh' ? '摘要区' : 'Summary',
+        title: tr(language, 'memory_workspace.sections.summary', '摘要区', 'Summary'),
       },
       {
         id: 'pending',
-        title: language === 'zh' ? '待确认' : 'Pending',
+        title: tr(language, 'memory_workspace.sections.pending', '待确认', 'Pending'),
       },
       {
         id: 'enabled',
-        title: language === 'zh' ? '已启用' : 'Enabled',
+        title: tr(language, 'memory_workspace.sections.enabled', '已启用', 'Enabled'),
       },
       {
         id: 'daily_summary',
-        title: language === 'zh' ? '每日摘要' : 'Daily summary',
+        title: tr(
+          language,
+          'memory_workspace.sections.daily_summary',
+          '每日摘要',
+          'Daily summary',
+        ),
       },
       {
         id: 'disabled',
-        title: language === 'zh' ? '已停用' : 'Disabled',
+        title: tr(language, 'memory_workspace.sections.disabled', '已停用', 'Disabled'),
       },
     ],
     summaryCard: {
-      title: language === 'zh' ? '记忆' : 'Memory',
-      description:
-        language === 'zh'
-          ? '任何会影响未来推荐和默认行为的记忆，都先在这里可见、可解释、可编辑。'
-          : 'Any memory that changes future recommendations or defaults should be visible, explainable, and editable here first.',
+      title: tr(language, 'memory_workspace.summary_card.title', '记忆', 'Memory'),
+      description: tr(
+        language,
+        'memory_workspace.summary_card.description',
+        '任何会影响未来推荐和默认行为的记忆，都应该先在这里可见、可解释、可编辑。',
+        'Any memory that changes future recommendations or defaults should be visible, explainable, and editable here first.',
+      ),
       metrics: [
         {
           id: 'enabled',
-          label: language === 'zh' ? '已启用' : 'Enabled',
+          label: tr(
+            language,
+            'memory_workspace.summary_card.metrics.enabled',
+            '已启用',
+            'Enabled',
+          ),
           value: enabledCards.length,
         },
         {
           id: 'pending',
-          label: language === 'zh' ? '待确认' : 'Pending',
+          label: tr(
+            language,
+            'memory_workspace.summary_card.metrics.pending',
+            '待确认',
+            'Pending',
+          ),
           value: pendingCards.length,
         },
         {
           id: 'daily_summary',
-          label: language === 'zh' ? '今日摘要' : 'Daily summaries',
+          label: tr(
+            language,
+            'memory_workspace.summary_card.metrics.daily_summary',
+            '今日摘要',
+            'Daily summaries',
+          ),
           value: dailySummaryCards.length,
         },
         {
           id: 'disabled',
-          label: language === 'zh' ? '已停用' : 'Disabled',
+          label: tr(
+            language,
+            'memory_workspace.summary_card.metrics.disabled',
+            '已停用',
+            'Disabled',
+          ),
           value: disabledCards.length,
         },
       ],

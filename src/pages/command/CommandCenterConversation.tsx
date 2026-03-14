@@ -1,35 +1,48 @@
 import React from 'react';
 import { Bot, User } from 'lucide-react';
 import type { AutomationDraft } from '@/src/services/automation';
+import type { ExecutionTicket } from '@/src/services/manager-workspace/executionTicketTypes';
 import { AutomationDraftCard } from '@/src/pages/automation/AutomationDraftCard';
 import { Button } from '@/src/components/ui/Button';
+import { translateText } from '@/src/i18n/translate';
 import type { CommandCenterFeedItem } from './feedAdapter';
+import { ExecutionEventCard } from './ExecutionEventCard';
 
 interface CommandCenterConversationProps {
   language: 'zh' | 'en';
   items: CommandCenterFeedItem[];
   drafts: AutomationDraft[];
+  executionTickets: ExecutionTicket[];
   onActivateDraft: (draftId: string) => void;
   onDeleteDraft: (draftId: string) => void;
   onClarificationAnswer: (draftId: string, answer: string) => void;
   onOpenSettings: () => void;
+  onOpenAutomationEventRoute: (route: string) => void;
   className?: string;
+}
+
+function tr(language: 'zh' | 'en', key: string, zh: string, en: string) {
+  return translateText(language, key, language === 'zh' ? zh : en);
 }
 
 export function CommandCenterConversation({
   language,
   items,
   drafts,
+  executionTickets,
   onActivateDraft,
   onDeleteDraft,
   onClarificationAnswer,
   onOpenSettings,
+  onOpenAutomationEventRoute,
   className = '',
 }: CommandCenterConversationProps) {
-  const emptyBundleCopy =
-    language === 'zh'
-      ? '这批卡片已经处理完了。'
-      : 'Those cards have already been handled.';
+  const emptyBundleCopy = tr(
+    language,
+    'command_center.conversation.draft_bundle_empty',
+    '\u8fd9\u4e9b\u5361\u7247\u5df2\u7ecf\u5904\u7406\u5b8c\u6210\u3002',
+    'Those cards have already been handled.',
+  );
 
   return (
     <section
@@ -43,9 +56,17 @@ export function CommandCenterConversation({
                 .map((draftId) => drafts.find((draft) => draft.id === draftId))
                 .filter((draft): draft is AutomationDraft => Boolean(draft))
             : [];
+        const relatedTickets = item.draftIds?.length
+          ? new Map(
+              executionTickets
+                .filter((ticket) => ticket.draftId && item.draftIds?.includes(ticket.draftId))
+                .map((ticket) => [ticket.draftId as string, ticket]),
+            )
+          : new Map<string, ExecutionTicket>();
         const isUser = item.role === 'user';
         const isSystem = item.role === 'system';
         const bubbleText = item.text || '';
+        const hasExecutionEvent = Boolean(item.automationEvent || item.navigationIntent);
 
         return (
           <div key={item.id} id={`command-feed-item-${item.id}`} className="space-y-3">
@@ -60,7 +81,13 @@ export function CommandCenterConversation({
                 </div>
               ) : null}
 
-              {bubbleText ? (
+              {hasExecutionEvent ? (
+                <ExecutionEventCard
+                  language={language}
+                  item={item}
+                  onOpenRoute={onOpenAutomationEventRoute}
+                />
+              ) : bubbleText ? (
                 <div
                   className={`whitespace-pre-wrap border shadow-sm ${
                     isSystem
@@ -102,6 +129,7 @@ export function CommandCenterConversation({
                     <AutomationDraftCard
                       key={draft.id}
                       draft={draft}
+                      executionTicket={relatedTickets.get(draft.id) || null}
                       language={language}
                       className="shadow-sm"
                       onActivateDraft={onActivateDraft}

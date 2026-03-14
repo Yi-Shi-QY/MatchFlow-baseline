@@ -1,0 +1,129 @@
+{
+  "task_center": {
+    "schedule": {
+      "time_needed": "待补充时间",
+      "daily": "每日 {{time}}",
+      "invalid": "时间无效"
+    },
+    "clarification": {
+      "time_prompt": "请补充运行时间，例如“今晚 20:00”或“每天 09:00”。",
+      "time_placeholder": "例如：今晚 20:00",
+      "target_prompt": "请补充分析目标，例如联赛、比赛对阵或要解析的查询范围。",
+      "target_placeholder": "例如：英超全部比赛"
+    },
+    "sections": {
+      "waiting_title": "待我处理",
+      "waiting_empty": "当前没有需要你立即处理的事项。"
+    },
+    "composer": {
+      "title": "统一自然语言入口",
+      "subtitle": "一句话描述目标和时间。系统会先判断这是立即分析还是自动化任务，再生成可确认的结构化草稿。",
+      "placeholder": "例如：现在分析皇马 vs 巴萨；今晚 20:00 分析皇马 vs 巴萨；每天 09:00 分析英超和西甲全部比赛",
+      "action_smart": "理解指令",
+      "action_analyze_now": "准备立即分析",
+      "action_automation": "生成自动化草稿",
+      "examples": "示例指令",
+      "mode_label": "模式",
+      "smart": "智能",
+      "analyze_now": "立即分析",
+      "automation": "自动化"
+    },
+    "draft_card": {
+      "ready": "可确认",
+      "clarify": "待澄清",
+      "target": "目标",
+      "schedule": "时间",
+      "intent": "类型",
+      "activate": "确认并保存",
+      "run_now": "立即分析",
+      "delete": "删除",
+      "answer": "提交补充",
+      "recurring": "周期规则",
+      "one_time": "单次任务",
+      "immediate": "立即执行",
+      "all_matches": "全量展开",
+      "single_target": "单目标",
+      "target_needed": "待补充目标"
+    },
+    "cards": {
+      "target_needed": "待补充目标",
+      "approval": {
+        "eyebrow": "待确认执行",
+        "action": "确认执行"
+      },
+      "clarification": {
+        "eyebrow": "待补充信息",
+        "description_fallback": "还缺少继续执行所需的关键信息。",
+        "action": "继续补充"
+      },
+      "rejected": {
+        "eyebrow": "异常待处理",
+        "description_fallback": "这条任务草稿当前无法继续执行。",
+        "action": "处理异常"
+      },
+      "failed": {
+        "eyebrow": "异常待处理",
+        "description_fallback": "最近一次运行失败，需要回看详情。",
+        "action": "处理异常"
+      },
+      "running": {
+        "eyebrow": "执行中",
+        "description": "任务已经开始执行，可以回看最近进展。",
+        "action": "查看进展"
+      },
+      "scheduled_rule": {
+        "eyebrow": "已安排规则",
+        "action": "查看安排"
+      },
+      "scheduled_job": {
+        "eyebrow": "已安排任务",
+        "action": "查看安排"
+      },
+      "completed": {
+        "eyebrow": "最近完成",
+        "description": "任务已经完成，可以查看结果回顾。",
+        "action": "查看结果"
+      }
+    },
+    "summary": {
+      "waiting": "待我处理",
+      "running": "执行中",
+      "scheduled": "已安排",
+      "completed": "最近完成"
+    },
+    "feedback": {
+      "draft_updated": "任务草稿已更新。",
+      "draft_completed": "草稿已补全。",
+      "immediate_unsupported": "这条指令暂时还不能直接执行立即分析。",
+      "immediate_missing_target": "请先补充一个明确的分析目标，再执行立即分析。",
+      "immediate_recurring": "周期任务请切到“自动化”模式保存，不支持作为立即分析执行。",
+      "immediate_multi_target": "这条指令会展开成多个目标。请改成一个具体对象，或切到“自动化”模式。",
+      "enabled_recurring": "已启用周期规则“{{title}}”。",
+      "scheduled_job": "已安排定时任务“{{title}}”。",
+      "draft_deleted_named": "已删除“{{title}}”草稿。",
+      "draft_deleted_unnamed": "已删除该草稿。",
+      "job_not_found": "未找到对应任务。",
+      "job_started": "任务开始执行。",
+      "job_completed": "已完成“{{title}}”。",
+      "job_cancelled": "已取消“{{title}}”。",
+      "job_failed": "执行“{{title}}”失败。"
+    },
+    "examples": {
+      "analyze_now": {
+        "0": "现在分析皇马 vs 巴萨",
+        "1": "马上分析曼联 vs 利物浦",
+        "2": "分析今天的英超焦点战"
+      },
+      "automation": {
+        "0": "今晚 20:00 分析皇马 vs 巴萨，完成后提醒我",
+        "1": "每天 09:00 分析英超和西甲全部比赛",
+        "2": "明晚 19:30 自动分析英超重点比赛"
+      },
+      "smart": {
+        "0": "现在分析皇马 vs 巴萨",
+        "1": "今晚 20:00 分析皇马 vs 巴萨，完成后提醒我",
+        "2": "每天 09:00 分析英超和西甲全部比赛"
+      }
+    }
+  }
+}

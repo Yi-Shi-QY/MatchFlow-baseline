@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { ArrowLeft, QrCode, AlertCircle } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Camera } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
+import { useWorkspaceNavigation } from '@/src/services/navigation/useWorkspaceNavigation';
+import { withWorkspaceBackContext } from '@/src/services/navigation/workspaceBackNavigation';
 
 export default function Scan() {
-  const navigate = useNavigate();
+  const { navigate, goBack } = useWorkspaceNavigation();
   const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -69,7 +70,9 @@ export default function Scan() {
 
         // Navigate after a short delay to show the frozen frame and success state
         setTimeout(() => {
-          navigate(`/share?d=${dParam}`);
+          navigate(`/share?d=${dParam}`, {
+            state: withWorkspaceBackContext(undefined, '/scan'),
+          });
         }, 800);
       } else {
         setError(t('scan.invalid_qr'));
@@ -95,7 +98,12 @@ export default function Scan() {
     <div className="min-h-screen bg-black text-zinc-100 font-sans flex flex-col pb-[env(safe-area-inset-bottom)]">
       <header className="sticky top-0 z-20 bg-black/80 backdrop-blur-md border-b border-white/10 px-4 pb-4 pt-[calc(1rem+env(safe-area-inset-top))] flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="h-8 w-8 rounded-full bg-zinc-900 border border-white/10">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => void goBack('/sources')}
+            className="h-8 w-8 rounded-full bg-zinc-900 border border-white/10"
+          >
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">

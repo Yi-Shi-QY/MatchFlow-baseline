@@ -23,6 +23,7 @@ function mapResumeResult(input: {
     route: string;
     state?: Record<string, unknown>;
   };
+  memoryCandidates?: unknown[];
 }): WorkflowResumeResult {
   const draftIds =
     input.draftIds ||
@@ -68,6 +69,7 @@ function mapResumeResult(input: {
       feedbackMessage: input.feedbackMessage || input.agentText,
       draftsToSave: input.draftsToSave,
       navigation: input.navigation,
+      memoryCandidates: input.memoryCandidates,
     },
   };
 }

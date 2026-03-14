@@ -1,0 +1,124 @@
+{
+  "command_center": {
+    "sections": {
+      "continue": "Continue",
+      "last_summary": "Last summary",
+      "suggestions": "Suggestions",
+      "run_status": "Run Status"
+    },
+    "status_bar": {
+      "pending": "Pending",
+      "running": "Running"
+    },
+    "composer": {
+      "placeholder": "Ask what matches are on today, or tell me which match to analyze and when.",
+      "send": "Send"
+    },
+    "conversation": {
+      "draft_bundle_empty": "Those cards have already been handled."
+    },
+    "run_status": {
+      "cancelling": "Cancelling..."
+    },
+    "home": {
+      "target_needed": "Target needed",
+      "approval": {
+        "analyze_now": "Analyze now",
+        "confirm_run": "Confirm run",
+        "eyebrow": "Approval needed"
+      },
+      "clarification": {
+        "description_fallback": "Some required details are still missing before this can continue.",
+        "action": "Continue",
+        "eyebrow": "Needs reply"
+      },
+      "exception": {
+        "review_title": "The last run needs review",
+        "action": "Review issue",
+        "eyebrow": "Issue detected",
+        "failed_title": "The latest run failed",
+        "description_fallback": "Open the conversation to inspect the failure details."
+      },
+      "resumable": {
+        "status_running": "In progress",
+        "status_queued": "Queued",
+        "title_fallback": "Continue current thread",
+        "description": "{{status}} - Return to the conversation to review the latest progress.",
+        "action": "View progress",
+        "eyebrow": "Resumable thread"
+      },
+      "last_summary": {
+        "title": "Last completed flow",
+        "action": "Open thread",
+        "empty_summary": "The previous flow is complete. You can start a new request now."
+      },
+      "status": {
+        "approval_needed": "Approval needed",
+        "details_needed": "Details needed",
+        "issue_needs_review": "Issue needs review",
+        "continue_active_thread": "Continue the active thread",
+        "last_flow_completed": "Last flow completed",
+        "ready_new_request": "Ready for a new request"
+      }
+    },
+    "run_model": {
+      "states": {
+        "submitting": "Submitting",
+        "queued": "Queued",
+        "running": "Running",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "trigger": {
+        "resume": "Resume",
+        "system": "System",
+        "compaction": "Compaction",
+        "user": "User"
+      },
+      "planner": {
+        "workflow": "Workflow",
+        "llm": "LLM",
+        "deterministic": "Deterministic"
+      },
+      "metrics": {
+        "run_id": "Run ID",
+        "status": "Status",
+        "trigger": "Trigger",
+        "planner": "Planner",
+        "tool": "Tool",
+        "intent": "Intent",
+        "started": "Started",
+        "updated": "Updated",
+        "session": "Session",
+        "domain": "Domain"
+      },
+      "queued": {
+        "title": "Waiting for the previous step to finish",
+        "description": "Another request in this conversation is still running. This one will start automatically next.",
+        "action": "Cancel pending request"
+      },
+      "running": {
+        "title": "Working on your latest request",
+        "description": "The manager is processing your request and may gather context, resume a workflow, or call a tool.",
+        "action": "Stop request"
+      },
+      "failed": {
+        "title": "The latest request did not finish",
+        "no_details": "No additional error details were returned."
+      },
+      "cancelled": {
+        "interrupted_title": "The latest request was stopped",
+        "queued_title": "The latest pending request was cancelled",
+        "interrupted_description": "This request was interrupted while it was running.",
+        "queued_description": "This request was cancelled before execution started."
+      },
+      "submit_failed": {
+        "title": "This request could not be started"
+      },
+      "submitting": {
+        "title": "Starting your request",
+        "description": "The request has been sent. Waiting for execution to enter a stable running state."
+      }
+    }
+  }
+}

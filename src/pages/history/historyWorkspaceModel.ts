@@ -1,3 +1,4 @@
+import { translateText } from '@/src/i18n/translate';
 import type { SubjectDisplayMatch } from '@/src/services/subjectDisplayMatch';
 import {
   coerceSubjectSnapshotToDisplayMatch,
@@ -32,6 +33,8 @@ interface HistoryPrimaryAction {
   route: string;
   state: {
     importedData: SubjectDisplayMatch;
+    subjectSnapshot?: unknown;
+    subjectType: string;
   };
 }
 
@@ -72,6 +75,16 @@ export interface HistoryWorkspaceModel {
   savedTopicCards: HistorySavedTopicCardModel[];
 }
 
+function tr(
+  language: 'zh' | 'en',
+  key: string,
+  zh: string,
+  en: string,
+  options: Record<string, unknown> = {},
+): string {
+  return translateText(language, key, language === 'zh' ? zh : en, options);
+}
+
 function buildSubjectKey(domainId: string, subjectId: string): string {
   return `${domainId}::${subjectId}`;
 }
@@ -99,15 +112,13 @@ function getStatusLabel(
   status: SubjectDisplayMatch['status'],
   language: 'zh' | 'en',
 ): string {
-  if (language === 'zh') {
-    if (status === 'live') return '进行中';
-    if (status === 'finished') return '已结束';
-    return '待开始';
+  if (status === 'live') {
+    return tr(language, 'history_workspace.match_status.live', '进行中', 'Live');
   }
-
-  if (status === 'live') return 'Live';
-  if (status === 'finished') return 'Finished';
-  return 'Upcoming';
+  if (status === 'finished') {
+    return tr(language, 'history_workspace.match_status.finished', '已结束', 'Finished');
+  }
+  return tr(language, 'history_workspace.match_status.upcoming', '待开始', 'Upcoming');
 }
 
 function buildTopicTag(
@@ -132,7 +143,7 @@ function truncateText(input: string, maxLength = 120): string {
   if (normalized.length <= maxLength) {
     return normalized;
   }
-  return `${normalized.slice(0, maxLength - 1).trim()}…`;
+  return `${normalized.slice(0, maxLength - 1).trim()}...`;
 }
 
 function deriveResultSummary(
@@ -152,9 +163,12 @@ function deriveResultSummary(
     return truncateText(summary);
   }
 
-  return language === 'zh'
-    ? '从这里重新打开结果详情，再决定是否继续跟进。'
-    : 'Reopen the result details here before deciding on the next step.';
+  return tr(
+    language,
+    'history_workspace.defaults.result_summary',
+    '从这里重新打开结果详情，再决定是否继续跟进。',
+    'Reopen the result details here before deciding on the next step.',
+  );
 }
 
 function deriveResumeReason(
@@ -172,22 +186,29 @@ function deriveResumeReason(
     return text;
   }
 
-  return language === 'zh'
-    ? '这个主题仍然保留了可恢复的分析上下文。'
-    : 'This topic still has recoverable analysis context.';
+  return tr(
+    language,
+    'history_workspace.defaults.resume_reason',
+    '这个主题仍然保留了可恢复的分析上下文。',
+    'This topic still has recoverable analysis context.',
+  );
 }
 
 function deriveSavedSummary(
   language: 'zh' | 'en',
 ): string {
-  return language === 'zh'
-    ? '保留这个主题，之后可以直接重新打开继续查看。'
-    : 'Keep this topic handy so it can be reopened quickly later.';
+  return tr(
+    language,
+    'history_workspace.defaults.saved_summary',
+    '保留这个主题，之后可以直接重新打开继续查看。',
+    'Keep this topic handy so it can be reopened quickly later.',
+  );
 }
 
 function buildPrimaryAction(input: {
   language: 'zh' | 'en';
   subjectDisplay: SubjectDisplayMatch;
+  subjectSnapshot?: unknown;
   domainId: string;
   subjectId: string;
   label: string;
@@ -197,6 +218,8 @@ function buildPrimaryAction(input: {
     route: buildSubjectRoute(input.domainId, input.subjectId),
     state: {
       importedData: input.subjectDisplay,
+      subjectSnapshot: input.subjectSnapshot,
+      subjectType: input.subjectDisplay.subjectType || 'match',
     },
   };
 }
@@ -227,15 +250,16 @@ export function deriveHistoryWorkspaceModel(input: {
       subjectId: record.subjectId,
       title: buildMatchTitle(record.subjectDisplay),
       tag: buildTopicTag(record.subjectDisplay, language),
-      metaLabel: language === 'zh' ? '完成时间' : 'Completed',
+      metaLabel: tr(language, 'history_workspace.meta.completed', '完成时间', 'Completed'),
       timestampLabel: formatTimestamp(record.timestamp, language),
       summary: deriveResultSummary(record, language),
       primaryAction: buildPrimaryAction({
         language,
         subjectDisplay: record.subjectDisplay,
+        subjectSnapshot: record.subjectSnapshot,
         domainId: record.domainId,
         subjectId: record.subjectId,
-        label: language === 'zh' ? '查看结果' : 'View result',
+        label: tr(language, 'history_workspace.actions.view_result', '查看结果', 'View result'),
       }),
     }));
 
@@ -263,15 +287,16 @@ export function deriveHistoryWorkspaceModel(input: {
         subjectId: record.subjectId,
         title: buildMatchTitle(subjectDisplay),
         tag: buildTopicTag(subjectDisplay, language),
-        metaLabel: language === 'zh' ? '上次停留' : 'Last active',
+        metaLabel: tr(language, 'history_workspace.meta.last_active', '上次停留', 'Last active'),
         timestampLabel: formatTimestamp(record.timestamp, language),
         reason: deriveResumeReason(record, language),
         primaryAction: buildPrimaryAction({
           language,
           subjectDisplay,
+          subjectSnapshot: record.state.subjectSnapshot ?? record.state.subjectDisplaySnapshot,
           domainId: record.domainId,
           subjectId: record.subjectId,
-          label: language === 'zh' ? '继续此主题' : 'Continue topic',
+          label: tr(language, 'history_workspace.actions.continue_topic', '继续此主题', 'Continue topic'),
         }),
       };
     });
@@ -293,15 +318,16 @@ export function deriveHistoryWorkspaceModel(input: {
       subjectId: record.subjectId,
       title: buildMatchTitle(record.subjectDisplay),
       tag: buildTopicTag(record.subjectDisplay, language),
-      metaLabel: language === 'zh' ? '最近保存' : 'Saved',
+      metaLabel: tr(language, 'history_workspace.meta.saved', '最近保存', 'Saved'),
       timestampLabel: formatTimestamp(record.timestamp, language),
       summary: deriveSavedSummary(language),
       primaryAction: buildPrimaryAction({
         language,
         subjectDisplay: record.subjectDisplay,
+        subjectSnapshot: record.subjectSnapshot,
         domainId: record.domainId,
         subjectId: record.subjectId,
-        label: language === 'zh' ? '打开主题' : 'Open topic',
+        label: tr(language, 'history_workspace.actions.open_topic', '打开主题', 'Open topic'),
       }),
     }));
 
@@ -309,41 +335,58 @@ export function deriveHistoryWorkspaceModel(input: {
     sections: [
       {
         id: 'summary',
-        title: language === 'zh' ? '顶部轻量摘要' : 'Summary',
+        title: tr(language, 'history_workspace.sections.summary', '顶部轻量摘要', 'Summary'),
       },
       {
         id: 'recent_completed',
-        title: language === 'zh' ? '最近完成' : 'Recent completed',
+        title: tr(
+          language,
+          'history_workspace.sections.recent_completed',
+          '最近完成',
+          'Recent completed',
+        ),
       },
       {
         id: 'resumable_topics',
-        title: language === 'zh' ? '可继续内容' : 'Resumable topics',
+        title: tr(
+          language,
+          'history_workspace.sections.resumable_topics',
+          '可继续内容',
+          'Resumable topics',
+        ),
       },
       {
         id: 'saved_topics',
-        title: language === 'zh' ? '已保存主题' : 'Saved topics',
+        title: tr(
+          language,
+          'history_workspace.sections.saved_topics',
+          '已保存主题',
+          'Saved topics',
+        ),
       },
     ],
     summaryCard: {
-      title: language === 'zh' ? '历史' : 'History',
-      description:
-        language === 'zh'
-          ? '先看最近产出的结果，再决定是否恢复旧主题或打开已保存主题。'
-          : 'Start with recent completed results, then decide whether to resume an older topic or reopen a saved one.',
+      title: tr(language, 'history_workspace.summary_card.title', '历史', 'History'),
+      description: tr(
+        language,
+        'history_workspace.summary_card.description',
+        '先看最近产出的结果，再决定是否恢复旧主题或打开已保存主题。',
+        'Start with recent completed results, then decide whether to resume an older topic or reopen a saved one.',
+      ),
       metrics: [
         {
           id: 'recent_completed',
-          label: language === 'zh' ? '最近完成' : 'Completed',
+          label: tr(language, 'history_workspace.summary_card.metrics.completed', '最近完成', 'Completed'),
           value: recentCompletedCards.length,
         },
         {
           id: 'resumable_topics',
-          label: language === 'zh' ? '可继续' : 'Resumable',
+          label: tr(language, 'history_workspace.summary_card.metrics.resumable', '可继续', 'Resumable'),
           value: resumableCards.length,
         },
         {
           id: 'saved_topics',
-          label: language === 'zh' ? '已保存' : 'Saved',
+          label: tr(language, 'history_workspace.summary_card.metrics.saved', '已保存', 'Saved'),
           value: savedTopicCards.length,
         },
       ],

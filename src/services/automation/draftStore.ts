@@ -11,74 +11,18 @@ import {
   writeAutomationRecords,
 } from './storageFallback';
 import type {
-  AutomationAnalysisProfile,
   AutomationDraftActivationMode,
   AutomationClarificationState,
   AutomationDraft,
   AutomationDraftQueryOptions,
-  AutomationSchedule,
-  AutomationTargetSelector,
 } from './types';
+import {
+  normalizeAutomationAnalysisProfile,
+  normalizeAutomationExecutionPolicy,
+  normalizeAutomationSchedule,
+  normalizeAutomationTargetSelector,
+} from './recordNormalizers';
 import { sortByUpdatedAtDesc } from './utils';
-
-function normalizeSchedule(input: unknown): AutomationSchedule | undefined {
-  const value = normalizeObject<Record<string, unknown>>(input);
-  if (!value || typeof value.type !== 'string') return undefined;
-  if (value.type === 'daily' && typeof value.time === 'string' && typeof value.timezone === 'string') {
-    return {
-      type: 'daily',
-      time: value.time,
-      timezone: value.timezone,
-    };
-  }
-  if (value.type === 'one_time' && typeof value.runAt === 'string' && typeof value.timezone === 'string') {
-    return {
-      type: 'one_time',
-      runAt: value.runAt,
-      timezone: value.timezone,
-    };
-  }
-  return undefined;
-}
-
-function normalizeTargetSelector(input: unknown): AutomationTargetSelector | undefined {
-  const value = normalizeObject<Record<string, unknown>>(input);
-  if (!value || typeof value.mode !== 'string') return undefined;
-  if (
-    value.mode === 'league_query' &&
-    typeof value.leagueKey === 'string' &&
-    typeof value.leagueLabel === 'string'
-  ) {
-    return {
-      mode: 'league_query',
-      leagueKey: value.leagueKey,
-      leagueLabel: value.leagueLabel,
-    };
-  }
-  if (
-    value.mode === 'server_resolve' &&
-    typeof value.queryText === 'string' &&
-    typeof value.displayLabel === 'string'
-  ) {
-    return {
-      mode: 'server_resolve',
-      queryText: value.queryText,
-      displayLabel: value.displayLabel,
-    };
-  }
-  if (
-    value.mode === 'fixed_subject' &&
-    typeof value.subjectId === 'string' &&
-    typeof value.subjectLabel === 'string'
-  ) {
-    return {
-      mode: 'fixed_subject',
-      subjectId: value.subjectId,
-      subjectLabel: value.subjectLabel,
-    };
-  }
-  return undefined;
-}
 
 function normalizeClarificationState(input: unknown): AutomationClarificationState {
   const value = normalizeObject<Record<string, unknown>>(input);
@@ -93,33 +37,6 @@ function normalizeClarificationState(input: unknown): AutomationClarificationSta
 
 function normalizeActivationMode(input: unknown): AutomationDraftActivationMode {
   return input === 'run_now' ? 'run_now' : 'save_only';
-}
-
-function normalizeAnalysisProfile(input: unknown): AutomationAnalysisProfile | undefined {
-  const value = normalizeObject<Record<string, unknown>>(input);
-  if (!value) return undefined;
-  const selectedSourceIds = Array.isArray(value.selectedSourceIds)
-    ? value.selectedSourceIds.filter(
-        (entry): entry is AutomationAnalysisProfile['selectedSourceIds'][number] =>
-          entry === 'fundamental' || entry === 'market' || entry === 'custom',
-      )
-    : [];
-  const sequencePreference = Array.isArray(value.sequencePreference)
-    ? value.sequencePreference.filter(
-        (entry): entry is AutomationAnalysisProfile['sequencePreference'][number] =>
-          entry === 'fundamental' ||
-          entry === 'market' ||
-          entry === 'custom' ||
-          entry === 'prediction',
-      )
-    : [];
-  if (selectedSourceIds.length === 0 && sequencePreference.length === 0) {
-    return undefined;
-  }
-  return {
-    selectedSourceIds,
-    sequencePreference,
-  };
 }
 
 function normalizeDraft(raw: unknown): AutomationDraft | null {
@@ -152,28 +69,9 @@ function normalizeDraft(raw: unknown): AutomationDraft | null {
     domainId,
     domainPackVersion: normalizeString(value.domainPackVersion) || undefined,
     templateId: normalizeString(value.templateId) || undefined,
-    schedule: normalizeSchedule(value.schedule),
-    targetSelector: normalizeTargetSelector(value.targetSelector),
-    executionPolicy: {
-      targetExpansion:
-        value.executionPolicy &&
-        typeof value.executionPolicy === 'object' &&
-        (value.executionPolicy as Record<string, unknown>).targetExpansion === 'all_matches'
-          ? 'all_matches'
-          : 'single',
-      recoveryWindowMinutes:
-        value.executionPolicy &&
-        typeof value.executionPolicy === 'object' &&
-        typeof (value.executionPolicy as Record<string, unknown>).recoveryWindowMinutes === 'number'
-          ? Number((value.executionPolicy as Record<string, unknown>).recoveryWindowMinutes)
-          : 30,
-      maxRetries:
-        value.executionPolicy &&
-        typeof value.executionPolicy === 'object' &&
-        typeof (value.executionPolicy as Record<string, unknown>).maxRetries === 'number'
-          ? Number((value.executionPolicy as Record<string, unknown>).maxRetries)
-          : 2,
-    },
+    schedule: normalizeAutomationSchedule(value.schedule),
+    targetSelector: normalizeAutomationTargetSelector(value.targetSelector),
+    executionPolicy: normalizeAutomationExecutionPolicy(value.executionPolicy),
     notificationPolicy: {
       notifyOnClarification:
         value.notificationPolicy &&
@@ -196,7 +94,7 @@ function normalizeDraft(raw: unknown): AutomationDraft | null {
           ? normalizeBoolean((value.notificationPolicy as Record<string, unknown>).notifyOnFailure, true)
           : true,
     },
-    analysisProfile: normalizeAnalysisProfile(value.analysisProfile),
+    analysisProfile: normalizeAutomationAnalysisProfile(value.analysisProfile),
     clarificationState: normalizeClarificationState(value.clarificationState),
     rejectionReason: normalizeString(value.rejectionReason) || undefined,
     createdAt: normalizeTimestamp(value.createdAt, Date.now()),
