@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE } from '@/src/domains/runtime/football/tools';
-import { PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE } from '@/src/domains/runtime/projectOps/tools';
+import { FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE } from '@/src/domains/runtime/football/workflowType';
+import { PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE } from '@/src/domains/runtime/projectOps/workflowType';
 import type { ManagerSessionProjection } from '@/src/services/manager-gateway/types';
 import type { ManagerPendingTask } from '@/src/services/manager/types';
 import { projectManagerSessionProjectionToLegacySnapshot } from '@/src/services/manager-gateway/legacyCompat';
@@ -15,6 +15,9 @@ vi.mock('@/src/domains/runtime/registry', () => {
     getRuntimeDomainPackById: (...args: unknown[]) => registryMocks.getRuntimeDomainPackById(...args),
     getDefaultRuntimeDomainPack: (...args: unknown[]) =>
       registryMocks.getDefaultRuntimeDomainPack(...args),
+    resolveRuntimeDomainPack: (domainId?: string | null) =>
+      registryMocks.getRuntimeDomainPackById(domainId) ||
+      registryMocks.getDefaultRuntimeDomainPack(),
   };
 });
 
@@ -38,12 +41,14 @@ function createProjection(
     session: {
       id: 'session_main',
       sessionKey: 'manager:main',
+      sessionKind: 'domain_main',
       title: 'Main session',
       status: 'active',
       domainId: 'football',
       runtimeDomainVersion: '1.0.0',
       activeWorkflowType: null,
       activeWorkflowStateData: null,
+      compositeWorkflowStateData: null,
       latestSummaryId: null,
       latestMessageAt: 300,
       createdAt: 100,
@@ -55,6 +60,7 @@ function createProjection(
     activeRun: null,
     latestRun: null,
     activeWorkflow: null,
+    compositeWorkflow: null,
     ...overrides,
   };
 }
@@ -202,5 +208,95 @@ describe('manager legacy compat', () => {
     );
 
     expect(snapshot.pendingTask).toEqual(pendingTask);
+  });
+
+  it('projects the supervisor active child workflow and composite summaries into the legacy snapshot', () => {
+    const pendingTask = createPendingTask();
+    registryMocks.getRuntimeDomainPackById.mockImplementation((domainId?: string | null) => {
+      if (domainId === 'project_ops') {
+        return {
+          manifest: {
+            domainId: 'project_ops',
+            displayName: 'Project Ops Runtime Pack',
+          },
+          manager: {
+            domainId: 'project_ops',
+            skillIds: ['manager_continue_task_intake'],
+            parsePendingTask: (workflow: { workflowType?: string; stateData?: unknown } | null) =>
+              workflow?.workflowType === PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE
+                ? (workflow.stateData as Record<string, unknown>)
+                : null,
+          },
+        };
+      }
+
+      if (domainId === 'football') {
+        return {
+          manifest: {
+            domainId: 'football',
+            displayName: 'Football Runtime Pack',
+          },
+          manager: {
+            domainId: 'football',
+            skillIds: ['manager_continue_task_intake'],
+            parsePendingTask: (workflow: { workflowType?: string; stateData?: unknown } | null) =>
+              workflow?.workflowType === FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE
+                ? (workflow.stateData as Record<string, unknown>)
+                : null,
+          },
+        };
+      }
+
+      return null;
+    });
+
+    const snapshot = projectManagerSessionProjectionToLegacySnapshot(
+      createProjection({
+        session: {
+          ...createProjection().session,
+          sessionKey: 'manager:main:supervisor',
+          sessionKind: 'supervisor',
+        },
+        activeWorkflow: null,
+        compositeWorkflow: {
+          schemaVersion: 'manager_composite_v1',
+          workflowId: 'manager_composite_1',
+          workflowType: 'manager_composite',
+          sourceText: 'Analyze football and project ops',
+          status: 'active',
+          activeItemId: 'item_project_ops',
+          createdAt: 100,
+          updatedAt: 300,
+          items: [
+            {
+              itemId: 'item_football',
+              title: 'Real Madrid vs Barcelona',
+              domainId: 'football',
+              sourceText: 'Analyze Real Madrid vs Barcelona',
+              status: 'completed',
+              summary: 'Football analysis configured.',
+            },
+            {
+              itemId: 'item_project_ops',
+              title: 'Q2 mobile launch blockers',
+              domainId: 'project_ops',
+              sourceText: 'Review Q2 mobile launch blockers',
+              status: 'active',
+              childWorkflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+              childWorkflowStateData: pendingTask as unknown as Record<string, unknown>,
+              summary: 'Project ops intake is waiting for focus areas.',
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(snapshot.pendingTask).toEqual(pendingTask);
+    expect(snapshot.messages.map((message) => message.text)).toContain(
+      '[Football] Football analysis configured.',
+    );
+    expect(snapshot.messages.map((message) => message.text)).toContain(
+      '[Project Ops] Project ops intake is waiting for focus areas.',
+    );
   });
 });

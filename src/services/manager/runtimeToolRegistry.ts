@@ -15,37 +15,85 @@ import {
   managerHelpDeclaration,
   managerPrepareTaskIntakeDeclaration,
   managerQueryLocalMatchesDeclaration,
+  type ManagerToolRuntimeSupport,
 } from './toolRegistry';
+
+function buildRuntimeSupport(domainId?: string | null): ManagerToolRuntimeSupport | null {
+  const runtimePack =
+    getRuntimeDomainPackById(domainId) ||
+    (domainId ? null : getDefaultRuntimeDomainPack());
+  if (!runtimePack?.manager) {
+    return null;
+  }
+
+  return {
+    domainId: runtimePack.manifest.domainId,
+    skillIds: runtimePack.manager.skillIds,
+    taskIntake: runtimePack.manager.taskIntake || null,
+    plannerHints: runtimePack.manager.plannerHints,
+  };
+}
+
+function resolveRuntimeSupport(domainId: string): ManagerToolRuntimeSupport | null {
+  return buildRuntimeSupport(domainId);
+}
 
 const SHARED_MANAGER_SKILL_CATALOG: BuiltinSkillEntry[] = [
   {
     id: managerQueryLocalMatchesDeclaration.name,
     declaration: managerQueryLocalMatchesDeclaration,
-    execute: executeManagerQueryLocalMatches,
+    execute: (args) =>
+      executeManagerQueryLocalMatches({
+        ...args,
+        support: buildRuntimeSupport(args?.domainId),
+        resolveSupport: resolveRuntimeSupport,
+      }),
     version: '1.0.0',
   },
   {
     id: managerDescribeCapabilityDeclaration.name,
     declaration: managerDescribeCapabilityDeclaration,
-    execute: executeManagerDescribeCapability,
+    execute: (args) =>
+      executeManagerDescribeCapability({
+        ...args,
+        support: buildRuntimeSupport(args?.domainId),
+        resolveSupport: resolveRuntimeSupport,
+      }),
     version: '1.0.0',
   },
   {
     id: managerPrepareTaskIntakeDeclaration.name,
     declaration: managerPrepareTaskIntakeDeclaration,
-    execute: executeManagerPrepareTaskIntake,
+    execute: (args) =>
+      executeManagerPrepareTaskIntake({
+        ...args,
+        support: buildRuntimeSupport(args?.defaultDomainId),
+        resolveSupport: resolveRuntimeSupport,
+      }),
     version: '1.0.0',
   },
   {
     id: managerContinueTaskIntakeDeclaration.name,
     declaration: managerContinueTaskIntakeDeclaration,
-    execute: executeManagerContinueTaskIntake,
+    execute: (args) =>
+      executeManagerContinueTaskIntake({
+        ...args,
+        support: buildRuntimeSupport(
+          args?.intakeWorkflow?.domainId || args?.pendingTask?.drafts?.[0]?.domainId || args?.domainId,
+        ),
+        resolveSupport: resolveRuntimeSupport,
+      }),
     version: '1.0.0',
   },
   {
     id: managerHelpDeclaration.name,
     declaration: managerHelpDeclaration,
-    execute: executeManagerHelp,
+    execute: (args) =>
+      executeManagerHelp({
+        ...args,
+        support: buildRuntimeSupport(args?.domainId),
+        resolveSupport: resolveRuntimeSupport,
+      }),
     version: '1.0.0',
   },
 ];

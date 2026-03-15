@@ -5,7 +5,7 @@ import {
   formatManagerSourcePreferences,
   parseSequencePreference,
   parseSourcePreferenceIds,
-} from '@/src/services/managerAgent';
+} from '@/src/services/manager-legacy/analysisProfile';
 import type {
   ManagerClarificationField,
   ManagerClarificationSnapshot,

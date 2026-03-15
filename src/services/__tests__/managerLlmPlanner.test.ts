@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE } from '@/src/domains/runtime/projectOps/workflowType';
 import type { DomainRuntimePack } from '@/src/domains/runtime/types';
 import { createLegacyManagerGatewayLlmPlanner } from '@/src/services/manager/llmPlanner';
 import type { ManagerGatewayLlmPlanner } from '@/src/services/manager-gateway/types';
@@ -246,6 +247,162 @@ describe('createLegacyManagerGatewayLlmPlanner', () => {
       blockType: 'assistant_text',
       role: 'assistant',
       text: 'Handled by project ops',
+    });
+  });
+
+  it('prefers tool-authored agent text when the stream also contains a natural-language recap', async () => {
+    saveSettings({
+      ...DEFAULT_SETTINGS,
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+      deepseekApiKey: 'sk-deepseek',
+    });
+
+    streamAIRequestMock.mockImplementation(async function* () {
+      yield '[SYSTEM] Tool result: {"agentText":"Need factors first","messageKind":"text"}\n';
+      yield 'I will help you analyze that now. First, tell me which factors to prioritize.';
+    });
+
+    const planner = createLegacyManagerGatewayLlmPlanner();
+    const result = await planner.planTurn(createPlannerInput());
+
+    expect(result?.blocks[0]).toMatchObject({
+      blockType: 'assistant_text',
+      role: 'assistant',
+      text: 'Need factors first',
+    });
+    expect(result?.diagnostics?.feedbackMessage).toBe('Need factors first');
+  });
+
+  it('passes generic intake workflow context to the agent prompt', async () => {
+    saveSettings({
+      ...DEFAULT_SETTINGS,
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+      deepseekApiKey: 'sk-deepseek',
+    });
+
+    const systemPromptMock = vi.fn().mockReturnValue('manager prompt');
+    getAgentMock.mockReturnValue({
+      id: 'manager_command_center',
+      skills: [],
+      systemPrompt: systemPromptMock,
+    });
+
+    streamAIRequestMock.mockImplementation(async function* () {
+      yield '[SYSTEM] Tool result: {"agentText":"Handled by project ops","messageKind":"text"}';
+    });
+
+    const planner = createLegacyManagerGatewayLlmPlanner();
+    await planner.planTurn(
+      createPlannerInput({
+        runtimePack: createRuntimePack({
+          manifest: {
+            domainId: 'project_ops',
+            displayName: 'Project Ops',
+            version: '1.0.0',
+          },
+          manager: {
+            domainId: 'project_ops',
+            skillIds: ['manager_continue_task_intake', 'manager_help'],
+            plannerHints: {
+              defaultWorkflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+            },
+            taskIntake: {
+              definition: {
+                workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+                title: { en: 'Project intake' },
+                slots: [],
+                steps: [
+                  {
+                    stepId: 'focus_dimensions',
+                    title: { en: 'Choose focus areas' },
+                    slotIds: ['focus_dimensions'],
+                  },
+                ],
+              },
+              parseInput: () => ({}),
+              buildPrompt: () => ({ body: 'prompt body' }),
+            },
+            parsePendingTask: () => null,
+            mapLegacyEffect: (effect) => ({
+              blocks: [
+                {
+                  blockType: 'assistant_text',
+                  role: 'assistant',
+                  text: effect.agentText,
+                },
+              ],
+              diagnostics: {
+                feedbackMessage: effect.feedbackMessage || effect.agentText,
+              },
+            }),
+          },
+        }),
+        projection: {
+          ...createPlannerInput().projection,
+          session: {
+            ...createPlannerInput().projection.session,
+            domainId: 'project_ops',
+          },
+          runtimeDomainId: 'project_ops',
+          activeWorkflow: {
+            workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+            stateData: {
+              schemaVersion: 'manager_intake_v1',
+              workflowId: 'project_ops_intake_1',
+              workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+              domainId: 'project_ops',
+              sourceText: 'Analyze Q2 Mobile Launch now',
+              composerMode: 'smart',
+              drafts: [],
+              slotValues: {},
+              recognizedSlotIds: ['target_subject'],
+              missingSlotIds: ['focus_dimensions'],
+              activeStepId: 'focus_dimensions',
+              completed: false,
+              createdAt: 100,
+              updatedAt: 100,
+            },
+          },
+        },
+      }),
+    );
+
+    expect(systemPromptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        managerTaskIntake: expect.objectContaining({
+          workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+          sourceText: 'Analyze Q2 Mobile Launch now',
+          activeStepId: 'focus_dimensions',
+          activeStepTitle: 'Choose focus areas',
+          recognizedSlotIds: ['target_subject'],
+          missingSlotIds: ['focus_dimensions'],
+          completed: false,
+        }),
+      }),
+    );
+  });
+
+  it('strips reasoning tags from direct replies for reasoning models', async () => {
+    saveSettings({
+      ...DEFAULT_SETTINGS,
+      provider: 'deepseek',
+      model: 'deepseek-r1',
+      deepseekApiKey: 'sk-deepseek',
+    });
+
+    streamAIRequestMock.mockImplementation(async function* () {
+      yield '<think>I should answer directly.</think>\nPlanner ready.';
+    });
+
+    const planner = createLegacyManagerGatewayLlmPlanner();
+    const result = await planner.planTurn(createPlannerInput());
+
+    expect(result?.blocks[0]).toMatchObject({
+      blockType: 'assistant_text',
+      role: 'assistant',
+      text: 'Planner ready.',
     });
   });
 });

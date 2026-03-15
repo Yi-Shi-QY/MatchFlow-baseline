@@ -1,3 +1,4 @@
+import type { AutomationDraft } from '@/src/services/automation/types';
 import type { DomainAutomationCapability } from './automation';
 
 export type RuntimeIntentType = 'query' | 'analyze' | 'schedule' | 'explain' | 'clarify';
@@ -16,6 +17,98 @@ export type RuntimeMemoryScopeType = 'global' | 'domain' | 'session';
 export interface RuntimeLocalizedText {
   zh?: string;
   en?: string;
+}
+
+export type RuntimeTaskIntakeValue =
+  | string
+  | number
+  | boolean
+  | null
+  | string[]
+  | number[]
+  | boolean[]
+  | Record<string, unknown>;
+
+export interface RuntimeTaskIntakeOptionDefinition {
+  value: string;
+  label: RuntimeLocalizedText;
+  aliases?: string[];
+  description?: RuntimeLocalizedText;
+}
+
+export interface RuntimeTaskIntakeSlotDefinition {
+  slotId: string;
+  label: RuntimeLocalizedText;
+  required: boolean;
+  valueType: 'enum' | 'entity' | 'string' | 'number' | 'datetime' | 'list' | 'json';
+  description?: RuntimeLocalizedText;
+  stepId?: string;
+  options?: RuntimeTaskIntakeOptionDefinition[];
+}
+
+export interface RuntimeTaskIntakeStepDefinition {
+  stepId: string;
+  title: RuntimeLocalizedText;
+  description?: RuntimeLocalizedText;
+  slotIds: string[];
+}
+
+export interface RuntimeTaskIntakeDefinition {
+  workflowType: string;
+  title: RuntimeLocalizedText;
+  description?: RuntimeLocalizedText;
+  slots: RuntimeTaskIntakeSlotDefinition[];
+  steps: RuntimeTaskIntakeStepDefinition[];
+  defaultSlotValues?: Record<string, RuntimeTaskIntakeValue>;
+}
+
+export interface RuntimeTaskIntakeParseInput {
+  input: string;
+  language: 'zh' | 'en';
+  slotValues: Record<string, RuntimeTaskIntakeValue>;
+  activeStepId: string | null;
+  signal?: AbortSignal;
+}
+
+export interface RuntimeTaskIntakeParseResult {
+  slotValues?: Record<string, RuntimeTaskIntakeValue>;
+  recognizedSlotIds?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface RuntimeTaskIntakePromptInput {
+  language: 'zh' | 'en';
+  definition: RuntimeTaskIntakeDefinition;
+  activeStepId: string | null;
+  slotValues: Record<string, RuntimeTaskIntakeValue>;
+  recognizedSlotIds: string[];
+  missingSlotIds: string[];
+  isRetry?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RuntimeTaskIntakePromptResult {
+  title?: string;
+  body: string;
+}
+
+export interface RuntimeTaskIntakeCapability {
+  definition: RuntimeTaskIntakeDefinition;
+  parseInput(
+    input: RuntimeTaskIntakeParseInput,
+  ): Promise<RuntimeTaskIntakeParseResult> | RuntimeTaskIntakeParseResult;
+  buildPrompt(input: RuntimeTaskIntakePromptInput): RuntimeTaskIntakePromptResult;
+  finalizeDrafts?(
+    input: {
+      drafts: AutomationDraft[];
+      slotValues: Record<string, RuntimeTaskIntakeValue>;
+      language: 'zh' | 'en';
+    },
+  ): Promise<AutomationDraft[]> | AutomationDraft[];
+  describeTopic?(input: {
+    topic: 'help' | 'factors' | 'sequence';
+    language: 'zh' | 'en';
+  }): string | null;
 }
 
 export interface SessionWorkflowStateSnapshot {
@@ -173,6 +266,7 @@ export interface RuntimeManagerLegacyEffectInput {
   action?: unknown;
   draftsToSave?: Array<{ id: string }>;
   pendingTask?: Record<string, unknown> | null;
+  intakeWorkflow?: Record<string, unknown> | null;
   shouldRefreshTaskState?: boolean;
   feedbackMessage?: string;
   navigation?: {
@@ -191,6 +285,7 @@ export interface RuntimeManagerCapability {
     sequenceText?: RuntimeLocalizedText;
     defaultWorkflowType?: string;
   };
+  taskIntake?: RuntimeTaskIntakeCapability;
   parsePendingTask?(
     workflow: SessionWorkflowStateSnapshot | null | undefined,
   ): Record<string, unknown> | null;

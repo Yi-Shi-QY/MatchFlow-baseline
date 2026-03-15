@@ -78,6 +78,7 @@ export default function CommandCenter() {
           <CommandCenterComposer
             language={language}
             commandText={state.commandText}
+            placeholder={state.composerPlaceholder}
             isSubmitting={state.isSubmitting}
             onCommandTextChange={state.setCommandText}
             onSubmit={state.handleParseCommand}

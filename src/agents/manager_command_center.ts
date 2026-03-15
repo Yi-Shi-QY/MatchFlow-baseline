@@ -19,7 +19,7 @@ function formatConversation(
     .join('\n');
 }
 
-function formatPendingTask(
+function formatLegacyPendingTask(
   pendingTask:
     | {
         sourceText: string;
@@ -31,10 +31,31 @@ function formatPendingTask(
     | undefined,
 ): string {
   if (!pendingTask) {
-    return 'No pending task intake.';
+    return 'No legacy pending-task compatibility snapshot.';
   }
 
   return JSON.stringify(pendingTask);
+}
+
+function formatTaskIntake(
+  taskIntake:
+    | {
+        workflowType: string;
+        sourceText: string;
+        activeStepId: string | null;
+        activeStepTitle?: string | null;
+        recognizedSlotIds: string[];
+        missingSlotIds: string[];
+        completed: boolean;
+      }
+    | null
+    | undefined,
+): string {
+  if (!taskIntake) {
+    return 'No active task intake workflow.';
+  }
+
+  return JSON.stringify(taskIntake);
 }
 
 function formatContextFragments(
@@ -55,7 +76,7 @@ function formatContextFragments(
     .join('\n\n');
 }
 
-function buildToolChoiceRules(activeDomainId: string, hasPendingTask: boolean): string {
+function buildToolChoiceRules(activeDomainId: string, hasTaskIntake: boolean): string {
   const toolIds = new Set(listRuntimeManagerToolIdsForDomain(activeDomainId));
   const rules: string[] = [];
 
@@ -74,9 +95,9 @@ function buildToolChoiceRules(activeDomainId: string, hasPendingTask: boolean): 
       'Use `manager_prepare_task_intake` when the user wants to analyze something now, later, or on a recurring schedule.',
     );
   }
-  if (hasPendingTask && toolIds.has('manager_continue_task_intake')) {
+  if (hasTaskIntake && toolIds.has('manager_continue_task_intake')) {
     rules.push(
-      'If pending task intake state exists, use `manager_continue_task_intake` to process the latest answer.',
+      'If task intake state exists and the user is answering that pending step, use `manager_continue_task_intake` instead of replying manually.',
     );
   }
   if (toolIds.has('manager_help')) {
@@ -86,6 +107,8 @@ function buildToolChoiceRules(activeDomainId: string, hasPendingTask: boolean): 
   }
 
   rules.push('Never call more than one tool in a single turn.');
+  rules.push('If you decide to call a tool, output only the tool call and stop.');
+  rules.push('Do not expose chain-of-thought or reasoning traces in the visible reply.');
   rules.push('After the tool result comes back, write the final reply in natural language.');
   rules.push('If no tool is needed, answer directly and concisely.');
 
@@ -105,6 +128,7 @@ export const managerCommandCenterAgent: AgentConfig = {
     domainId,
     domainName,
     managerPendingTask,
+    managerTaskIntake,
     managerContextFragments,
   }) => {
     const lang = language === 'zh' ? 'zh' : 'en';
@@ -115,7 +139,10 @@ export const managerCommandCenterAgent: AgentConfig = {
         : getDefaultRuntimeDomainPack().manifest.domainId;
     const activeDomainName =
       typeof domainName === 'string' && domainName.trim() ? domainName.trim() : activeDomainId;
-    const toolChoiceRules = buildToolChoiceRules(activeDomainId, Boolean(managerPendingTask));
+    const toolChoiceRules = buildToolChoiceRules(
+      activeDomainId,
+      Boolean(managerTaskIntake || managerPendingTask),
+    );
     const domainHelpText = resolveRuntimeManagerHelpText({
       domainId: activeDomainId,
       language: lang,
@@ -129,7 +156,9 @@ Do not expose tool names, raw JSON, or internal fields to the user.
 Language: ${lang}
 Active domain id: ${activeDomainId}
 Active domain name: ${activeDomainName}
-Pending task intake state: ${formatPendingTask(managerPendingTask)}
+Active task intake workflow: ${formatTaskIntake(managerTaskIntake)}
+Legacy pending-task compatibility snapshot: ${formatLegacyPendingTask(managerPendingTask)}
+Task intake source of truth: Prefer the active task intake workflow above. Treat the legacy pending-task snapshot as compatibility-only context.
 Domain help text:
 ${domainHelpText}
 Assembled context fragments:

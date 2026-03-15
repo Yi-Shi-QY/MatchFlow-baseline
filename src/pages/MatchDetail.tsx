@@ -58,6 +58,7 @@ export default function MatchDetail() {
   const { t, i18n } = useTranslation();
   const location = useLocation();
   const importedData = (location.state?.importedData ?? null) as EditableSubjectDataFormModel | null;
+  const openAnalysisWorkbench = Boolean(location.state?.openAnalysisWorkbench);
   const autoStartAnalysis = Boolean(location.state?.autoStartAnalysis);
   const autoStartSourceText =
     typeof location.state?.autoStartSourceText === 'string'
@@ -78,6 +79,10 @@ export default function MatchDetail() {
     if (importedData) {
       return {
         id: importedData.id || `custom_${Date.now()}`,
+        domainId: importedData.domainId,
+        subjectType: importedData.subjectType,
+        title: importedData.title,
+        subtitle: importedData.subtitle,
         league: importedData.league || '自定义赛事',
         date: importedData.date || new Date().toISOString().split('T')[0],
         status: importedData.status || 'upcoming',
@@ -96,6 +101,7 @@ export default function MatchDetail() {
         stats:
           (importedData.stats as Match['stats'] | undefined) ||
           { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } },
+        metadata: importedData.metadata,
         customInfo: importedData.customInfo
       } as Match;
     }
@@ -197,6 +203,7 @@ export default function MatchDetail() {
     editableData,
     includeAnimations,
     activeDomainId: activeDomain.id,
+    forceSelection: openAnalysisWorkbench || autoStartAnalysis,
     activeAnalysis,
     historyRecord,
     startAnalysisInContext: contextStartAnalysis,

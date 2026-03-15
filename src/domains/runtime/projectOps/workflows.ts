@@ -1,3 +1,8 @@
+import {
+  createManagerIntakeWorkflowSnapshot,
+  parseManagerIntakeWorkflowSnapshot,
+} from '@/src/services/manager-intake/workflowProjection';
+import type { ManagerIntakeWorkflowState } from '@/src/services/manager-intake/types';
 import { executeManagerContinueTaskIntake } from '@/src/services/manager/toolRegistry';
 import type {
   DomainWorkflowHandler,
@@ -5,10 +10,14 @@ import type {
   WorkflowResumeInput,
   WorkflowResumeResult,
 } from '../types';
-import {
-  PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
-  parsePendingTaskFromWorkflow,
-} from './tools';
+import { projectOpsTaskIntakeCapability } from './taskIntake';
+import { parsePendingTaskFromWorkflow } from './tools';
+import { PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE } from './workflowType';
+
+const PROJECT_OPS_MANAGER_SUPPORT = {
+  domainId: 'project_ops',
+  taskIntake: projectOpsTaskIntakeCapability,
+} as const;
 
 function mapResumeResult(input: {
   agentText: string;
@@ -17,6 +26,7 @@ function mapResumeResult(input: {
   action?: unknown;
   draftsToSave?: Array<{ id: string }>;
   pendingTask?: unknown;
+  intakeWorkflow?: ManagerIntakeWorkflowState | null;
   shouldRefreshTaskState?: boolean;
   feedbackMessage?: string;
   navigation?: {
@@ -46,24 +56,30 @@ function mapResumeResult(input: {
       },
     ],
     sessionPatch:
-      typeof input.pendingTask === 'undefined'
-        ? undefined
-        : {
-            activeWorkflow:
-              parsePendingTaskFromWorkflow({
-                workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
-                stateData:
-                  input.pendingTask && typeof input.pendingTask === 'object'
-                    ? (input.pendingTask as Record<string, unknown>)
-                    : {},
-              }) && input.pendingTask && typeof input.pendingTask === 'object'
-                ? {
-                    workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
-                    stateData: JSON.parse(JSON.stringify(input.pendingTask)) as Record<string, unknown>,
-                    updatedAt: Date.now(),
-                  }
-                : null,
-          },
+      typeof input.intakeWorkflow !== 'undefined'
+        ? {
+            activeWorkflow: input.intakeWorkflow
+              ? createManagerIntakeWorkflowSnapshot(input.intakeWorkflow)
+              : null,
+          }
+        : typeof input.pendingTask === 'undefined'
+          ? undefined
+          : {
+              activeWorkflow:
+                parsePendingTaskFromWorkflow({
+                  workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+                  stateData:
+                    input.pendingTask && typeof input.pendingTask === 'object'
+                      ? (input.pendingTask as Record<string, unknown>)
+                      : {},
+                }) && input.pendingTask && typeof input.pendingTask === 'object'
+                  ? {
+                      workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+                      stateData: JSON.parse(JSON.stringify(input.pendingTask)) as Record<string, unknown>,
+                      updatedAt: Date.now(),
+                    }
+                  : null,
+            },
     diagnostics: {
       shouldRefreshTaskState: Boolean(input.shouldRefreshTaskState),
       feedbackMessage: input.feedbackMessage || input.agentText,
@@ -80,10 +96,29 @@ export const projectOpsRuntimeWorkflowHandlers: DomainWorkflowHandler[] = [
     canResume(state: SessionWorkflowStateSnapshot): boolean {
       return (
         state.workflowType === PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE &&
-        Boolean(parsePendingTaskFromWorkflow(state))
+        (Boolean(
+          parseManagerIntakeWorkflowSnapshot(state, PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE),
+        ) ||
+          Boolean(parsePendingTaskFromWorkflow(state)))
       );
     },
     async resume(input: WorkflowResumeInput): Promise<WorkflowResumeResult> {
+      const intakeWorkflow = parseManagerIntakeWorkflowSnapshot(
+        input.workflow,
+        PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+      );
+      if (intakeWorkflow) {
+        const effect = await executeManagerContinueTaskIntake({
+          intakeWorkflow,
+          answer: input.input,
+          language: input.language === 'zh' ? 'zh' : 'en',
+          support: PROJECT_OPS_MANAGER_SUPPORT,
+          signal: input.signal,
+        });
+
+        return mapResumeResult(effect);
+      }
+
       const pendingTask = parsePendingTaskFromWorkflow(input.workflow);
       if (!pendingTask) {
         return {
@@ -96,6 +131,7 @@ export const projectOpsRuntimeWorkflowHandlers: DomainWorkflowHandler[] = [
         pendingTask,
         answer: input.input,
         language: input.language === 'zh' ? 'zh' : 'en',
+        support: PROJECT_OPS_MANAGER_SUPPORT,
         signal: input.signal,
       });
 

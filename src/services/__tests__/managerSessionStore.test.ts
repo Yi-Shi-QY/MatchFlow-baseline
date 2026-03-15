@@ -31,7 +31,7 @@ describe('manager session store', () => {
       configurable: true,
     });
     localStorage.clear();
-    clearManagerSessionStoreFallback();
+    clearManagerSessionStoreFallback({ preserveLocalStorage: true });
   });
 
   it('creates a new main session in fallback storage when no legacy state exists', async () => {
@@ -45,6 +45,119 @@ describe('manager session store', () => {
     expect(session.domainId).toBe('football');
     expect(session.runtimeDomainVersion).toBe('1.0.0');
     await expect(store.listMessages(session.id)).resolves.toEqual([]);
+  });
+
+  it('creates isolated main sessions for non-default domains', async () => {
+    const store = createManagerSessionStore();
+    const footballSession = await store.getOrCreateMainSession({
+      domainId: 'football',
+      runtimeDomainVersion: '1.0.0',
+    });
+    const projectOpsSession = await store.getOrCreateMainSession({
+      domainId: 'project_ops',
+      runtimeDomainVersion: '1.0.0',
+    });
+
+    expect(footballSession.sessionKey).toBe('manager:main');
+    expect(projectOpsSession.sessionKey).toBe('manager:main:project_ops');
+    expect(projectOpsSession.id).not.toBe(footballSession.id);
+    expect(projectOpsSession.domainId).toBe('project_ops');
+  });
+
+  it('normalizes legacy sessions without session-kind fields as domain_main', async () => {
+    localStorage.setItem(
+      'matchflow_manager_gateway_store_v1',
+      JSON.stringify({
+        schemaVersion: 1,
+        sessions: [
+          {
+            id: 'legacy_session_1',
+            sessionKey: 'manager:main',
+            title: 'Legacy main session',
+            status: 'active',
+            domainId: 'football',
+            runtimeDomainVersion: '1.0.0',
+            activeWorkflowType: null,
+            activeWorkflowStateData: null,
+            latestSummaryId: null,
+            latestMessageAt: 100,
+            createdAt: 90,
+            updatedAt: 100,
+          },
+        ],
+        messages: [],
+        runs: [],
+        summaries: [],
+        memories: [],
+      }),
+    );
+    clearManagerSessionStoreFallback({ preserveLocalStorage: true });
+
+    const store = createManagerSessionStore();
+    const session = await store.getSessionByKey('manager:main');
+
+    expect(session).toMatchObject({
+      id: 'legacy_session_1',
+      sessionKind: 'domain_main',
+      parentSessionId: null,
+      ownerDomainId: null,
+    });
+  });
+
+  it('persists supervisor and child sessions with parent-child linkage across reloads', async () => {
+    const store = createManagerSessionStore();
+    const supervisor = await store.createSession?.({
+      sessionKey: 'manager:supervisor',
+      sessionKind: 'supervisor',
+      domainId: 'manager_supervisor',
+      runtimeDomainVersion: '1.0.0',
+      title: 'Supervisor session',
+    });
+
+    expect(supervisor).toBeTruthy();
+    if (!supervisor) {
+      throw new Error('Expected createSession to return a supervisor session.');
+    }
+
+    const child = await store.createSession?.({
+      sessionKey: `manager:child:${supervisor.id}:project_ops`,
+      sessionKind: 'domain_child',
+      domainId: 'project_ops',
+      runtimeDomainVersion: '1.0.0',
+      title: 'Project Ops child session',
+      parentSessionId: supervisor.id,
+      ownerDomainId: 'project_ops',
+    });
+
+    expect(child).toBeTruthy();
+    if (!child) {
+      throw new Error('Expected createSession to return a child session.');
+    }
+
+    expect(supervisor.sessionKind).toBe('supervisor');
+    expect(supervisor.parentSessionId).toBeNull();
+    expect(supervisor.ownerDomainId).toBeNull();
+    expect(child.sessionKind).toBe('domain_child');
+    expect(child.parentSessionId).toBe(supervisor.id);
+    expect(child.ownerDomainId).toBe('project_ops');
+
+    clearManagerSessionStoreFallback({ preserveLocalStorage: true });
+    const reloadedStore = createManagerSessionStore();
+    const reloadedSupervisor = await reloadedStore.getSessionById(supervisor.id);
+    const reloadedChild = await reloadedStore.getSessionById(child.id);
+
+    expect(reloadedSupervisor).toMatchObject({
+      id: supervisor.id,
+      sessionKind: 'supervisor',
+      parentSessionId: null,
+      ownerDomainId: null,
+    });
+    expect(reloadedChild).toMatchObject({
+      id: child.id,
+      sessionKind: 'domain_child',
+      parentSessionId: supervisor.id,
+      ownerDomainId: 'project_ops',
+    });
   });
 
   it('appends messages with increasing ordinals and updates session timestamps', async () => {

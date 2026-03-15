@@ -6,6 +6,7 @@ import { getSettings } from '@/src/services/settings';
 import type { ManagerGatewayLlmPlanner } from '@/src/services/manager-gateway/types';
 import {
   mapRuntimeManagerEffect,
+  parseRuntimeManagerTaskIntakeSummary,
   parseRuntimeManagerPendingTask,
   runtimePackSupportsManagerLlm,
 } from './runtimeIntentRouter';
@@ -48,6 +49,21 @@ async function collectStreamText(
   return output;
 }
 
+function stripManagerReasoningArtifacts(text: string): string {
+  if (!text) {
+    return '';
+  }
+
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+    .replace(/<\|begin_of_thought\|>[\s\S]*?<\|end_of_thought\|>/gi, '')
+    .replace(/^\s*<(?:think|thinking|reasoning)>[\s\S]*$/i, '')
+    .replace(/^\s*<\|begin_of_thought\|>[\s\S]*$/i, '')
+    .trim();
+}
+
 function parseManagerToolResult(output: string): ManagerConversationEffect | null {
   const matches = [...output.matchAll(/\[SYSTEM\] Tool result: (.+)/g)];
   const raw = matches.length > 0 ? matches[matches.length - 1][1] : null;
@@ -73,13 +89,15 @@ function parseManagerToolResult(output: string): ManagerConversationEffect | nul
 }
 
 function extractManagerAssistantReply(output: string): string {
-  return output
+  return stripManagerReasoningArtifacts(
+    output
     .replace(/\[SYSTEM_NOTICE\][^\n]*\n?/g, '')
     .replace(/\[SYSTEM\] Calling tool(?: \(manual mode\))?:[^\n]*\n?/g, '')
     .replace(/\[SYSTEM\] Tool result: [^\n]*\n?/g, '')
     .replace(/\[ERROR\][^\n]*\n?/g, '')
     .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
-    .trim();
+    .trim(),
+  );
 }
 
 function extractManagerError(output: string): string | null {
@@ -205,6 +223,11 @@ export function createLegacyManagerGatewayLlmPlanner(): ManagerGatewayLlmPlanner
           runtimePack: input.runtimePack,
           workflow: input.projection.activeWorkflow,
         });
+        const taskIntake = parseRuntimeManagerTaskIntakeSummary({
+          runtimePack: input.runtimePack,
+          workflow: input.projection.activeWorkflow,
+          language: input.language,
+        });
         const prompt = agent.systemPrompt({
           language: input.language,
           userInput: input.input,
@@ -224,6 +247,7 @@ export function createLegacyManagerGatewayLlmPlanner(): ManagerGatewayLlmPlanner
                 sequencePreference: pendingTask.sequencePreference,
               }
             : null,
+          managerTaskIntake: taskIntake,
           managerContextFragments: Array.isArray(input.contextFragments)
             ? input.contextFragments.map((fragment) => ({
                 category: fragment.category,
@@ -246,19 +270,20 @@ export function createLegacyManagerGatewayLlmPlanner(): ManagerGatewayLlmPlanner
         const assistantReply = extractManagerAssistantReply(output);
         const effect = parseManagerToolResult(output);
         const streamError = extractManagerError(output);
+        const hasActiveTaskIntake = Boolean(taskIntake || pendingTask);
 
         if (effect) {
           return mapRuntimeManagerEffect({
             runtimePack: input.runtimePack,
             effect: {
-            ...effect,
-            agentText: assistantReply || effect.agentText,
-            feedbackMessage: effect.feedbackMessage || assistantReply || effect.agentText,
+              ...effect,
+              agentText: effect.agentText,
+              feedbackMessage: effect.feedbackMessage || effect.agentText,
             },
           });
         }
 
-        if (assistantReply && !pendingTask) {
+        if (assistantReply && !hasActiveTaskIntake) {
           return {
             blocks: [
               {

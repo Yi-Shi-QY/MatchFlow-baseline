@@ -1,18 +1,16 @@
 import {
   describeAvailableFactors,
   describeDefaultSequence,
-} from '@/src/services/managerAgent';
+} from '@/src/services/manager-legacy/analysisProfile';
 import type {
   RuntimeManagerCapability,
   RuntimeManagerLegacyEffectInput,
   RuntimeToolExecutionResult,
   SessionWorkflowStateSnapshot,
 } from '../types';
-import {
-  FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE,
-  mapLegacyManagerEffectToRuntimeToolResult,
-  parsePendingTaskFromWorkflow,
-} from './tools';
+import { footballTaskIntakeCapability } from './taskIntake';
+import { mapLegacyManagerEffectToRuntimeToolResult, parsePendingTaskFromWorkflow } from './tools';
+import { FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE } from './workflowType';
 
 const FOOTBALL_MANAGER_SKILL_IDS = [
   'manager_query_local_matches',
@@ -44,9 +42,10 @@ function mapLegacyEffect(
 export const footballRuntimeManagerCapability: RuntimeManagerCapability = {
   domainId: 'football',
   skillIds: [...FOOTBALL_MANAGER_SKILL_IDS],
+  taskIntake: footballTaskIntakeCapability,
   plannerHints: {
     helpText: {
-      zh: '你可以直接问我今天有哪些比赛，或者告诉我想分析哪场比赛以及什么时间执行。我会先在对话里确认分析因素和顺序，再生成任务卡片。',
+      zh: '浣犲彲浠ョ洿鎺ラ棶鎴戜粖澶╂湁鍝簺姣旇禌锛屾垨鑰呭憡璇夋垜鎯冲垎鏋愬摢鍦烘瘮璧涗互鍙婁粈涔堟椂闂存墽琛屻€傛垜浼氬厛鍦ㄥ璇濋噷纭鍒嗘瀽鍥犵礌鍜岄『搴忥紝鍐嶇敓鎴愪换鍔″崱鐗囥€?',
       en: 'Ask what matches are on today, or tell me which match or league to analyze and when. I will confirm the analysis factors and sequence in chat before creating task cards.',
     },
     factorsText: {

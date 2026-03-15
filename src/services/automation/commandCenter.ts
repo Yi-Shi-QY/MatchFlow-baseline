@@ -1,6 +1,7 @@
 import type { AnalysisRequestPayload } from '@/src/services/ai/contracts';
 import { translateText } from '@/src/i18n/translate';
 import { buildSubjectRoute } from '@/src/services/navigation/subjectRoute';
+import { DEFAULT_DOMAIN_ID } from '@/src/services/domains/builtinModules';
 import { getNextClarificationQuestion } from './clarification';
 import { assembleAutomationJob } from './jobAssembler';
 import type {
@@ -19,6 +20,8 @@ export interface ImmediateAnalysisNavigationTarget {
   route: string;
   state: {
     importedData: AnalysisRequestPayload;
+    subjectType?: string;
+    openAnalysisWorkbench?: true;
     autoStartAnalysis: true;
     autoStartSourceText: string;
   };
@@ -306,6 +309,8 @@ export async function resolveImmediateAnalysisNavigation(
       route: buildSubjectRoute(target.domainId, target.subjectId),
       state: {
         importedData: target.dataToAnalyze,
+        subjectType: target.subjectType,
+        openAnalysisWorkbench: true,
         autoStartAnalysis: true,
         autoStartSourceText: draft.sourceText,
       },
@@ -316,7 +321,46 @@ export async function resolveImmediateAnalysisNavigation(
 export function getCommandComposerExamples(
   language: 'zh' | 'en',
   composerMode: AutomationCommandComposerMode,
+  domainId: string = DEFAULT_DOMAIN_ID,
 ): string[] {
+  if (domainId === 'project_ops') {
+    if (composerMode === 'analyze_now') {
+      return [
+        language === 'zh' ? '现在分析 Q2 Mobile Launch' : 'Analyze Q2 Mobile Launch now',
+        language === 'zh'
+          ? '马上分析 Vendor Cutover Checklist'
+          : 'Run Vendor Cutover Checklist now',
+        language === 'zh'
+          ? '分析 Support Load Rebalance'
+          : 'Analyze Support Load Rebalance now',
+      ];
+    }
+
+    if (composerMode === 'automation') {
+      return [
+        language === 'zh'
+          ? '明天 09:00 分析 Q2 Mobile Launch 并提醒我'
+          : 'Tomorrow at 09:00 analyze Q2 Mobile Launch and notify me',
+        language === 'zh'
+          ? '每天 09:00 检查 Vendor Cutover Checklist'
+          : 'Every day at 09:00 review Vendor Cutover Checklist',
+        language === 'zh'
+          ? '今晚 18:00 分析 Support Load Rebalance'
+          : 'Tonight at 18:00 analyze Support Load Rebalance',
+      ];
+    }
+
+    return [
+      language === 'zh' ? '现在分析 Q2 Mobile Launch' : 'Analyze Q2 Mobile Launch now',
+      language === 'zh'
+        ? '明天 09:00 分析 Vendor Cutover Checklist 并提醒我'
+        : 'Tomorrow at 09:00 analyze Vendor Cutover Checklist and notify me',
+      language === 'zh'
+        ? '每天 09:00 检查关键 project ops 任务'
+        : 'Every day at 09:00 review key project ops tasks',
+    ];
+  }
+
   if (composerMode === 'analyze_now') {
     return [
       tr(

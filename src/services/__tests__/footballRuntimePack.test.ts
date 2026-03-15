@@ -6,12 +6,16 @@ import type {
   SessionWorkflowStateSnapshot,
 } from '@/src/domains/runtime/types';
 import { createFootballRuntimePack, footballRuntimePack } from '@/src/domains/runtime/football';
-import {
-  FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE,
-  parsePendingTaskFromWorkflow,
-} from '@/src/domains/runtime/football/tools';
+import { FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE } from '@/src/domains/runtime/football/workflowType';
 import type { AutomationJob } from '@/src/services/automation/types';
 import { queryFootballMatchesViaRuntimeAdapters } from '@/src/domains/runtime/football/sourceAdapters';
+
+function parseFootballPendingTask(
+  workflow: SessionWorkflowStateSnapshot | null | undefined,
+) {
+  const parser = footballRuntimePack.manager?.parsePendingTask;
+  return parser ? parser(workflow) : null;
+}
 
 const mocks = vi.hoisted(() => ({
   resolveDomainEventFeed: vi.fn(),
@@ -160,6 +164,15 @@ describe('football runtime pack', () => {
 
     expect(result.blocks[0].blockType).toBe('assistant_text');
     expect(result.blocks[0].text).toContain('Premier League');
+  });
+
+  it('exposes a football task-intake capability on the runtime manager', () => {
+    expect(footballRuntimePack.manager?.taskIntake?.definition.workflowType).toBe(
+      FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE,
+    );
+    expect(
+      footballRuntimePack.manager?.taskIntake?.definition.steps.map((step) => step.stepId),
+    ).toEqual(['analysis_dimensions', 'analysis_sequence']);
   });
 
   it('resolves football events through injected runtime source adapters', async () => {
@@ -342,7 +355,7 @@ describe('football runtime pack', () => {
       },
     };
 
-    expect(parsePendingTaskFromWorkflow(workflowState)?.stage).toBe('await_factors');
+    expect(parseFootballPendingTask(workflowState)?.stage).toBe('await_factors');
 
     const result = await workflow!.resume({
       input: 'fundamentals and market',

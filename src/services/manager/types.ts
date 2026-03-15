@@ -4,6 +4,7 @@ import type {
   ImmediateAnalysisNavigationTarget,
 } from '@/src/services/automation/commandCenter';
 import type { MemoryCandidateInput } from '@/src/services/memoryCandidateTypes';
+import type { ManagerIntakeWorkflowState } from '@/src/services/manager-intake/types';
 
 export type ManagerLanguage = 'zh' | 'en';
 export type ManagerSourcePreferenceId = 'fundamental' | 'market' | 'custom';
@@ -46,6 +47,7 @@ export interface ManagerConversationAction {
 export interface ManagerSessionSnapshot {
   messages: ManagerConversationMessage[];
   pendingTask: ManagerPendingTask | null;
+  intakeWorkflow?: ManagerIntakeWorkflowState | null;
 }
 
 export interface ManagerConversationEffect {
@@ -60,6 +62,7 @@ export interface ManagerConversationEffect {
   feedbackMessage?: string;
   navigation?: ImmediateAnalysisNavigationTarget;
   memoryCandidates?: MemoryCandidateInput[];
+  intakeWorkflow?: ManagerIntakeWorkflowState | null;
 }
 
 export interface ManagerSessionResult extends ManagerSessionSnapshot {

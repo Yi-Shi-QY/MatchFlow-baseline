@@ -41,6 +41,18 @@ export function CommandCenterContinueStrip({
               {card.eyebrow}
             </div>
             <div className="mt-2 text-sm font-semibold text-[var(--mf-text)]">{card.title}</div>
+            {card.chips && card.chips.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {card.chips.map((chip) => (
+                  <span
+                    key={`${card.id}:${chip}`}
+                    className="rounded-full border border-[var(--mf-border)] bg-[var(--mf-surface-2)] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--mf-text-muted)]"
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <p className="mt-2 text-xs leading-5 text-[var(--mf-text-muted)]">{card.description}</p>
             <Button
               size="sm"

@@ -4,11 +4,12 @@ import type {
   RuntimeToolExecutionResult,
   SessionWorkflowStateSnapshot,
 } from '../types';
+import { projectOpsTaskIntakeCapability } from './taskIntake';
 import {
-  PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
   mapLegacyManagerEffectToProjectOpsRuntimeToolResult,
   parsePendingTaskFromWorkflow,
 } from './tools';
+import { PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE } from './workflowType';
 
 const PROJECT_OPS_MANAGER_SKILL_IDS = [
   'manager_describe_capability',
@@ -39,18 +40,19 @@ function mapLegacyEffect(
 export const projectOpsRuntimeManagerCapability: RuntimeManagerCapability = {
   domainId: 'project_ops',
   skillIds: [...PROJECT_OPS_MANAGER_SKILL_IDS],
+  taskIntake: projectOpsTaskIntakeCapability,
   plannerHints: {
     helpText: {
-      zh: 'Describe the project, task, or initiative you want to analyze and when it should run. I will confirm the factors and sequence before creating task cards.',
-      en: 'Describe the project, task, or initiative you want to analyze and when it should run. I will confirm the factors and sequence before creating task cards.',
+      zh: '直接描述你要分析的项目、任务或专项，以及希望什么时候执行。我会先确认分析对象和关注方向，再创建任务卡片。',
+      en: 'Describe the project, task, or initiative you want to analyze and when it should run. I will confirm the subject and focus areas before creating task cards.',
     },
     factorsText: {
-      zh: 'Project Ops uses the shared analysis profile: fundamentals for operating context, market for execution signals, and custom for freeform notes.',
-      en: 'Project Ops uses the shared analysis profile: fundamentals for operating context, market for execution signals, and custom for freeform notes.',
+      zh: 'Project Ops 当前支持的关注方向包括：进度与里程碑、风险与阻塞、资源与负责人、协同与交接。你也可以直接说“默认”，我会按通用运营复盘顺序推进。',
+      en: 'Project Ops currently supports these focus areas: delivery and milestones, risk and blockers, resources and owners, coordination and handoff. You can also say "default" and I will use the standard operating review flow.',
     },
     sequenceText: {
-      zh: 'The default sequence is fundamentals -> market -> custom -> prediction, which means context first, risk second, notes third, and recommendation last.',
-      en: 'The default sequence is fundamentals -> market -> custom -> prediction, which means context first, risk second, notes third, and recommendation last.',
+      zh: 'Project Ops 的默认分析顺序是：先看对象与上下文，再看风险和阻塞，最后给推进建议。',
+      en: 'The default Project Ops review order is context first, then risks and blockers, then the next-step recommendation.',
     },
     defaultWorkflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
   },

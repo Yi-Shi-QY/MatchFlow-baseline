@@ -1,0 +1,847 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type {
+  AnalysisIntent,
+  DomainRuntimePack,
+  RuntimeFeedBlockInput,
+  RuntimeToolExecutionResult,
+  SessionWorkflowStateSnapshot,
+  WorkflowResumeResult,
+} from '@/src/domains/runtime/types';
+import { createManagerGateway } from '@/src/services/manager-gateway/gateway';
+import type {
+  ManagerGatewaySessionStore,
+  ManagerMessageRecord,
+  ManagerRunRecord,
+  ManagerSessionRecord,
+  ManagerSummaryRecord,
+} from '@/src/services/manager-gateway/types';
+
+function createDeferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return {
+    promise,
+    resolve,
+  };
+}
+
+function createAbortError(): Error & { name: string } {
+  const error = new Error('Manager run aborted') as Error & { name: string };
+  error.name = 'AbortError';
+  return error;
+}
+
+async function waitForCondition(
+  condition: () => boolean,
+  timeoutMs = 1000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error('Timed out waiting for manager supervisor cancel condition.');
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  }
+}
+
+function buildMainSessionKey(input: {
+  domainId: string;
+  sessionKind?: string | null;
+}): string {
+  if (input.sessionKind === 'supervisor') {
+    return 'manager:main:supervisor';
+  }
+
+  return input.domainId === 'football' ? 'manager:main' : `manager:main:${input.domainId}`;
+}
+
+function createMutableSessionStore(): ManagerGatewaySessionStore & {
+  getSessionsSnapshot(): ManagerSessionRecord[];
+  getMessagesSnapshot(): ManagerMessageRecord[];
+  getRunsSnapshot(): ManagerRunRecord[];
+} {
+  const sessions: ManagerSessionRecord[] = [];
+  const messages: ManagerMessageRecord[] = [];
+  const runs: ManagerRunRecord[] = [];
+  const summaries: ManagerSummaryRecord[] = [];
+
+  return {
+    async getOrCreateMainSession(input: {
+      domainId: string;
+      runtimeDomainVersion?: string | null;
+      title?: string;
+      sessionKind?: string;
+    }) {
+      const sessionKey = buildMainSessionKey({
+        domainId: input.domainId,
+        sessionKind: input.sessionKind,
+      });
+      const existing = sessions.find((entry) => entry.sessionKey === sessionKey);
+      if (existing) {
+        return {
+          ...existing,
+          title: input.title || existing.title,
+          domainId: input.domainId || existing.domainId,
+          runtimeDomainVersion: input.runtimeDomainVersion || existing.runtimeDomainVersion,
+        };
+      }
+
+      const now = 100 + sessions.length;
+      const record: ManagerSessionRecord = {
+        id: `session_${sessions.length + 1}`,
+        sessionKey,
+        sessionKind:
+          input.sessionKind === 'supervisor' || input.sessionKind === 'domain_child'
+            ? input.sessionKind
+            : 'domain_main',
+        parentSessionId: null,
+        ownerDomainId: null,
+        title: input.title || 'Main session',
+        status: 'active',
+        domainId: input.domainId,
+        runtimeDomainVersion: input.runtimeDomainVersion || '1.0.0',
+        activeWorkflowType: null,
+        activeWorkflowStateData: null,
+        compositeWorkflowStateData: null,
+        latestSummaryId: null,
+        latestMessageAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+      sessions.push(record);
+      return { ...record };
+    },
+    async createSession(input) {
+      const existing = sessions.find((entry) => entry.sessionKey === input.sessionKey);
+      if (existing) {
+        return { ...existing };
+      }
+
+      const now = 200 + sessions.length;
+      const record: ManagerSessionRecord = {
+        id: `session_${sessions.length + 1}`,
+        sessionKey: input.sessionKey,
+        sessionKind: input.sessionKind,
+        parentSessionId: input.parentSessionId || null,
+        ownerDomainId: input.ownerDomainId || null,
+        title: input.title || 'Child session',
+        status: 'active',
+        domainId: input.domainId,
+        runtimeDomainVersion: input.runtimeDomainVersion || '1.0.0',
+        activeWorkflowType: null,
+        activeWorkflowStateData: null,
+        compositeWorkflowStateData: null,
+        latestSummaryId: null,
+        latestMessageAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+      sessions.push(record);
+      return { ...record };
+    },
+    async getSessionById(sessionId) {
+      const record = sessions.find((entry) => entry.id === sessionId);
+      return record ? { ...record } : null;
+    },
+    async listMessages(sessionId) {
+      return messages
+        .filter((entry) => entry.sessionId === sessionId)
+        .sort((left, right) => left.ordinal - right.ordinal)
+        .map((entry) => ({ ...entry }));
+    },
+    async getLatestSummary(sessionId) {
+      return (
+        summaries
+          .filter((entry) => entry.sessionId === sessionId)
+          .sort((left, right) => right.createdAt - left.createdAt)[0] || null
+      );
+    },
+    async saveSummary(input) {
+      const summary: ManagerSummaryRecord = {
+        id: `summary_${summaries.length + 1}`,
+        sessionId: input.sessionId,
+        kind: input.kind,
+        cutoffOrdinal: input.cutoffOrdinal,
+        summaryText: input.summaryText,
+        sourceMessageCount: input.sourceMessageCount,
+        createdAt: input.createdAt || 500 + summaries.length,
+      };
+      summaries.push(summary);
+      return { ...summary };
+    },
+    async appendMessage(input) {
+      const sessionMessages = messages.filter((entry) => entry.sessionId === input.sessionId);
+      const ordinal =
+        sessionMessages.reduce((maxOrdinal, entry) => Math.max(maxOrdinal, entry.ordinal), -1) + 1;
+      const record: ManagerMessageRecord = {
+        id: `message_${messages.length + 1}`,
+        sessionId: input.sessionId,
+        runId: input.runId || null,
+        ordinal,
+        role: input.role,
+        blockType: input.blockType,
+        text: input.text || null,
+        payloadData: input.payloadData || null,
+        createdAt: input.createdAt || 300 + messages.length,
+      };
+      messages.push(record);
+      const sessionIndex = sessions.findIndex((entry) => entry.id === input.sessionId);
+      if (sessionIndex >= 0) {
+        sessions[sessionIndex] = {
+          ...sessions[sessionIndex],
+          latestMessageAt: record.createdAt,
+          updatedAt: record.createdAt,
+        };
+      }
+      return { ...record };
+    },
+    async createRun(input) {
+      const record: ManagerRunRecord = {
+        id: `run_${runs.length + 1}`,
+        sessionId: input.sessionId,
+        inputMessageId: input.inputMessageId || null,
+        status: input.status,
+        triggerType: input.triggerType,
+        plannerMode: input.plannerMode || null,
+        intentType: input.intentType ?? null,
+        toolPath: input.toolPath ?? null,
+        errorCode: input.errorCode ?? null,
+        errorMessage: input.errorMessage ?? null,
+        stateData: input.stateData ?? null,
+        startedAt:
+          typeof input.startedAt === 'number' && Number.isFinite(input.startedAt)
+            ? input.startedAt
+            : null,
+        finishedAt:
+          typeof input.finishedAt === 'number' && Number.isFinite(input.finishedAt)
+            ? input.finishedAt
+            : null,
+        createdAt: input.createdAt || 600 + runs.length,
+        updatedAt: input.updatedAt || input.createdAt || 600 + runs.length,
+      };
+      runs.push(record);
+      return { ...record };
+    },
+    async updateRun(runId, patch) {
+      const index = runs.findIndex((entry) => entry.id === runId);
+      if (index < 0) {
+        return null;
+      }
+
+      const current = runs[index];
+      const updated: ManagerRunRecord = {
+        ...current,
+        inputMessageId:
+          typeof patch.inputMessageId !== 'undefined'
+            ? patch.inputMessageId
+            : current.inputMessageId,
+        status: patch.status ?? current.status,
+        plannerMode:
+          typeof patch.plannerMode !== 'undefined'
+            ? patch.plannerMode
+            : current.plannerMode,
+        intentType:
+          typeof patch.intentType !== 'undefined' ? patch.intentType : current.intentType,
+        toolPath: typeof patch.toolPath !== 'undefined' ? patch.toolPath : current.toolPath,
+        errorCode:
+          typeof patch.errorCode !== 'undefined' ? patch.errorCode : current.errorCode,
+        errorMessage:
+          typeof patch.errorMessage !== 'undefined'
+            ? patch.errorMessage
+            : current.errorMessage,
+        stateData:
+          typeof patch.stateData !== 'undefined' ? patch.stateData : current.stateData,
+        startedAt:
+          typeof patch.startedAt !== 'undefined' ? patch.startedAt : current.startedAt,
+        finishedAt:
+          typeof patch.finishedAt !== 'undefined' ? patch.finishedAt : current.finishedAt,
+        updatedAt: patch.updatedAt ?? current.updatedAt,
+      };
+      runs[index] = updated;
+      return { ...updated };
+    },
+    async updateSession(sessionId, patch) {
+      const index = sessions.findIndex((entry) => entry.id === sessionId);
+      if (index < 0) {
+        return null;
+      }
+
+      const current = sessions[index];
+      const updated: ManagerSessionRecord = {
+        ...current,
+        title: patch.title ?? current.title,
+        runtimeDomainVersion:
+          typeof patch.runtimeDomainVersion !== 'undefined'
+            ? patch.runtimeDomainVersion
+            : current.runtimeDomainVersion,
+        activeWorkflowType:
+          typeof patch.activeWorkflowType !== 'undefined'
+            ? patch.activeWorkflowType
+            : current.activeWorkflowType,
+        activeWorkflowStateData:
+          typeof patch.activeWorkflowStateData !== 'undefined'
+            ? patch.activeWorkflowStateData
+            : current.activeWorkflowStateData,
+        compositeWorkflowStateData:
+          typeof patch.compositeWorkflowStateData !== 'undefined'
+            ? patch.compositeWorkflowStateData
+            : current.compositeWorkflowStateData,
+        latestSummaryId:
+          typeof patch.latestSummaryId !== 'undefined'
+            ? patch.latestSummaryId
+            : current.latestSummaryId,
+        latestMessageAt: patch.latestMessageAt ?? current.latestMessageAt,
+        updatedAt: patch.updatedAt ?? current.updatedAt,
+      };
+      sessions[index] = updated;
+      return { ...updated };
+    },
+    async getActiveRun(sessionId) {
+      const activeRuns = runs
+        .filter(
+          (entry) =>
+            entry.sessionId === sessionId &&
+            (entry.status === 'queued' || entry.status === 'running'),
+        )
+        .sort((left, right) => {
+          if (left.status === right.status) {
+            return right.updatedAt - left.updatedAt;
+          }
+          return left.status === 'running' ? -1 : 1;
+        });
+      return activeRuns[0] ? { ...activeRuns[0] } : null;
+    },
+    async getLatestRun(sessionId) {
+      const latestRuns = runs
+        .filter((entry) => entry.sessionId === sessionId)
+        .sort((left, right) => {
+          if (left.updatedAt === right.updatedAt) {
+            return right.createdAt - left.createdAt;
+          }
+          return right.updatedAt - left.updatedAt;
+        });
+      return latestRuns[0] ? { ...latestRuns[0] } : null;
+    },
+    getSessionsSnapshot() {
+      return sessions.map((entry) => ({ ...entry }));
+    },
+    getMessagesSnapshot() {
+      return messages.map((entry) => ({ ...entry }));
+    },
+    getRunsSnapshot() {
+      return runs.map((entry) => ({ ...entry }));
+    },
+  };
+}
+
+function createRuntimePack(args: {
+  domainId: string;
+  resolverIntent?: AnalysisIntent | null;
+  toolResult?: RuntimeToolExecutionResult;
+  workflowState?: SessionWorkflowStateSnapshot | null;
+  workflowResult?: WorkflowResumeResult;
+}) {
+  const resolveIntent = vi.fn(async () => args.resolverIntent || null);
+  const toolExecute = vi.fn(async () =>
+    args.toolResult || {
+      blocks: [],
+      diagnostics: {},
+    },
+  );
+  const workflowResume = vi.fn(async () =>
+    args.workflowResult || {
+      workflowHandled: false,
+      blocks: [],
+    },
+  );
+
+  const pack: DomainRuntimePack = {
+    manifest: {
+      domainId: args.domainId,
+      version: '2.0.0',
+      displayName: args.domainId,
+      supportedIntentTypes: ['query', 'analyze'],
+      supportedEventTypes: [],
+      supportedFactorIds: [],
+    },
+    resolver: {
+      resolveIntent,
+      async resolveSubjects() {
+        return [];
+      },
+      async resolveEvents() {
+        return [];
+      },
+    },
+    sourceAdapters: [],
+    contextProviders: [],
+    manager: {
+      domainId: args.domainId,
+      skillIds: [],
+    },
+    tools: [
+      {
+        id: `${args.domainId}_tool`,
+        description: `${args.domainId} tool`,
+        canHandle() {
+          return true;
+        },
+        execute: toolExecute,
+      },
+    ],
+    workflows: [
+      {
+        workflowType: args.workflowState?.workflowType || `${args.domainId}_workflow`,
+        canResume(state) {
+          return state.workflowType === (args.workflowState?.workflowType || `${args.domainId}_workflow`);
+        },
+        resume: workflowResume,
+      },
+    ],
+  };
+
+  return {
+    pack,
+    resolveIntent,
+    toolExecute,
+    workflowResume,
+  };
+}
+
+function createRuntimeRegistry(runtimePacks: {
+  football: DomainRuntimePack;
+  project_ops: DomainRuntimePack;
+}) {
+  return {
+    resolve(domainId?: string | null) {
+      return runtimePacks[(domainId || 'football') as keyof typeof runtimePacks];
+    },
+    getById(domainId?: string | null) {
+      return domainId ? runtimePacks[domainId as keyof typeof runtimePacks] || null : null;
+    },
+    list() {
+      return [runtimePacks.football, runtimePacks.project_ops];
+    },
+  };
+}
+
+function createSupervisorIntent(input: {
+  domainId: 'football' | 'project_ops';
+  rawInput: string;
+}) {
+  if (input.domainId === 'football') {
+    return {
+      domainId: 'football',
+      intentType: 'analyze',
+      targetType: 'event',
+      eventRefs: [
+        {
+          domainId: 'football',
+          eventType: 'match',
+          eventId: 'rm-barca',
+          title: 'Real Madrid vs Barcelona',
+          subjectRefs: [],
+        },
+      ],
+      rawInput: input.rawInput,
+    } satisfies AnalysisIntent;
+  }
+
+  return {
+    domainId: 'project_ops',
+    intentType: 'analyze',
+    targetType: 'subject',
+    subjectRefs: [
+      {
+        domainId: 'project_ops',
+        subjectType: 'project',
+        subjectId: 'q2-mobile-launch',
+        label: 'Q2 mobile launch blockers',
+      },
+    ],
+    rawInput: input.rawInput,
+  } satisfies AnalysisIntent;
+}
+
+describe('manager supervisor cancel', () => {
+  beforeEach(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.clear();
+    }
+  });
+
+  it('cancels an active child run without deleting sibling items', async () => {
+    const store = createMutableSessionStore();
+    const resumeStarted = createDeferred();
+    const footballWorkflowState: SessionWorkflowStateSnapshot = {
+      workflowType: 'football_task_intake',
+      stateData: {
+        step: 'await_factors',
+      },
+    };
+    const footballRuntime = createRuntimePack({
+      domainId: 'football',
+      resolverIntent: createSupervisorIntent({
+        domainId: 'football',
+        rawInput: 'Analyze Real Madrid vs Barcelona',
+      }),
+      toolResult: {
+        blocks: [
+          {
+            blockType: 'assistant_text',
+            role: 'assistant',
+            text: 'Choose analysis factors.',
+          } satisfies RuntimeFeedBlockInput,
+        ],
+        sessionPatch: {
+          activeWorkflow: footballWorkflowState,
+        },
+      },
+      workflowState: footballWorkflowState,
+    });
+    let resumeCount = 0;
+    footballRuntime.workflowResume.mockImplementation(
+      async (_input: { signal?: AbortSignal }) => {
+        resumeCount += 1;
+        if (resumeCount === 1) {
+          resumeStarted.resolve();
+          await new Promise((_, reject) => {
+            _input.signal?.addEventListener(
+              'abort',
+              () => {
+                reject(createAbortError());
+              },
+              { once: true },
+            );
+          });
+        }
+
+        return {
+          workflowHandled: true,
+          blocks: [
+            {
+              blockType: 'assistant_text',
+              role: 'assistant',
+              text: 'Football analysis configured.',
+            } satisfies RuntimeFeedBlockInput,
+          ],
+          sessionPatch: {
+            activeWorkflow: null,
+          },
+        };
+      },
+    );
+    const projectOpsRuntime = createRuntimePack({
+      domainId: 'project_ops',
+      resolverIntent: createSupervisorIntent({
+        domainId: 'project_ops',
+        rawInput: 'Review Q2 mobile launch blockers',
+      }),
+      toolResult: {
+        blocks: [
+          {
+            blockType: 'assistant_text',
+            role: 'assistant',
+            text: 'Project ops should stay pending.',
+          } satisfies RuntimeFeedBlockInput,
+        ],
+      },
+    });
+    const gateway = createManagerGateway({
+      sessionStore: store,
+      runtimeDomainRegistry: createRuntimeRegistry({
+        football: footballRuntime.pack,
+        project_ops: projectOpsRuntime.pack,
+      }) as any,
+    });
+
+    const initial = await gateway.submitMainSessionTurn({
+      input: 'Analyze Real Madrid vs Barcelona and review Q2 mobile launch blockers',
+      language: 'en',
+      domainId: 'football',
+      title: 'Command Center',
+      sessionKind: 'supervisor',
+    } as any);
+    const initialFootballItem = initial.projection.compositeWorkflow?.items.find(
+      (item) => item.domainId === 'football',
+    );
+
+    const resumePromise = gateway.submitMainSessionTurn({
+      input: 'default',
+      language: 'en',
+      domainId: 'football',
+      title: 'Command Center',
+      sessionKind: 'supervisor',
+    } as any);
+    await resumeStarted.promise;
+
+    const cancelResult = await gateway.cancelSessionRun(initial.projection.session.id);
+
+    expect(cancelResult.outcome).toBe('interrupt_requested');
+    await expect(resumePromise).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    await waitForCondition(
+      () => store.getRunsSnapshot().filter((run) => run.status === 'cancelled').length >= 2,
+    );
+
+    const reloaded = await gateway.loadSessionProjection(initial.projection.session.id);
+    const workflow = reloaded?.compositeWorkflow;
+    const footballItem = workflow?.items.find((item) => item.domainId === 'football');
+    const projectOpsItem = workflow?.items.find((item) => item.domainId === 'project_ops');
+
+    expect(workflow?.items).toHaveLength(2);
+    expect(workflow?.activeItemId).toBe(footballItem?.itemId);
+    expect(footballItem).toMatchObject({
+      status: 'active',
+      childSessionId: initialFootballItem?.childSessionId,
+      childWorkflowType: 'football_task_intake',
+      childWorkflowStateData: {
+        step: 'await_factors',
+      },
+    });
+    expect(projectOpsItem).toMatchObject({
+      status: 'pending',
+    });
+  });
+
+  it('cancels an unfinished supervisor composite workflow deterministically', async () => {
+    const store = createMutableSessionStore();
+    const footballWorkflowState: SessionWorkflowStateSnapshot = {
+      workflowType: 'football_task_intake',
+      stateData: {
+        step: 'await_factors',
+      },
+    };
+    const footballRuntime = createRuntimePack({
+      domainId: 'football',
+      resolverIntent: createSupervisorIntent({
+        domainId: 'football',
+        rawInput: 'Analyze Real Madrid vs Barcelona',
+      }),
+      toolResult: {
+        blocks: [
+          {
+            blockType: 'assistant_text',
+            role: 'assistant',
+            text: 'Choose analysis factors.',
+          } satisfies RuntimeFeedBlockInput,
+        ],
+        sessionPatch: {
+          activeWorkflow: footballWorkflowState,
+        },
+      },
+      workflowState: footballWorkflowState,
+    });
+    const projectOpsRuntime = createRuntimePack({
+      domainId: 'project_ops',
+      resolverIntent: createSupervisorIntent({
+        domainId: 'project_ops',
+        rawInput: 'Review Q2 mobile launch blockers',
+      }),
+      toolResult: {
+        blocks: [
+          {
+            blockType: 'assistant_text',
+            role: 'assistant',
+            text: 'Project ops should stay pending.',
+          } satisfies RuntimeFeedBlockInput,
+        ],
+      },
+    });
+    const gateway = createManagerGateway({
+      sessionStore: store,
+      runtimeDomainRegistry: createRuntimeRegistry({
+        football: footballRuntime.pack,
+        project_ops: projectOpsRuntime.pack,
+      }) as any,
+    });
+
+    const result = await gateway.submitMainSessionTurn({
+      input: 'Analyze Real Madrid vs Barcelona and review Q2 mobile launch blockers',
+      language: 'en',
+      domainId: 'football',
+      title: 'Command Center',
+      sessionKind: 'supervisor',
+    } as any);
+
+    const cancelResult = await gateway.cancelSessionRun(result.projection.session.id);
+    const workflow = cancelResult.projection.compositeWorkflow;
+    const footballItem = workflow?.items.find((item) => item.domainId === 'football');
+    const projectOpsItem = workflow?.items.find((item) => item.domainId === 'project_ops');
+
+    expect(cancelResult.outcome).toBe('cancelled');
+    expect(workflow).toMatchObject({
+      status: 'blocked',
+      activeItemId: null,
+    });
+    expect(footballItem).toMatchObject({
+      status: 'blocked',
+      childSessionId: expect.any(String),
+      childWorkflowType: 'football_task_intake',
+      childWorkflowStateData: {
+        step: 'await_factors',
+      },
+    });
+    expect(projectOpsItem).toMatchObject({
+      status: 'blocked',
+    });
+  });
+
+  it('restores the active child pointer after interruption and resumes correctly after reload', async () => {
+    const store = createMutableSessionStore();
+    const resumeStarted = createDeferred();
+    const footballWorkflowState: SessionWorkflowStateSnapshot = {
+      workflowType: 'football_task_intake',
+      stateData: {
+        step: 'await_factors',
+      },
+    };
+    const footballRuntime = createRuntimePack({
+      domainId: 'football',
+      resolverIntent: createSupervisorIntent({
+        domainId: 'football',
+        rawInput: 'Analyze Real Madrid vs Barcelona',
+      }),
+      toolResult: {
+        blocks: [
+          {
+            blockType: 'assistant_text',
+            role: 'assistant',
+            text: 'Choose analysis factors.',
+          } satisfies RuntimeFeedBlockInput,
+        ],
+        sessionPatch: {
+          activeWorkflow: footballWorkflowState,
+        },
+      },
+      workflowState: footballWorkflowState,
+    });
+    let resumeCount = 0;
+    footballRuntime.workflowResume.mockImplementation(
+      async (input: { signal?: AbortSignal }) => {
+        resumeCount += 1;
+        if (resumeCount === 1) {
+          resumeStarted.resolve();
+          await new Promise((_, reject) => {
+            input.signal?.addEventListener(
+              'abort',
+              () => {
+                reject(createAbortError());
+              },
+              { once: true },
+            );
+          });
+        }
+
+        return {
+          workflowHandled: true,
+          blocks: [
+            {
+              blockType: 'assistant_text',
+              role: 'assistant',
+              text: 'Football analysis configured.',
+            } satisfies RuntimeFeedBlockInput,
+          ],
+          sessionPatch: {
+            activeWorkflow: null,
+          },
+        };
+      },
+    );
+    const projectOpsRuntime = createRuntimePack({
+      domainId: 'project_ops',
+      resolverIntent: createSupervisorIntent({
+        domainId: 'project_ops',
+        rawInput: 'Review Q2 mobile launch blockers',
+      }),
+      toolResult: {
+        blocks: [
+          {
+            blockType: 'assistant_text',
+            role: 'assistant',
+            text: 'Project ops should stay pending.',
+          } satisfies RuntimeFeedBlockInput,
+        ],
+      },
+    });
+    const runtimeRegistry = createRuntimeRegistry({
+      football: footballRuntime.pack,
+      project_ops: projectOpsRuntime.pack,
+    });
+    const gateway = createManagerGateway({
+      sessionStore: store,
+      runtimeDomainRegistry: runtimeRegistry as any,
+    });
+
+    const initial = await gateway.submitMainSessionTurn({
+      input: 'Analyze Real Madrid vs Barcelona and review Q2 mobile launch blockers',
+      language: 'en',
+      domainId: 'football',
+      title: 'Command Center',
+      sessionKind: 'supervisor',
+    } as any);
+
+    const interruptedPromise = gateway.submitMainSessionTurn({
+      input: 'default',
+      language: 'en',
+      domainId: 'football',
+      title: 'Command Center',
+      sessionKind: 'supervisor',
+    } as any);
+    await resumeStarted.promise;
+    await gateway.cancelSessionRun(initial.projection.session.id);
+    await expect(interruptedPromise).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    await waitForCondition(
+      () => store.getRunsSnapshot().filter((run) => run.status === 'cancelled').length >= 2,
+    );
+
+    const restartedGateway = createManagerGateway({
+      sessionStore: store,
+      runtimeDomainRegistry: runtimeRegistry as any,
+    });
+    const reloaded = await restartedGateway.loadSessionProjection(initial.projection.session.id);
+    const reloadedFootballItem = reloaded?.compositeWorkflow?.items.find(
+      (item) => item.domainId === 'football',
+    );
+
+    expect(reloaded?.compositeWorkflow?.activeItemId).toBe(reloadedFootballItem?.itemId);
+    expect(reloadedFootballItem).toMatchObject({
+      status: 'active',
+      childSessionId: expect.any(String),
+      childWorkflowType: 'football_task_intake',
+      childWorkflowStateData: {
+        step: 'await_factors',
+      },
+    });
+
+    const resumed = await restartedGateway.submitMainSessionTurn({
+      input: 'default',
+      language: 'en',
+      domainId: 'football',
+      title: 'Command Center',
+      sessionKind: 'supervisor',
+    } as any);
+    const footballItem = resumed.projection.compositeWorkflow?.items.find(
+      (item) => item.domainId === 'football',
+    );
+    const projectOpsItem = resumed.projection.compositeWorkflow?.items.find(
+      (item) => item.domainId === 'project_ops',
+    );
+
+    expect(footballRuntime.workflowResume).toHaveBeenCalledTimes(2);
+    expect(footballItem).toMatchObject({
+      status: 'completed',
+      summary: 'Football analysis configured.',
+    });
+    expect(projectOpsItem).toMatchObject({
+      status: 'active',
+    });
+  });
+});

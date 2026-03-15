@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DomainEvent } from '@/src/domains/runtime/types';
-import { executeManagerQueryLocalMatches } from '@/src/services/manager/toolRegistry';
+import {
+  executeManagerContinueTaskIntake,
+  executeManagerQueryLocalMatches,
+  managerContinueTaskIntakeDeclaration,
+} from '@/src/services/manager/toolRegistry';
 import {
   listRuntimeManagerBuiltinSkillEntries,
   listRuntimeManagerToolIdsForDomain,
@@ -105,5 +109,29 @@ describe('manager tool registry', () => {
     ]);
     expect(supportsRuntimeManagerTool('football', 'manager_help')).toBe(true);
     expect(supportsRuntimeManagerTool('football', 'manager_unknown')).toBe(false);
+  });
+
+  it('exposes generic continue-task-intake arguments while keeping legacy pendingTask optional', () => {
+    const parameters = managerContinueTaskIntakeDeclaration.parameters as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+
+    expect(parameters.properties?.intakeWorkflow).toBeDefined();
+    expect(parameters.properties?.pendingTask).toBeDefined();
+    expect(parameters.properties?.domainId).toBeDefined();
+    expect(parameters.required).toEqual(['answer', 'language']);
+  });
+
+  it('returns a concrete retry message when continue-task-intake is called without active state', async () => {
+    const result = await executeManagerContinueTaskIntake({
+      domainId: 'football',
+      answer: 'default',
+      language: 'en',
+    });
+
+    expect(result.messageKind).toBe('text');
+    expect(result.agentText).toContain('There is no active task intake to continue');
+    expect(result.intakeWorkflow).toBeNull();
   });
 });

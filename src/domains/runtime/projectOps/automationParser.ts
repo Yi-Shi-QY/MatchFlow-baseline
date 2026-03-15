@@ -14,7 +14,9 @@ import {
 } from '@/src/services/domains/modules/projectOps/localCases';
 
 function hasProjectOpsSignals(input: string): boolean {
-  return /\b(project|task|initiative|handoff|deadline|review|milestone|owner|blocker|ops)\b/i.test(input);
+  return /(project|task|initiative|handoff|deadline|review|milestone|owner|blocker|ops|launch|cutover|support|项目|任务|专项|里程碑|负责人|阻塞|交接|截止|复盘|推进|上线|风险)/i.test(
+    input,
+  );
 }
 
 function resolveTargetSelector(sourceText: string) {
@@ -33,8 +35,11 @@ function resolveTargetSelector(sourceText: string) {
   }
 
   const cleaned = sourceText
-    .replace(/\b(analy[sz]e|analysis|schedule|run|every day|daily|automate|create task)\b/gi, ' ')
-    .replace(/\b(project ops)\b/gi, ' ')
+    .replace(
+      /\b(analy[sz]e|analysis|schedule|run|every day|daily|automate|create task)\b|分析|定时|自动|安排/gi,
+      ' ',
+    )
+    .replace(/\b(project ops)\b|项目运营|项目分析/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 

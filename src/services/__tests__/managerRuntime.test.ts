@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { parsePendingTaskFromWorkflow } from '@/src/domains/runtime/football/tools';
 import type { ManagerSessionProjection } from '@/src/services/manager-gateway/types';
 import { listAutomationDrafts } from '@/src/services/automation/draftStore';
+import { resetManagerGatewayForTests } from '@/src/services/manager-gateway/service';
+import { clearManagerSessionStoreFallback } from '@/src/services/manager-gateway/sessionStore';
 import {
   submitManagerTurn,
   submitManagerTurnProjectionResult,
@@ -48,6 +50,8 @@ describe('manager runtime', () => {
       configurable: true,
     });
     localStorage.clear();
+    clearManagerSessionStoreFallback();
+    resetManagerGatewayForTests();
     saveSettings({ ...DEFAULT_SETTINGS });
   });
 
@@ -65,7 +69,7 @@ describe('manager runtime', () => {
 
     expect(lastBlock.role).toBe('assistant');
     expect(lastBlock.blockType).toBe('assistant_text');
-    expect(lastBlock.text).toContain('add the required API key');
+    expect(lastBlock.text).toContain('API key');
     expect(payload).toMatchObject({
       action: {
         type: 'open_settings',

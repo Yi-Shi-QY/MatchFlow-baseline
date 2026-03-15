@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getActiveAnalysisDomain } from '@/src/services/domains/registry';
+import { resolveRuntimeManagerHelpText } from '@/src/services/manager/runtimeIntentRouter';
 import {
   cancelGatewayBackedManagerRun,
   type GatewayBackedManagerActionResult,
@@ -62,8 +63,16 @@ export function useCommandCenterState(language: 'zh' | 'en') {
   const [projection, setProjection] = React.useState<ManagerSessionProjection | null>(null);
 
   const fallbackFeedItems = React.useMemo(
-    () => createCommandCenterWelcomeFeed(language),
-    [language],
+    () => createCommandCenterWelcomeFeed(language, activeDomain.id),
+    [activeDomain.id, language],
+  );
+  const composerPlaceholder = React.useMemo(
+    () =>
+      resolveRuntimeManagerHelpText({
+        domainId: activeDomain.id,
+        language,
+      }),
+    [activeDomain.id, language],
   );
 
   const feedItems = React.useMemo(() => {
@@ -93,8 +102,9 @@ export function useCommandCenterState(language: 'zh' | 'en') {
       deriveCommandCenterHomeLayout({
         workspaceProjection,
         language,
+        domainId: activeDomain.id,
       }),
-    [language, workspaceProjection],
+    [activeDomain.id, language, workspaceProjection],
   );
 
   const handleCommandTextChange = React.useCallback((value: string) => {
@@ -432,6 +442,7 @@ export function useCommandCenterState(language: 'zh' | 'en') {
     drafts: taskState.drafts,
     executionTickets: taskState.executionTickets,
     homeLayout,
+    composerPlaceholder,
     handleParseCommand,
     handleClarificationAnswer,
     handleActivateDraft,

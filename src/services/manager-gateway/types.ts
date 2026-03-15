@@ -9,9 +9,15 @@ import type {
   RuntimeToolExecutionResult,
   SessionWorkflowStateSnapshot,
 } from '@/src/domains/runtime/types';
+import type {
+  ManagerCompositeItemStatus,
+  ManagerCompositeWorkflowState,
+  ManagerRoutingMode,
+} from '@/src/services/manager-orchestration/types';
 
 export type ManagerLanguage = 'zh' | 'en';
 export type ManagerSessionStatus = 'active' | 'archived';
+export type ManagerSessionKind = 'domain_main' | 'supervisor' | 'domain_child';
 export type ManagerRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type ManagerMessageRole = 'user' | 'assistant' | 'system';
 export type ManagerMessageBlockType =
@@ -28,12 +34,16 @@ export type ManagerMessageBlockType =
 export interface ManagerSessionRecord {
   id: string;
   sessionKey: string;
+  sessionKind?: ManagerSessionKind;
+  parentSessionId?: string | null;
+  ownerDomainId?: string | null;
   title: string;
   status: ManagerSessionStatus;
   domainId: string;
   runtimeDomainVersion?: string | null;
   activeWorkflowType?: string | null;
   activeWorkflowStateData?: string | null;
+  compositeWorkflowStateData?: string | null;
   latestSummaryId?: string | null;
   latestMessageAt: number;
   createdAt: number;
@@ -125,6 +135,7 @@ export interface ManagerSessionProjection {
   activeRun: ManagerRunRecord | null;
   latestRun: ManagerRunRecord | null;
   activeWorkflow: SessionWorkflowStateSnapshot | null;
+  compositeWorkflow?: ManagerCompositeWorkflowState | null;
   contextUsage?: ContextUsageSnapshot;
   contextSnapshot?: ManagerContextSnapshot;
 }
@@ -139,6 +150,7 @@ export interface ManagerGatewayRunCancelResult {
 export interface GetOrCreateMainSessionInput {
   domainId?: string;
   title?: string;
+  sessionKind?: 'domain_main' | 'supervisor';
 }
 
 export interface SubmitMainSessionTurnInput {
@@ -146,7 +158,53 @@ export interface SubmitMainSessionTurnInput {
   language: ManagerLanguage;
   domainId?: string;
   title?: string;
+  sessionKind?: 'domain_main' | 'supervisor';
   allowHeuristicFallback?: boolean;
+}
+
+export type ManagerGatewayCompatibilityPath =
+  | 'legacy_domain_main'
+  | 'supervisor'
+  | 'domain_child';
+
+export interface ManagerGatewayRoutingDiagnostics {
+  mode: ManagerRoutingMode;
+  workItemCount: number;
+  workItemDomains: string[];
+}
+
+export interface ManagerGatewayActiveChildDiagnostics {
+  itemId: string;
+  domainId: string;
+  childSessionId?: string | null;
+  inputSource: 'source_text' | 'user_input';
+}
+
+export type ManagerGatewayChildSyncOutcome = 'workflow_active' | 'item_completed';
+
+export interface ManagerGatewayChildSyncDiagnostics {
+  itemId: string;
+  domainId: string;
+  outcome: ManagerGatewayChildSyncOutcome;
+  itemStatus: ManagerCompositeItemStatus;
+  nextActiveItemId?: string | null;
+  nextActiveDomainId?: string | null;
+}
+
+export interface ManagerGatewayMigrationDiagnostics {
+  compatibilityPath: ManagerGatewayCompatibilityPath;
+  sessionKind: ManagerSessionKind;
+}
+
+export interface ManagerGatewayOrchestrationDiagnostics {
+  migration: ManagerGatewayMigrationDiagnostics;
+  routing?: ManagerGatewayRoutingDiagnostics;
+  activeChild?: ManagerGatewayActiveChildDiagnostics;
+  childSync?: ManagerGatewayChildSyncDiagnostics;
+}
+
+export interface ManagerGatewayDiagnostics extends Record<string, unknown> {
+  orchestration?: ManagerGatewayOrchestrationDiagnostics;
 }
 
 export interface ManagerGatewayTurnResult {
@@ -154,7 +212,7 @@ export interface ManagerGatewayTurnResult {
   plannerMode: 'workflow' | 'deterministic' | 'llm_assisted';
   toolId?: string;
   workflowType?: string;
-  diagnostics?: Record<string, unknown>;
+  diagnostics?: ManagerGatewayDiagnostics;
   feedbackMessage?: string;
   shouldRefreshTaskState: boolean;
   navigationIntent?: {
@@ -183,6 +241,16 @@ export interface ManagerGatewaySessionStore {
     domainId: string;
     runtimeDomainVersion?: string | null;
     title?: string;
+    sessionKind?: 'domain_main' | 'supervisor';
+  }): Promise<ManagerSessionRecord>;
+  createSession?(input: {
+    sessionKey: string;
+    sessionKind: ManagerSessionKind;
+    domainId: string;
+    runtimeDomainVersion?: string | null;
+    title?: string;
+    parentSessionId?: string | null;
+    ownerDomainId?: string | null;
   }): Promise<ManagerSessionRecord>;
   getSessionById(sessionId: string): Promise<ManagerSessionRecord | null>;
   listMessages(sessionId: string): Promise<ManagerMessageRecord[]>;
@@ -254,6 +322,7 @@ export interface ManagerGatewaySessionStore {
     runtimeDomainVersion?: string | null;
     activeWorkflowType?: string | null;
     activeWorkflowStateData?: string | null;
+    compositeWorkflowStateData?: string | null;
     latestSummaryId?: string | null;
     latestMessageAt?: number;
     updatedAt?: number;
@@ -265,6 +334,7 @@ export interface ManagerGatewaySessionStore {
 export interface ManagerRuntimeDomainRegistry {
   resolve(domainId?: string | null): DomainRuntimePack;
   getById?(domainId?: string | null): DomainRuntimePack | null;
+  list?(): DomainRuntimePack[];
 }
 
 export interface ManagerContextAssemblyResult {

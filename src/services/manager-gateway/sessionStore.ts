@@ -7,6 +7,7 @@ import {
   getDB,
 } from '@/src/services/db';
 import { createAutomationId } from '@/src/services/automation/utils';
+import { DEFAULT_DOMAIN_ID } from '@/src/services/domains/builtinModules';
 import type {
   ManagerGatewaySessionStore,
   ManagerMemoryRecord,
@@ -14,6 +15,7 @@ import type {
   ManagerMessageRecord,
   ManagerMessageRole,
   ManagerRunRecord,
+  ManagerSessionKind,
   ManagerSessionRecord,
   ManagerSummaryRecord,
 } from './types';
@@ -86,6 +88,14 @@ function normalizeSessionStatus(input: unknown): ManagerSessionRecord['status'] 
   return input === 'active' || input === 'archived' ? input : null;
 }
 
+function normalizeSessionKind(input: unknown): ManagerSessionKind {
+  return input === 'supervisor' || input === 'domain_child' ? input : 'domain_main';
+}
+
+function normalizeNullableText(input: unknown): string | null {
+  return typeof input === 'string' && input.trim().length > 0 ? input : null;
+}
+
 function normalizeRunStatus(input: unknown): ManagerRunRecord['status'] | null {
   switch (input) {
     case 'queued':
@@ -117,6 +127,9 @@ function normalizeSession(raw: unknown): ManagerSessionRecord | null {
   return {
     id,
     sessionKey,
+    sessionKind: normalizeSessionKind(value.sessionKind),
+    parentSessionId: normalizeNullableText(value.parentSessionId),
+    ownerDomainId: normalizeNullableText(value.ownerDomainId),
     title,
     status,
     domainId,
@@ -126,6 +139,10 @@ function normalizeSession(raw: unknown): ManagerSessionRecord | null {
       typeof value.activeWorkflowType === 'string' ? value.activeWorkflowType : null,
     activeWorkflowStateData:
       typeof value.activeWorkflowStateData === 'string' ? value.activeWorkflowStateData : null,
+    compositeWorkflowStateData:
+      typeof value.compositeWorkflowStateData === 'string'
+        ? value.compositeWorkflowStateData
+        : null,
     latestSummaryId:
       typeof value.latestSummaryId === 'string' ? value.latestSummaryId : null,
     latestMessageAt: normalizeTimestamp(value.latestMessageAt, Date.now()),
@@ -353,21 +370,49 @@ function writeFallbackStore(store: ManagerGatewayStoreSnapshot) {
   localStorage.setItem(MANAGER_GATEWAY_STORE_KEY, JSON.stringify(store));
 }
 
+function normalizeSessionDomainId(input: unknown): string {
+  return typeof input === 'string' && input.trim().length > 0
+    ? input.trim()
+    : DEFAULT_DOMAIN_ID;
+}
+
+function buildMainManagerSessionKey(
+  domainId: string,
+  sessionKind?: 'domain_main' | 'supervisor',
+): string {
+  if (sessionKind === 'supervisor') {
+    return `${MAIN_MANAGER_SESSION_KEY}:supervisor`;
+  }
+
+  const normalizedDomainId = normalizeSessionDomainId(domainId);
+  return normalizedDomainId === DEFAULT_DOMAIN_ID
+    ? MAIN_MANAGER_SESSION_KEY
+    : `${MAIN_MANAGER_SESSION_KEY}:${normalizedDomainId}`;
+}
+
 function createFreshSession(input: {
   domainId: string;
+  sessionKey: string;
+  sessionKind?: ManagerSessionKind;
   runtimeDomainVersion?: string | null;
   title?: string;
+  parentSessionId?: string | null;
+  ownerDomainId?: string | null;
   now: number;
 }): ManagerSessionRecord {
   return {
     id: createAutomationId('manager_session'),
-    sessionKey: MAIN_MANAGER_SESSION_KEY,
+    sessionKey: input.sessionKey,
+    sessionKind: input.sessionKind || 'domain_main',
+    parentSessionId: input.parentSessionId || null,
+    ownerDomainId: input.ownerDomainId || null,
     title: input.title || 'Manager Main Session',
     status: 'active',
     domainId: input.domainId,
     runtimeDomainVersion: input.runtimeDomainVersion || null,
     activeWorkflowType: null,
     activeWorkflowStateData: null,
+    compositeWorkflowStateData: null,
     latestSummaryId: null,
     latestMessageAt: input.now,
     createdAt: input.now,
@@ -379,6 +424,9 @@ function mapSessionRow(row: Record<string, unknown>): ManagerSessionRecord {
   return {
     id: String(row.id || ''),
     sessionKey: String(row.sessionKey || ''),
+    sessionKind: normalizeSessionKind(row.sessionKind),
+    parentSessionId: normalizeNullableText(row.parentSessionId),
+    ownerDomainId: normalizeNullableText(row.ownerDomainId),
     title: String(row.title || ''),
     status: row.status === 'archived' ? 'archived' : 'active',
     domainId: String(row.domainId || ''),
@@ -388,6 +436,8 @@ function mapSessionRow(row: Record<string, unknown>): ManagerSessionRecord {
       typeof row.activeWorkflowType === 'string' ? row.activeWorkflowType : null,
     activeWorkflowStateData:
       typeof row.activeWorkflowStateData === 'string' ? row.activeWorkflowStateData : null,
+    compositeWorkflowStateData:
+      typeof row.compositeWorkflowStateData === 'string' ? row.compositeWorkflowStateData : null,
     latestSummaryId:
       typeof row.latestSummaryId === 'string' ? row.latestSummaryId : null,
     latestMessageAt: normalizeTimestamp(row.latestMessageAt, Date.now()),
@@ -483,18 +533,22 @@ async function insertSessionIntoDb(session: ManagerSessionRecord) {
   await db.run(
     `
       INSERT OR REPLACE INTO ${MANAGER_SESSIONS_TABLE}
-      (id, sessionKey, title, status, domainId, runtimeDomainVersion, activeWorkflowType, activeWorkflowStateData, latestSummaryId, latestMessageAt, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, sessionKey, sessionKind, parentSessionId, ownerDomainId, title, status, domainId, runtimeDomainVersion, activeWorkflowType, activeWorkflowStateData, compositeWorkflowStateData, latestSummaryId, latestMessageAt, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       session.id,
       session.sessionKey,
+      session.sessionKind || 'domain_main',
+      session.parentSessionId,
+      session.ownerDomainId,
       session.title,
       session.status,
       session.domainId,
       session.runtimeDomainVersion,
       session.activeWorkflowType,
       session.activeWorkflowStateData,
+      session.compositeWorkflowStateData,
       session.latestSummaryId,
       session.latestMessageAt,
       session.createdAt,
@@ -629,6 +683,15 @@ async function getNextOrdinalFromDb(sessionId: string): Promise<number> {
 
 export interface ManagerSessionStore extends ManagerGatewaySessionStore {
   getSessionByKey(sessionKey: string): Promise<ManagerSessionRecord | null>;
+  createSession(input: {
+    sessionKey: string;
+    sessionKind: ManagerSessionKind;
+    domainId: string;
+    runtimeDomainVersion?: string | null;
+    title?: string;
+    parentSessionId?: string | null;
+    ownerDomainId?: string | null;
+  }): Promise<ManagerSessionRecord>;
 }
 
 export function createManagerSessionStore(): ManagerSessionStore {
@@ -649,16 +712,49 @@ export function createManagerSessionStore(): ManagerSessionStore {
     },
 
     async getOrCreateMainSession(input): Promise<ManagerSessionRecord> {
-      const existing = await this.getSessionByKey(MAIN_MANAGER_SESSION_KEY);
+      const sessionKey = buildMainManagerSessionKey(input.domainId, input.sessionKind);
+      const existing = await this.getSessionByKey(sessionKey);
       if (existing) {
         return existing;
       }
 
       const now = Date.now();
       const session = createFreshSession({
-        domainId: input.domainId,
+        domainId: normalizeSessionDomainId(input.domainId),
+        sessionKey,
+        sessionKind: input.sessionKind || 'domain_main',
         runtimeDomainVersion: input.runtimeDomainVersion,
         title: input.title,
+        now,
+      });
+
+      const db = await getDB();
+      if (db) {
+        await insertSessionIntoDb(session);
+        return session;
+      }
+
+      const store = readFallbackStore();
+      store.sessions.push(session);
+      writeFallbackStore(store);
+      return session;
+    },
+
+    async createSession(input): Promise<ManagerSessionRecord> {
+      const existing = await this.getSessionByKey(input.sessionKey);
+      if (existing) {
+        return existing;
+      }
+
+      const now = Date.now();
+      const session = createFreshSession({
+        domainId: normalizeSessionDomainId(input.domainId),
+        sessionKey: input.sessionKey,
+        sessionKind: input.sessionKind,
+        runtimeDomainVersion: input.runtimeDomainVersion,
+        title: input.title,
+        parentSessionId: input.parentSessionId,
+        ownerDomainId: input.ownerDomainId,
         now,
       });
 
@@ -1059,6 +1155,10 @@ export function createManagerSessionStore(): ManagerSessionStore {
           typeof patch.activeWorkflowStateData !== 'undefined'
             ? patch.activeWorkflowStateData
             : current.activeWorkflowStateData,
+        compositeWorkflowStateData:
+          typeof patch.compositeWorkflowStateData !== 'undefined'
+            ? patch.compositeWorkflowStateData
+            : current.compositeWorkflowStateData,
         latestSummaryId:
           typeof patch.latestSummaryId !== 'undefined'
             ? patch.latestSummaryId
@@ -1145,9 +1245,11 @@ export function createManagerSessionStore(): ManagerSessionStore {
   };
 }
 
-export function clearManagerSessionStoreFallback() {
+export function clearManagerSessionStoreFallback(options?: {
+  preserveLocalStorage?: boolean;
+}) {
   memoryStoreCache = null;
-  if (typeof localStorage === 'undefined') {
+  if (options?.preserveLocalStorage || typeof localStorage === 'undefined') {
     return;
   }
   localStorage.removeItem(MANAGER_GATEWAY_STORE_KEY);

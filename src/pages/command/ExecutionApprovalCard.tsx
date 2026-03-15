@@ -10,7 +10,7 @@ import {
 import {
   formatManagerSequencePreference,
   formatManagerSourcePreferences,
-} from '@/src/services/managerAgent';
+} from '@/src/services/manager-legacy/analysisProfile';
 import type { ExecutionTicket } from '@/src/services/manager-workspace/executionTicketTypes';
 
 export interface ExecutionApprovalCardModel {

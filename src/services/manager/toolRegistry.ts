@@ -1,15 +1,24 @@
 import { Type, type FunctionDeclaration } from '@google/genai';
 import type { Match } from '@/src/data/matches';
-import { getDefaultRuntimeDomainPack } from '@/src/domains/runtime/registry';
+import type {
+  RuntimeManagerCapability,
+  RuntimeTaskIntakeCapability,
+  RuntimeTaskIntakeValue,
+} from '@/src/domains/runtime/types';
 import { extractMatchesFromRuntimeEvents } from '@/src/domains/runtime/sourceQueries';
 import {
   finalizeAutomationDraftsForComposer,
   summarizeManagerResponse,
   type AutomationCommandComposerMode,
 } from '@/src/services/automation/commandCenter';
-import { parseAutomationCommand } from '@/src/services/automation/parser';
 import type { AutomationDraft } from '@/src/services/automation/types';
-import { createAutomationId } from '@/src/services/automation/utils';
+import { DEFAULT_DOMAIN_ID } from '@/src/services/domains/builtinModules';
+import { buildManagerIntakePrompt } from '@/src/services/manager-intake/promptBuilder';
+import {
+  applyManagerIntakeAnswer,
+  createManagerIntakeWorkflowState,
+} from '@/src/services/manager-intake/runtime';
+import type { ManagerIntakeWorkflowState } from '@/src/services/manager-intake/types';
 import {
   buildManagerClarificationFollowUp,
   summarizeManagerClarification,
@@ -20,16 +29,8 @@ import type { MemoryCandidateDetectionMode } from '@/src/services/memoryCandidat
 import { ensureExecutionTicketForDraft } from '@/src/services/manager-workspace/executionTicketStore';
 import {
   applyAnalysisProfileToDrafts,
-  buildSequenceFollowUp,
-  parseSequencePreference,
-  parseSourcePreferenceIds,
-} from '@/src/services/managerAgent';
+} from '@/src/services/manager-legacy/analysisProfile';
 import { resolveDomainEventFeed } from '@/src/services/domainMatchFeed';
-import {
-  runtimeManagerSupportsTool,
-  resolveRuntimeManagerCapabilityText,
-  resolveRuntimeManagerHelpText,
-} from './runtimeIntentRouter';
 import type {
   ManagerConversationEffect,
   ManagerLanguage,
@@ -51,6 +52,17 @@ interface ManagerMatchQueryResolution {
   };
   scopeLabel: string;
 }
+
+export interface ManagerToolRuntimeSupport {
+  domainId?: string;
+  skillIds?: readonly string[];
+  taskIntake?: RuntimeTaskIntakeCapability | null;
+  plannerHints?: RuntimeManagerCapability['plannerHints'];
+}
+
+export type ManagerToolRuntimeSupportResolver = (
+  domainId: string,
+) => ManagerToolRuntimeSupport | null;
 
 function createAbortError(): Error & { name: string } {
   const error = new Error('Manager tool execution aborted') as Error & { name: string };
@@ -98,21 +110,6 @@ function normalizeInput(input: string): string {
   return input.toLowerCase().trim();
 }
 
-function createPendingTask(
-  sourceText: string,
-  composerMode: AutomationCommandComposerMode,
-  drafts: AutomationDraft[],
-): ManagerPendingTask {
-  return {
-    id: createAutomationId('manager_pending'),
-    sourceText,
-    composerMode,
-    drafts,
-    stage: 'await_factors',
-    createdAt: Date.now(),
-  };
-}
-
 function buildManagerTurnMemoryCandidates(args: {
   text: string;
   domainId: string;
@@ -128,24 +125,36 @@ function buildManagerTurnMemoryCandidates(args: {
 }
 
 function resolveDefaultDomainId(): string {
-  return getDefaultRuntimeDomainPack().manifest.domainId;
+  return DEFAULT_DOMAIN_ID;
 }
 
 function buildUnsupportedToolEffect(args: {
   domainId: string;
   language: ManagerLanguage;
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
 }): ManagerConversationEffect {
-  const agentText = args.domainId
-    ? resolveRuntimeManagerHelpText({
-        domainId: args.domainId,
-        language: args.language,
-      })
-    : buildFallbackHelpText(args.language);
+  return {
+    agentText: resolveManagerHelpText(args),
+    messageKind: 'text',
+    pendingTask: null,
+  };
+}
+
+function buildMissingTaskIntakeEffect(args: {
+  language: ManagerLanguage;
+}): ManagerConversationEffect {
+  const agentText =
+    args.language === 'zh'
+      ? '当前没有可继续的任务收集流程。请先直接告诉我你想分析什么，以及何时执行。'
+      : 'There is no active task intake to continue. Tell me what to analyze and when to run it first.';
 
   return {
     agentText,
     messageKind: 'text',
     pendingTask: null,
+    intakeWorkflow: null,
+    feedbackMessage: agentText,
   };
 }
 
@@ -153,23 +162,141 @@ function ensureSupportedManagerTool(args: {
   domainId: string;
   language: ManagerLanguage;
   toolId: string;
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
 }): ManagerConversationEffect | null {
-  if (
-    runtimeManagerSupportsTool({
-      domainId: args.domainId,
-      toolId: args.toolId,
-    })
-  ) {
+  const support = resolveManagerSupport(args);
+  if (!Array.isArray(support?.skillIds) || support.skillIds.includes(args.toolId)) {
     return null;
   }
 
-  return buildUnsupportedToolEffect(args);
+  return buildUnsupportedToolEffect({
+    domainId: args.domainId,
+    language: args.language,
+    support,
+    resolveSupport: args.resolveSupport,
+  });
 }
 
 function buildFallbackHelpText(language: ManagerLanguage): string {
   return language === 'zh'
     ? '你可以直接问我今天有哪些比赛，或者说“今晚 20:00 分析皇马 vs 巴萨”“每天 09:00 分析英超”。我会先在对话里确认分析因素和顺序，再生成任务卡片。'
     : 'Ask what matches are on today, or tell me which match or league to analyze and when. I will confirm the analysis factors and sequence in chat before creating task cards.';
+}
+
+function resolveManagerSupport(args: {
+  domainId?: string | null;
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
+}): ManagerToolRuntimeSupport | null {
+  const domainId =
+    typeof args.domainId === 'string' && args.domainId.trim().length > 0
+      ? args.domainId.trim()
+      : null;
+
+  if (domainId && typeof args.resolveSupport === 'function') {
+    const resolved = args.resolveSupport(domainId);
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  if (!args.support) {
+    return null;
+  }
+
+  if (!domainId || !args.support.domainId || args.support.domainId === domainId) {
+    return args.support;
+  }
+
+  return null;
+}
+
+function readPlannerHint(
+  support: ManagerToolRuntimeSupport | null,
+  language: ManagerLanguage,
+  key: 'helpText' | 'factorsText' | 'sequenceText',
+): string | null {
+  const text = support?.plannerHints?.[key]?.[language];
+  return typeof text === 'string' && text.trim().length > 0 ? text.trim() : null;
+}
+
+function resolveManagerHelpText(args: {
+  domainId?: string | null;
+  language: ManagerLanguage;
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
+}): string {
+  const support = resolveManagerSupport(args);
+  const taskIntakeText = support?.taskIntake?.describeTopic?.({
+    topic: 'help',
+    language: args.language,
+  });
+  if (typeof taskIntakeText === 'string' && taskIntakeText.trim().length > 0) {
+    return taskIntakeText.trim();
+  }
+
+  return readPlannerHint(support, args.language, 'helpText') || buildFallbackHelpText(args.language);
+}
+
+function resolveManagerCapabilityText(args: {
+  domainId?: string | null;
+  language: ManagerLanguage;
+  topic: 'factors' | 'sequence' | 'help';
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
+}): string {
+  const support = resolveManagerSupport(args);
+  const taskIntakeText = support?.taskIntake?.describeTopic?.({
+    topic: args.topic,
+    language: args.language,
+  });
+  if (typeof taskIntakeText === 'string' && taskIntakeText.trim().length > 0) {
+    return taskIntakeText.trim();
+  }
+
+  const plannerHintKey =
+    args.topic === 'factors'
+      ? 'factorsText'
+      : args.topic === 'sequence'
+        ? 'sequenceText'
+        : 'helpText';
+
+  return (
+    readPlannerHint(support, args.language, plannerHintKey) ||
+    resolveManagerHelpText({
+      domainId: args.domainId,
+      language: args.language,
+      support,
+      resolveSupport: args.resolveSupport,
+    })
+  );
+}
+
+function resolveTaskIntakeCapability(args: {
+  domainId?: string | null;
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
+}): RuntimeTaskIntakeCapability | null {
+  return resolveManagerSupport(args)?.taskIntake || null;
+}
+
+async function finalizeDraftsFromTaskIntake(args: {
+  capability: RuntimeTaskIntakeCapability;
+  drafts: AutomationDraft[];
+  slotValues: Record<string, RuntimeTaskIntakeValue>;
+  language: ManagerLanguage;
+}): Promise<AutomationDraft[]> {
+  if (typeof args.capability.finalizeDrafts !== 'function') {
+    return args.drafts.map((draft) => ({ ...draft }));
+  }
+
+  const finalized = await args.capability.finalizeDrafts({
+    drafts: args.drafts,
+    slotValues: args.slotValues,
+    language: args.language,
+  });
+  return finalized.map((draft) => ({ ...draft }));
 }
 
 export function looksLikeLocalMatchesQuery(input: string): boolean {
@@ -364,6 +491,8 @@ export async function executeManagerQueryLocalMatches(args: {
   sourceText: string;
   domainId: string;
   language: ManagerLanguage;
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
   signal?: AbortSignal;
 }): Promise<ManagerConversationEffect> {
   throwIfAborted(args.signal);
@@ -371,6 +500,8 @@ export async function executeManagerQueryLocalMatches(args: {
     domainId: args.domainId,
     language: args.language,
     toolId: managerQueryLocalMatchesDeclaration.name,
+    support: args.support,
+    resolveSupport: args.resolveSupport,
   });
   if (unsupported) {
     return unsupported;
@@ -425,6 +556,8 @@ export async function executeManagerDescribeCapability(args: {
   topic: 'factors' | 'sequence' | 'help';
   domainId: string;
   language: ManagerLanguage;
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
   signal?: AbortSignal;
 }): Promise<ManagerConversationEffect> {
   throwIfAborted(args.signal);
@@ -432,15 +565,19 @@ export async function executeManagerDescribeCapability(args: {
     domainId: args.domainId,
     language: args.language,
     toolId: managerDescribeCapabilityDeclaration.name,
+    support: args.support,
+    resolveSupport: args.resolveSupport,
   });
   if (unsupported) {
     return unsupported;
   }
 
-  const agentText = resolveRuntimeManagerCapabilityText({
+  const agentText = resolveManagerCapabilityText({
     domainId: args.domainId,
     language: args.language,
     topic: args.topic,
+    support: args.support,
+    resolveSupport: args.resolveSupport,
   });
 
   return {
@@ -488,6 +625,8 @@ export async function executeManagerPrepareTaskIntake(args: {
   defaultDomainId: string;
   language: ManagerLanguage;
   nowIso?: string;
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
   signal?: AbortSignal;
 }): Promise<ManagerConversationEffect> {
   throwIfAborted(args.signal);
@@ -495,6 +634,8 @@ export async function executeManagerPrepareTaskIntake(args: {
     domainId: args.defaultDomainId,
     language: args.language,
     toolId: managerPrepareTaskIntakeDeclaration.name,
+    support: args.support,
+    resolveSupport: args.resolveSupport,
   });
   if (unsupported) {
     return unsupported;
@@ -504,6 +645,7 @@ export async function executeManagerPrepareTaskIntake(args: {
     typeof args.nowIso === 'string' && args.nowIso.trim().length > 0
       ? new Date(args.nowIso)
       : new Date();
+  const { parseAutomationCommand } = await import('@/src/services/automation/parser');
   const drafts = finalizeAutomationDraftsForComposer(
     args.sourceText,
     parseAutomationCommand(args.sourceText, {
@@ -515,31 +657,43 @@ export async function executeManagerPrepareTaskIntake(args: {
       now,
     },
   );
-  const pendingTask = createPendingTask(args.sourceText, args.composerMode, drafts);
-  const clarification = summarizeManagerClarification({
-    pendingTask,
-    answer: args.sourceText,
-  });
-  const memoryCandidateMode: MemoryCandidateDetectionMode =
-    clarification.sequencePreference && clarification.selectedSourceIds.length > 0
-      ? 'analysis_profile'
-      : clarification.sequencePreference
-        ? 'analysis_sequence'
-        : clarification.selectedSourceIds.length > 0
-          ? 'analysis_factors'
-          : 'freeform';
+  const domainId = drafts[0]?.domainId || args.defaultDomainId || resolveDefaultDomainId();
   const memoryCandidates = buildManagerTurnMemoryCandidates({
     text: args.sourceText,
-    domainId: drafts[0]?.domainId || args.defaultDomainId,
-    detectionMode: memoryCandidateMode,
+    domainId,
+    detectionMode: 'freeform',
+  });
+  const capability = resolveTaskIntakeCapability({
+    domainId,
+    support: args.support,
+    resolveSupport: args.resolveSupport,
+  });
+  if (!capability) {
+    const effect = await buildDraftBundleEffect(drafts, args.composerMode, args.language);
+    return {
+      ...effect,
+      memoryCandidates,
+    };
+  }
+
+  const intakeWorkflow = await createManagerIntakeWorkflowState({
+    capability,
+    domainId,
+    sourceText: args.sourceText,
+    composerMode: args.composerMode,
+    drafts,
+    language: args.language,
+    signal: args.signal,
   });
 
-  if (clarification.isComplete && clarification.sequencePreference) {
+  if (intakeWorkflow.completed) {
     throwIfAborted(args.signal);
     const effect = await buildDraftBundleEffect(
-      applyAnalysisProfileToDrafts(drafts, {
-        selectedSourceIds: clarification.selectedSourceIds,
-        sequencePreference: clarification.sequencePreference,
+      await finalizeDraftsFromTaskIntake({
+        capability,
+        drafts: intakeWorkflow.drafts,
+        slotValues: intakeWorkflow.slotValues,
+        language: args.language,
       }),
       args.composerMode,
       args.language,
@@ -550,21 +704,17 @@ export async function executeManagerPrepareTaskIntake(args: {
     };
   }
 
-  pendingTask.selectedSourceIds =
-    clarification.selectedSourceIds.length > 0 ? clarification.selectedSourceIds : undefined;
-  pendingTask.sequencePreference = clarification.sequencePreference || undefined;
-  pendingTask.stage = clarification.nextStage || 'await_factors';
-  pendingTask.clarificationSummary = toManagerClarificationSnapshot(clarification);
-  const followUp = buildManagerClarificationFollowUp({
+  const prompt = buildManagerIntakePrompt({
+    capability,
+    state: intakeWorkflow,
     language: args.language,
-    summary: clarification,
   });
 
   return {
-    agentText: followUp,
+    agentText: prompt.body,
     messageKind: 'text',
-    pendingTask,
-    feedbackMessage: followUp,
+    feedbackMessage: prompt.body,
+    intakeWorkflow,
     memoryCandidates,
   };
 }
@@ -572,42 +722,133 @@ export async function executeManagerPrepareTaskIntake(args: {
 export const managerContinueTaskIntakeDeclaration: FunctionDeclaration = {
   name: 'manager_continue_task_intake',
   description:
-    'Continue a pending task-intake turn by applying the user answer to analysis factors or sequence preference.',
+    'Continue an active task-intake workflow by applying the latest user answer to the current clarification step. Prefer `intakeWorkflow`; use `pendingTask` only as a legacy compatibility fallback.',
   parameters: {
     type: Type.OBJECT,
     properties: {
+      intakeWorkflow: {
+        type: Type.OBJECT,
+        description: 'The active generic task-intake workflow state stored by the manager runtime.',
+      },
       pendingTask: {
         type: Type.OBJECT,
-        description: 'The current pending task state stored by the manager runtime.',
+        description:
+          'Legacy pending-task state for older manager workflows. Use only when the generic intakeWorkflow state is unavailable.',
+      },
+      domainId: {
+        type: Type.STRING,
+        description:
+          'Optional active domain id. Helps resolve domain-specific capability hints when only domain context is available.',
       },
       answer: {
         type: Type.STRING,
-        description: 'The latest user answer for factors or sequence preference.',
+        description: 'The latest user answer for the active clarification step.',
       },
       language: {
         type: Type.STRING,
         description: 'Reply language. Use "zh" for Chinese and "en" for English.',
       },
     },
-    required: ['pendingTask', 'answer', 'language'],
+    required: ['answer', 'language'],
   },
 };
 
 export async function executeManagerContinueTaskIntake(args: {
-  pendingTask: ManagerPendingTask;
+  domainId?: string;
+  pendingTask?: ManagerPendingTask;
+  intakeWorkflow?: ManagerIntakeWorkflowState;
   answer: string;
   language: ManagerLanguage;
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
   signal?: AbortSignal;
 }): Promise<ManagerConversationEffect> {
   throwIfAborted(args.signal);
-  const domainId = args.pendingTask.drafts[0]?.domainId || resolveDefaultDomainId();
+  const domainId =
+    args.intakeWorkflow?.domainId ||
+    args.pendingTask?.drafts[0]?.domainId ||
+    args.domainId ||
+    resolveDefaultDomainId();
   const unsupported = ensureSupportedManagerTool({
     domainId,
     language: args.language,
     toolId: managerContinueTaskIntakeDeclaration.name,
+    support: args.support,
+    resolveSupport: args.resolveSupport,
   });
   if (unsupported) {
     return unsupported;
+  }
+
+  const capability = resolveTaskIntakeCapability({
+    domainId,
+    support: args.support,
+    resolveSupport: args.resolveSupport,
+  });
+  if (args.intakeWorkflow) {
+    if (!capability) {
+      return buildUnsupportedToolEffect({
+        domainId,
+        language: args.language,
+        support: args.support,
+        resolveSupport: args.resolveSupport,
+      });
+    }
+
+    const memoryCandidates = buildManagerTurnMemoryCandidates({
+      text: args.answer,
+      domainId,
+      detectionMode: 'freeform',
+    });
+    const nextWorkflow = await applyManagerIntakeAnswer({
+      capability,
+      state: args.intakeWorkflow,
+      answer: args.answer,
+      language: args.language,
+      signal: args.signal,
+    });
+
+    if (!nextWorkflow.completed) {
+      const isRetry =
+        nextWorkflow.activeStepId === args.intakeWorkflow.activeStepId &&
+        nextWorkflow.missingSlotIds.length === args.intakeWorkflow.missingSlotIds.length &&
+        nextWorkflow.recognizedSlotIds.length === args.intakeWorkflow.recognizedSlotIds.length;
+      const prompt = buildManagerIntakePrompt({
+        capability,
+        state: nextWorkflow,
+        language: args.language,
+        isRetry,
+      });
+      return {
+        agentText: prompt.body,
+        messageKind: 'text',
+        feedbackMessage: prompt.body,
+        intakeWorkflow: nextWorkflow,
+        memoryCandidates,
+      };
+    }
+
+    throwIfAborted(args.signal);
+    const effect = await buildDraftBundleEffect(
+      await finalizeDraftsFromTaskIntake({
+        capability,
+        drafts: nextWorkflow.drafts,
+        slotValues: nextWorkflow.slotValues,
+        language: args.language,
+      }),
+      nextWorkflow.composerMode,
+      args.language,
+    );
+    return {
+      ...effect,
+      memoryCandidates,
+    };
+  }
+
+  if (!args.pendingTask) {
+    return buildMissingTaskIntakeEffect({
+      language: args.language,
+    });
   }
 
   const clarification = summarizeManagerClarification({
@@ -676,6 +917,9 @@ export async function executeManagerContinueTaskIntake(args: {
     memoryCandidates,
   };
 
+  /*
+   * Legacy football-only fallback below has been retired from the live path.
+   * It stays commented temporarily as a reference until the remaining compat layer is removed.
   if (args.pendingTask.stage === 'await_factors') {
     const selectedSourceIds = parseSourcePreferenceIds(args.answer);
     if (!selectedSourceIds) {
@@ -732,6 +976,7 @@ export async function executeManagerContinueTaskIntake(args: {
     args.pendingTask.composerMode,
     args.language,
   );
+  */
 }
 
 export const managerHelpDeclaration: FunctionDeclaration = {
@@ -757,6 +1002,8 @@ export const managerHelpDeclaration: FunctionDeclaration = {
 export async function executeManagerHelp(args: {
   domainId: string;
   language: ManagerLanguage;
+  support?: ManagerToolRuntimeSupport | null;
+  resolveSupport?: ManagerToolRuntimeSupportResolver | null;
   signal?: AbortSignal;
 }): Promise<ManagerConversationEffect> {
   throwIfAborted(args.signal);
@@ -764,15 +1011,19 @@ export async function executeManagerHelp(args: {
     domainId: args.domainId,
     language: args.language,
     toolId: managerHelpDeclaration.name,
+    support: args.support,
+    resolveSupport: args.resolveSupport,
   });
   if (unsupported) {
     return unsupported;
   }
 
   return {
-    agentText: resolveRuntimeManagerHelpText({
+    agentText: resolveManagerHelpText({
       domainId: args.domainId,
       language: args.language,
+      support: args.support,
+      resolveSupport: args.resolveSupport,
     }),
     messageKind: 'text',
     pendingTask: null,

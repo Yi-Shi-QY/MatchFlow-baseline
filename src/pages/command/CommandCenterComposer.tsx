@@ -6,6 +6,7 @@ import { translateText } from '@/src/i18n/translate';
 interface CommandCenterComposerProps {
   language: 'zh' | 'en';
   commandText: string;
+  placeholder?: string;
   isSubmitting: boolean;
   onCommandTextChange: (value: string) => void;
   onSubmit: () => void;
@@ -20,6 +21,7 @@ const COMPOSER_MAX_HEIGHT_PX = 132;
 export function CommandCenterComposer({
   language,
   commandText,
+  placeholder,
   isSubmitting,
   onCommandTextChange,
   onSubmit,
@@ -30,12 +32,15 @@ export function CommandCenterComposer({
   const canSubmit = normalizedText.length > 0 && !isSubmitting && !isLaunchAnimating;
   const isBusy = isSubmitting || isLaunchAnimating;
   const copy = {
-    placeholder: tr(
-      language,
-      'command_center.composer.placeholder',
-      '直接问今天有哪些比赛，或者说明要分析哪场比赛以及什么时间分析。',
-      'Ask what matches are on today, or tell me which match to analyze and when.',
-    ),
+    placeholder:
+      typeof placeholder === 'string' && placeholder.trim().length > 0
+        ? placeholder.trim()
+        : tr(
+            language,
+            'command_center.composer.placeholder',
+            '直接说出你要分析什么、何时执行。',
+            'Describe what you want to analyze and when to run it.',
+          ),
     send: tr(language, 'command_center.composer.send', '发送', 'Send'),
     sending: tr(language, 'command_center.composer.sending', '发送中', 'Sending'),
   };

@@ -122,6 +122,8 @@ describe('automation command center', () => {
 
     expect(result.status).toBe('ready');
     expect(result.navigation?.route).toBe('/subject/football/match-1');
+    expect(result.navigation?.state.subjectType).toBe('match');
+    expect(result.navigation?.state.openAnalysisWorkbench).toBe(true);
     expect(result.navigation?.state.autoStartAnalysis).toBe(true);
   });
 

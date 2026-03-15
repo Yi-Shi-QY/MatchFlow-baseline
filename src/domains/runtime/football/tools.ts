@@ -1,4 +1,15 @@
-import type { ManagerPendingTask } from '@/src/services/manager/types';
+import {
+  createManagerIntakeWorkflowSnapshot,
+  parseManagerIntakeWorkflowSnapshot,
+} from '@/src/services/manager-intake/workflowProjection';
+import type {
+  ManagerIntakeWorkflowState,
+} from '@/src/services/manager-intake/types';
+import type {
+  ManagerPendingTask,
+  ManagerSequenceStepId,
+  ManagerSourcePreferenceId,
+} from '@/src/services/manager/types';
 import {
   executeManagerDescribeCapability,
   executeManagerHelp,
@@ -12,8 +23,74 @@ import type {
   SessionWorkflowStateSnapshot,
   ToolExecutionInput,
 } from '../types';
+import { footballTaskIntakeCapability } from './taskIntake';
+import { FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE } from './workflowType';
 
-export const FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE = 'football_task_intake';
+const FOOTBALL_MANAGER_SUPPORT = {
+  domainId: 'football',
+  taskIntake: footballTaskIntakeCapability,
+} as const;
+
+function getSelectedSourceIds(
+  workflow: ManagerIntakeWorkflowState,
+): ManagerSourcePreferenceId[] {
+  const value = workflow.slotValues.analysis_dimensions;
+  return Array.isArray(value)
+    ? value.filter(
+        (entry): entry is ManagerSourcePreferenceId =>
+          entry === 'fundamental' || entry === 'market' || entry === 'custom',
+      )
+    : [];
+}
+
+function getSequencePreference(
+  workflow: ManagerIntakeWorkflowState,
+): ManagerSequenceStepId[] {
+  const value = workflow.slotValues.analysis_sequence;
+  return Array.isArray(value)
+    ? value.filter(
+        (entry): entry is ManagerSequenceStepId =>
+          entry === 'fundamental' ||
+          entry === 'market' ||
+          entry === 'custom' ||
+          entry === 'prediction',
+      )
+    : [];
+}
+
+function projectIntakeWorkflowToPendingTask(
+  workflow: ManagerIntakeWorkflowState,
+): ManagerPendingTask | null {
+  if (workflow.completed) {
+    return null;
+  }
+
+  const selectedSourceIds = getSelectedSourceIds(workflow);
+  const sequencePreference = getSequencePreference(workflow);
+  const missingFields: Array<'factors' | 'sequence'> = [];
+  if (workflow.missingSlotIds.includes('analysis_dimensions')) {
+    missingFields.push('factors');
+  }
+  if (workflow.missingSlotIds.includes('analysis_sequence')) {
+    missingFields.push('sequence');
+  }
+
+  return {
+    id: workflow.workflowId,
+    sourceText: workflow.sourceText,
+    composerMode: workflow.composerMode,
+    drafts: workflow.drafts.map((draft) => ({ ...draft })),
+    stage: workflow.activeStepId === 'analysis_sequence' ? 'await_sequence' : 'await_factors',
+    selectedSourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : undefined,
+    sequencePreference: sequencePreference.length > 0 ? sequencePreference : undefined,
+    clarificationSummary: {
+      recognizedSourceIds: [...selectedSourceIds],
+      recognizedSequence: sequencePreference.length > 0 ? [...sequencePreference] : null,
+      missingFields,
+    },
+    createdAt: workflow.createdAt,
+  };
+}
 
 function isManagerPendingTask(input: unknown): input is ManagerPendingTask {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -41,6 +118,21 @@ function createWorkflowStateFromPendingTask(
     stateData: JSON.parse(JSON.stringify(pendingTask)) as Record<string, unknown>,
     updatedAt: Date.now(),
   };
+}
+
+function createWorkflowStateFromEffect(effect: {
+  pendingTask?: ManagerPendingTask | null;
+  intakeWorkflow?: ManagerIntakeWorkflowState | null;
+}): SessionWorkflowStateSnapshot | null | undefined {
+  if (effect.intakeWorkflow) {
+    return createManagerIntakeWorkflowSnapshot(effect.intakeWorkflow);
+  }
+
+  if (typeof effect.pendingTask === 'undefined') {
+    return undefined;
+  }
+
+  return createWorkflowStateFromPendingTask(effect.pendingTask);
 }
 
 function mapEffectToBlocks(effect: {
@@ -84,6 +176,7 @@ export function mapLegacyManagerEffectToRuntimeToolResult(effect: {
   action?: unknown;
   draftsToSave?: Array<{ id: string }>;
   pendingTask?: ManagerPendingTask | null;
+  intakeWorkflow?: ManagerIntakeWorkflowState | null;
   shouldRefreshTaskState?: boolean;
   feedbackMessage?: string;
   navigation?: {
@@ -104,10 +197,10 @@ export function mapLegacyManagerEffectToRuntimeToolResult(effect: {
       action: effect.action,
     }),
     sessionPatch:
-      typeof effect.pendingTask === 'undefined'
+      typeof createWorkflowStateFromEffect(effect) === 'undefined'
         ? undefined
         : {
-            activeWorkflow: createWorkflowStateFromPendingTask(effect.pendingTask),
+            activeWorkflow: createWorkflowStateFromEffect(effect) || null,
           },
     navigationIntent: effect.navigation,
     diagnostics: {
@@ -133,6 +226,15 @@ export function parsePendingTaskFromWorkflow(
   if (workflow.workflowType !== FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE) {
     return null;
   }
+
+  const intakeWorkflow = parseManagerIntakeWorkflowSnapshot(
+    workflow,
+    FOOTBALL_TASK_INTAKE_WORKFLOW_TYPE,
+  );
+  if (intakeWorkflow) {
+    return projectIntakeWorkflowToPendingTask(intakeWorkflow);
+  }
+
   return isManagerPendingTask(workflow.stateData) ? workflow.stateData : null;
 }
 
@@ -148,6 +250,7 @@ export const footballRuntimeTools: DomainToolDefinition[] = [
         sourceText: input.input,
         domainId: input.session.domainId,
         language: resolveLanguage(input),
+        support: FOOTBALL_MANAGER_SUPPORT,
         signal: input.signal,
       });
       return mapLegacyManagerEffectToRuntimeToolResult(effect);
@@ -166,6 +269,7 @@ export const footballRuntimeTools: DomainToolDefinition[] = [
         topic,
         domainId: input.session.domainId,
         language: resolveLanguage(input),
+        support: FOOTBALL_MANAGER_SUPPORT,
         signal: input.signal,
       });
       return mapLegacyManagerEffectToRuntimeToolResult(effect);
@@ -184,6 +288,7 @@ export const footballRuntimeTools: DomainToolDefinition[] = [
         composerMode: 'smart',
         defaultDomainId: input.session.domainId,
         language: resolveLanguage(input),
+        support: FOOTBALL_MANAGER_SUPPORT,
         signal: input.signal,
       });
       return mapLegacyManagerEffectToRuntimeToolResult(effect);
@@ -199,6 +304,7 @@ export const footballRuntimeTools: DomainToolDefinition[] = [
       const effect = await executeManagerHelp({
         domainId: input.session.domainId,
         language: resolveLanguage(input),
+        support: FOOTBALL_MANAGER_SUPPORT,
         signal: input.signal,
       });
       return mapLegacyManagerEffectToRuntimeToolResult(effect);

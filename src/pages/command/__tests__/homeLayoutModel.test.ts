@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE } from '@/src/domains/runtime/projectOps/workflowType';
 import type { AutomationDraft, AutomationJob, AutomationRun } from '@/src/services/automation';
 import type { ManagerSessionProjection, ManagerRunRecord } from '@/src/services/manager-gateway/types';
 import { buildManagerWorkspaceProjection } from '@/src/services/manager-workspace/projection';
@@ -172,12 +173,14 @@ function createProjection(overrides: Partial<ManagerSessionProjection> = {}): Ma
     session: {
       id: 'session_main',
       sessionKey: 'manager:main',
+      sessionKind: 'domain_main',
       title: 'Manager',
       status: 'active',
       domainId: 'football',
       runtimeDomainVersion: '1.0.0',
       activeWorkflowType: null,
       activeWorkflowStateData: null,
+      compositeWorkflowStateData: null,
       latestSummaryId: null,
       latestMessageAt: 1710000005000,
       createdAt: 1710000000000,
@@ -188,6 +191,7 @@ function createProjection(overrides: Partial<ManagerSessionProjection> = {}): Ma
     activeRun: null,
     latestRun: null,
     activeWorkflow: null,
+    compositeWorkflow: null,
     feed: [
       {
         id: 'msg_user_1',
@@ -287,7 +291,7 @@ describe('command center home layout model', () => {
 
     const layout = deriveCommandCenterHomeLayout({
       workspaceProjection,
-      language: 'zh',
+      language: 'en',
     });
 
     expect(layout.mode).toBe('continue_first');
@@ -343,5 +347,210 @@ describe('command center home layout model', () => {
     });
     expect(layout.suggestionChips).toHaveLength(3);
     expect(layout.suggestionChips[0].autoSubmit).toBe(false);
+  });
+
+  it('surfaces active workflow clarification before falling back to the last summary strip', () => {
+    const layout = deriveCommandCenterHomeLayout({
+      workspaceProjection: createWorkspaceProjection({
+        projection: {
+          session: {
+            ...createProjection().session,
+            domainId: 'project_ops',
+          },
+          runtimeDomainId: 'project_ops',
+          latestRun: createRun({
+            status: 'completed',
+            finishedAt: 1710000005000,
+          }),
+          activeWorkflow: {
+            workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+            stateData: {
+              schemaVersion: 'manager_intake_v1',
+              workflowId: 'project_ops_intake_1',
+              workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+              domainId: 'project_ops',
+              sourceText: 'Analyze Q2 Mobile Launch now',
+              composerMode: 'smart',
+              drafts: [],
+              slotValues: {
+                target_subject: {
+                  subjectId: 'project_mobile_launch',
+                  label: 'Q2 Mobile Launch',
+                  subjectType: 'project',
+                },
+              },
+              recognizedSlotIds: ['target_subject'],
+              missingSlotIds: ['focus_dimensions'],
+              activeStepId: 'focus_dimensions',
+              completed: false,
+              createdAt: 1710000004500,
+              updatedAt: 1710000004500,
+            },
+            updatedAt: 1710000004500,
+          },
+        },
+      }),
+      language: 'en',
+      domainId: 'project_ops',
+    });
+
+    expect(layout.mode).toBe('continue_first');
+    expect(layout.lastSummaryCard).toBeNull();
+    expect(layout.statusTone).toBe('warning');
+    expect(layout.pendingCount).toBe(1);
+    expect(layout.continueCards).toHaveLength(1);
+    expect(layout.continueCards[0]).toMatchObject({
+      id: 'workflow:project_ops_intake_1',
+      kind: 'clarification',
+      title: 'Choose focus areas',
+      primaryActionLabel: 'Continue in chat',
+      action: {
+        type: 'focus_conversation',
+      },
+    });
+    expect(layout.continueCards[0].description).toContain('Q2 Mobile Launch');
+    expect(layout.continueCards[0].title).not.toContain('vs');
+  });
+
+  it('uses the active supervisor composite item as the top-strip source of truth and exposes domain chips on continue cards', () => {
+    const layout = deriveCommandCenterHomeLayout({
+      workspaceProjection: createWorkspaceProjection({
+        projection: {
+          session: {
+            ...createProjection().session,
+            sessionKey: 'manager:main:supervisor',
+            sessionKind: 'supervisor',
+          },
+          latestRun: createRun({
+            status: 'completed',
+            finishedAt: 1710000005000,
+          }),
+          feed: [
+            {
+              id: 'msg_completed_1',
+              role: 'assistant',
+              blockType: 'assistant_text',
+              text: 'Football analysis configured.',
+              payloadData: null,
+              createdAt: 1710000003000,
+            },
+          ],
+          compositeWorkflow: {
+            schemaVersion: 'manager_composite_v1',
+            workflowId: 'manager_composite_1',
+            workflowType: 'manager_composite',
+            sourceText: 'Analyze football and project ops',
+            status: 'active',
+            activeItemId: 'item_project_ops',
+            createdAt: 1710000000000,
+            updatedAt: 1710000005000,
+            items: [
+              {
+                itemId: 'item_football',
+                title: 'Real Madrid vs Barcelona',
+                domainId: 'football',
+                sourceText: 'Analyze Real Madrid vs Barcelona',
+                status: 'completed',
+                summary: 'Football analysis configured.',
+              },
+              {
+                itemId: 'item_project_ops',
+                title: 'Q2 mobile launch blockers',
+                domainId: 'project_ops',
+                sourceText: 'Review Q2 mobile launch blockers',
+                status: 'active',
+                childSessionId: 'child_session_2',
+                childWorkflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+                childWorkflowStateData: {
+                  schemaVersion: 'manager_intake_v1',
+                  workflowId: 'project_ops_intake_1',
+                  workflowType: PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE,
+                  domainId: 'project_ops',
+                  sourceText: 'Review Q2 mobile launch blockers',
+                  composerMode: 'smart',
+                  drafts: [],
+                  slotValues: {},
+                  recognizedSlotIds: [],
+                  missingSlotIds: ['focus_dimensions'],
+                  activeStepId: 'focus_dimensions',
+                  completed: false,
+                  createdAt: 1710000004000,
+                  updatedAt: 1710000004000,
+                },
+                pendingLabel: 'Choose focus areas',
+                summary: 'Project ops intake is waiting for focus areas.',
+              },
+            ],
+          },
+        },
+      }),
+      language: 'en',
+      domainId: 'football',
+    });
+
+    expect(layout.mode).toBe('continue_first');
+    expect(layout.statusLabel).toBe('Q2 mobile launch blockers');
+    expect(layout.statusTone).toBe('warning');
+    expect(layout.lastSummaryCard).toBeNull();
+    expect(layout.continueCards[0]).toMatchObject({
+      id: 'composite:item_project_ops',
+      kind: 'clarification',
+      title: 'Q2 mobile launch blockers',
+      description: 'Project ops intake is waiting for focus areas.',
+      primaryActionLabel: 'Continue in chat',
+      chips: ['Project Ops', 'Choose focus areas'],
+    });
+  });
+
+  it('uses the latest composite child summary for the summary strip after a supervisor flow is complete', () => {
+    const layout = deriveCommandCenterHomeLayout({
+      workspaceProjection: createWorkspaceProjection({
+        projection: {
+          session: {
+            ...createProjection().session,
+            sessionKey: 'manager:main:supervisor',
+            sessionKind: 'supervisor',
+          },
+          feed: [],
+          compositeWorkflow: {
+            schemaVersion: 'manager_composite_v1',
+            workflowId: 'manager_composite_done',
+            workflowType: 'manager_composite',
+            sourceText: 'Analyze football and project ops',
+            status: 'completed',
+            activeItemId: null,
+            createdAt: 1710000000000,
+            updatedAt: 1710000005000,
+            items: [
+              {
+                itemId: 'item_football',
+                title: 'Real Madrid vs Barcelona',
+                domainId: 'football',
+                sourceText: 'Analyze Real Madrid vs Barcelona',
+                status: 'completed',
+                summary: 'Football analysis configured.',
+              },
+              {
+                itemId: 'item_project_ops',
+                title: 'Q2 mobile launch blockers',
+                domainId: 'project_ops',
+                sourceText: 'Review Q2 mobile launch blockers',
+                status: 'completed',
+                summary: 'Project ops focus areas confirmed.',
+              },
+            ],
+          },
+        },
+      }),
+      language: 'en',
+      domainId: 'football',
+    });
+
+    expect(layout.mode).toBe('new_input_first');
+    expect(layout.continueCards).toEqual([]);
+    expect(layout.lastSummaryCard).toMatchObject({
+      title: 'Last completed flow',
+      summary: 'Project ops focus areas confirmed.',
+    });
   });
 });

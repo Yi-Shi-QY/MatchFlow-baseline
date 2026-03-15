@@ -1,4 +1,9 @@
 import {
+  createManagerIntakeWorkflowSnapshot,
+  parseManagerIntakeWorkflowSnapshot,
+} from '@/src/services/manager-intake/workflowProjection';
+import type { ManagerIntakeWorkflowState } from '@/src/services/manager-intake/types';
+import {
   executeManagerDescribeCapability,
   executeManagerHelp,
   executeManagerPrepareTaskIntake,
@@ -11,8 +16,13 @@ import type {
   SessionWorkflowStateSnapshot,
   ToolExecutionInput,
 } from '../types';
+import { projectOpsTaskIntakeCapability } from './taskIntake';
+import { PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE } from './workflowType';
 
-export const PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE = 'project_ops_task_intake';
+const PROJECT_OPS_MANAGER_SUPPORT = {
+  domainId: 'project_ops',
+  taskIntake: projectOpsTaskIntakeCapability,
+} as const;
 
 function isManagerPendingTask(input: unknown): input is ManagerPendingTask {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -40,6 +50,21 @@ function createWorkflowStateFromPendingTask(
     stateData: JSON.parse(JSON.stringify(pendingTask)) as Record<string, unknown>,
     updatedAt: Date.now(),
   };
+}
+
+function createWorkflowStateFromEffect(effect: {
+  pendingTask?: ManagerPendingTask | null;
+  intakeWorkflow?: ManagerIntakeWorkflowState | null;
+}): SessionWorkflowStateSnapshot | null | undefined {
+  if (effect.intakeWorkflow) {
+    return createManagerIntakeWorkflowSnapshot(effect.intakeWorkflow);
+  }
+
+  if (typeof effect.pendingTask === 'undefined') {
+    return undefined;
+  }
+
+  return createWorkflowStateFromPendingTask(effect.pendingTask);
 }
 
 function mapEffectToBlocks(effect: {
@@ -83,6 +108,7 @@ export function mapLegacyManagerEffectToProjectOpsRuntimeToolResult(effect: {
   action?: unknown;
   draftsToSave?: Array<{ id: string }>;
   pendingTask?: ManagerPendingTask | null;
+  intakeWorkflow?: ManagerIntakeWorkflowState | null;
   shouldRefreshTaskState?: boolean;
   feedbackMessage?: string;
   navigation?: {
@@ -103,10 +129,10 @@ export function mapLegacyManagerEffectToProjectOpsRuntimeToolResult(effect: {
       action: effect.action,
     }),
     sessionPatch:
-      typeof effect.pendingTask === 'undefined'
+      typeof createWorkflowStateFromEffect(effect) === 'undefined'
         ? undefined
         : {
-            activeWorkflow: createWorkflowStateFromPendingTask(effect.pendingTask),
+            activeWorkflow: createWorkflowStateFromEffect(effect) || null,
           },
     navigationIntent: effect.navigation,
     diagnostics: {
@@ -129,6 +155,11 @@ export function parsePendingTaskFromWorkflow(
   if (!workflow || workflow.workflowType !== PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE) {
     return null;
   }
+
+  if (parseManagerIntakeWorkflowSnapshot(workflow, PROJECT_OPS_TASK_INTAKE_WORKFLOW_TYPE)) {
+    return null;
+  }
+
   return isManagerPendingTask(workflow.stateData) ? workflow.stateData : null;
 }
 
@@ -146,6 +177,7 @@ export const projectOpsRuntimeTools: DomainToolDefinition[] = [
         topic,
         domainId: input.session.domainId,
         language: resolveLanguage(input),
+        support: PROJECT_OPS_MANAGER_SUPPORT,
         signal: input.signal,
       });
       return mapLegacyManagerEffectToProjectOpsRuntimeToolResult(effect);
@@ -163,6 +195,7 @@ export const projectOpsRuntimeTools: DomainToolDefinition[] = [
         composerMode: 'smart',
         defaultDomainId: input.session.domainId,
         language: resolveLanguage(input),
+        support: PROJECT_OPS_MANAGER_SUPPORT,
         signal: input.signal,
       });
       return mapLegacyManagerEffectToProjectOpsRuntimeToolResult(effect);
@@ -178,6 +211,7 @@ export const projectOpsRuntimeTools: DomainToolDefinition[] = [
       const effect = await executeManagerHelp({
         domainId: input.session.domainId,
         language: resolveLanguage(input),
+        support: PROJECT_OPS_MANAGER_SUPPORT,
         signal: input.signal,
       });
       return mapLegacyManagerEffectToProjectOpsRuntimeToolResult(effect);

@@ -1,14 +1,20 @@
 import {
   getDefaultRuntimeDomainPack,
   getRuntimeDomainPackById,
+  listRuntimeDomainPacks,
 } from '@/src/domains/runtime/registry';
 import type {
   DomainRuntimePack,
   RuntimeManagerCapability,
   RuntimeManagerLegacyEffectInput,
+  RuntimeLocalizedText,
+  RuntimeConversationTurn,
   RuntimeToolExecutionResult,
   SessionWorkflowStateSnapshot,
 } from '@/src/domains/runtime/types';
+import { parseManagerIntakeWorkflowSnapshot } from '@/src/services/manager-intake/workflowProjection';
+import { resolveManagerRoutingResult } from '@/src/services/manager-orchestration/router';
+import type { ManagerRoutingResult } from '@/src/services/manager-orchestration/types';
 import type {
   ManagerConversationEffect,
   ManagerLanguage,
@@ -74,6 +80,68 @@ export function parseRuntimeManagerPendingTask(input: {
   return isManagerPendingTask(raw) ? raw : null;
 }
 
+export interface RuntimeManagerTaskIntakeSummary {
+  workflowType: string;
+  sourceText: string;
+  activeStepId: string | null;
+  activeStepTitle?: string | null;
+  recognizedSlotIds: string[];
+  missingSlotIds: string[];
+  completed: boolean;
+}
+
+function readLocalizedRuntimeText(
+  text: RuntimeLocalizedText | undefined,
+  language: ManagerLanguage,
+): string | null {
+  if (!text) {
+    return null;
+  }
+
+  const preferred = language === 'zh' ? text.zh : text.en;
+  if (typeof preferred === 'string' && preferred.trim().length > 0) {
+    return preferred.trim();
+  }
+
+  const fallback = language === 'zh' ? text.en : text.zh;
+  return typeof fallback === 'string' && fallback.trim().length > 0 ? fallback.trim() : null;
+}
+
+export function parseRuntimeManagerTaskIntakeSummary(input: {
+  runtimePack?: DomainRuntimePack | null;
+  domainId?: string | null;
+  workflow: SessionWorkflowStateSnapshot | null | undefined;
+  language: ManagerLanguage;
+}): RuntimeManagerTaskIntakeSummary | null {
+  const capability = getRuntimeManagerCapability(input);
+  const taskIntake = capability?.taskIntake;
+  if (!taskIntake || !input.workflow) {
+    return null;
+  }
+
+  const workflowState = parseManagerIntakeWorkflowSnapshot(
+    input.workflow,
+    taskIntake.definition.workflowType,
+  );
+  if (!workflowState) {
+    return null;
+  }
+
+  const activeStep = taskIntake.definition.steps.find(
+    (step) => step.stepId === workflowState.activeStepId,
+  );
+
+  return {
+    workflowType: workflowState.workflowType,
+    sourceText: workflowState.sourceText,
+    activeStepId: workflowState.activeStepId,
+    activeStepTitle: readLocalizedRuntimeText(activeStep?.title, input.language),
+    recognizedSlotIds: [...workflowState.recognizedSlotIds],
+    missingSlotIds: [...workflowState.missingSlotIds],
+    completed: workflowState.completed,
+  };
+}
+
 export function mapRuntimeManagerEffect(input: {
   runtimePack?: DomainRuntimePack | null;
   domainId?: string | null;
@@ -97,6 +165,18 @@ function readLocalizedText(
   return typeof text === 'string' && text.trim().length > 0 ? text.trim() : null;
 }
 
+function readTaskIntakeTopicText(
+  capability: RuntimeManagerCapability | null,
+  language: ManagerLanguage,
+  topic: 'help' | 'factors' | 'sequence',
+): string | null {
+  const text = capability?.taskIntake?.describeTopic?.({
+    topic,
+    language,
+  });
+  return typeof text === 'string' && text.trim().length > 0 ? text.trim() : null;
+}
+
 function buildGenericHelpText(language: ManagerLanguage): string {
   return language === 'zh'
     ? '你可以直接告诉我想分析什么、什么时候执行；如果当前领域支持，我也可以先查询本地数据，再生成任务卡片。'
@@ -109,7 +189,11 @@ export function resolveRuntimeManagerHelpText(input: {
   language: ManagerLanguage;
 }): string {
   const capability = getRuntimeManagerCapability(input);
-  return readLocalizedText(capability, input.language, 'helpText') || buildGenericHelpText(input.language);
+  return (
+    readTaskIntakeTopicText(capability, input.language, 'help') ||
+    readLocalizedText(capability, input.language, 'helpText') ||
+    buildGenericHelpText(input.language)
+  );
 }
 
 export function resolveRuntimeManagerCapabilityText(input: {
@@ -119,6 +203,7 @@ export function resolveRuntimeManagerCapabilityText(input: {
   topic: 'factors' | 'sequence' | 'help';
 }): string {
   const capability = getRuntimeManagerCapability(input);
+  const taskIntakeText = readTaskIntakeTopicText(capability, input.language, input.topic);
   const directText =
     input.topic === 'factors'
       ? readLocalizedText(capability, input.language, 'factorsText')
@@ -126,7 +211,7 @@ export function resolveRuntimeManagerCapabilityText(input: {
         ? readLocalizedText(capability, input.language, 'sequenceText')
         : readLocalizedText(capability, input.language, 'helpText');
 
-  return directText || resolveRuntimeManagerHelpText(input);
+  return taskIntakeText || directText || resolveRuntimeManagerHelpText(input);
 }
 
 export function resolveRuntimeManagerWorkflowType(input: {
@@ -138,4 +223,29 @@ export function resolveRuntimeManagerWorkflowType(input: {
   return typeof workflowType === 'string' && workflowType.trim().length > 0
     ? workflowType.trim()
     : null;
+}
+
+export async function resolveRuntimeManagerRoutingResult(input: {
+  input: string;
+  language: ManagerLanguage;
+  runtimePacks?: DomainRuntimePack[];
+  sessionId?: string;
+  activeDomainId?: string | null;
+  recentMessages?: RuntimeConversationTurn[];
+  activeWorkflow?: SessionWorkflowStateSnapshot | null;
+  signal?: AbortSignal;
+}): Promise<ManagerRoutingResult> {
+  return resolveManagerRoutingResult({
+    text: input.input,
+    language: input.language,
+    runtimePacks:
+      Array.isArray(input.runtimePacks) && input.runtimePacks.length > 0
+        ? input.runtimePacks
+        : listRuntimeDomainPacks(),
+    sessionId: input.sessionId,
+    activeDomainId: input.activeDomainId,
+    recentMessages: input.recentMessages,
+    activeWorkflow: input.activeWorkflow,
+    signal: input.signal,
+  });
 }

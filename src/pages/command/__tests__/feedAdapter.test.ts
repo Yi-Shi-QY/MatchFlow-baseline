@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ManagerSessionProjection } from '@/src/services/manager-gateway/types';
+import { resolveRuntimeManagerHelpText } from '@/src/services/manager/runtimeIntentRouter';
 import {
   createCommandCenterWelcomeFeed,
   projectManagerSessionProjectionToCommandCenterFeed,
@@ -10,12 +11,14 @@ function createProjection(): ManagerSessionProjection {
     session: {
       id: 'session_main',
       sessionKey: 'manager:main',
+      sessionKind: 'domain_main',
       title: 'Main session',
       status: 'active',
       domainId: 'football',
       runtimeDomainVersion: '1.0.0',
       activeWorkflowType: null,
       activeWorkflowStateData: null,
+      compositeWorkflowStateData: null,
       latestSummaryId: null,
       latestMessageAt: 300,
       createdAt: 100,
@@ -26,6 +29,7 @@ function createProjection(): ManagerSessionProjection {
     activeRun: null,
     latestRun: null,
     activeWorkflow: null,
+    compositeWorkflow: null,
     feed: [
       {
         id: 'msg_user_1',
@@ -139,10 +143,67 @@ describe('command center feed adapter', () => {
         id: 'command_center_welcome_en',
         role: 'assistant',
         blockType: 'assistant_text',
-        text:
-          'The manager agent is ready. Ask what matches are on today, or tell me which match to analyze and when. I will query local synced data first, then arrange the analysis task in the conversation.',
+        text: resolveRuntimeManagerHelpText({
+          domainId: 'football',
+          language: 'en',
+        }),
         createdAt: 0,
       },
     ]);
+  });
+
+  it('builds a domain-aware project ops welcome feed', () => {
+    const items = createCommandCenterWelcomeFeed('en', 'project_ops');
+
+    expect(items[0]?.text).toContain('project, task, or initiative');
+  });
+
+  it('projects supervisor composite child summaries even when they are only stored on the workflow items', () => {
+    const items = projectManagerSessionProjectionToCommandCenterFeed({
+      ...createProjection(),
+      session: {
+        ...createProjection().session,
+        sessionKey: 'manager:main:supervisor',
+        sessionKind: 'supervisor',
+        domainId: 'football',
+      },
+      feed: [],
+      activeWorkflow: null,
+      compositeWorkflow: {
+        schemaVersion: 'manager_composite_v1',
+        workflowId: 'manager_composite_1',
+        workflowType: 'manager_composite',
+        sourceText: 'Analyze football and project ops',
+        status: 'active',
+        activeItemId: 'item_project_ops',
+        createdAt: 100,
+        updatedAt: 200,
+        items: [
+          {
+            itemId: 'item_football',
+            title: 'Real Madrid vs Barcelona',
+            domainId: 'football',
+            sourceText: 'Analyze Real Madrid vs Barcelona',
+            status: 'completed',
+            summary: 'Football analysis configured.',
+          },
+          {
+            itemId: 'item_project_ops',
+            title: 'Q2 mobile launch blockers',
+            domainId: 'project_ops',
+            sourceText: 'Review Q2 mobile launch blockers',
+            status: 'active',
+            pendingLabel: 'Choose focus areas',
+            summary: 'Project ops intake is waiting for focus areas.',
+          },
+        ],
+      },
+    });
+
+    expect(items.map((item) => item.text)).toEqual([
+      '[Football] Football analysis configured.',
+      '[Project Ops] Project ops intake is waiting for focus areas.',
+    ]);
+    expect(items.every((item) => item.role === 'assistant')).toBe(true);
   });
 });

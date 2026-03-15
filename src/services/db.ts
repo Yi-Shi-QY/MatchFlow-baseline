@@ -109,6 +109,22 @@ async function runSchemaMigrations(targetDb: SQLiteDBConnection) {
   await ensureTableColumn(targetDb, SYNCED_MATCHES_TABLE, 'awayName', 'awayName TEXT');
   await ensureTableColumn(targetDb, SYNCED_MATCHES_TABLE, 'payloadData', 'payloadData TEXT');
   await ensureTableColumn(targetDb, SYNCED_MATCHES_TABLE, 'updatedAt', 'updatedAt INTEGER');
+
+  // Manager session model v2.
+  await ensureTableColumn(
+    targetDb,
+    MANAGER_SESSIONS_TABLE,
+    'sessionKind',
+    "sessionKind TEXT NOT NULL DEFAULT 'domain_main'",
+  );
+  await ensureTableColumn(targetDb, MANAGER_SESSIONS_TABLE, 'parentSessionId', 'parentSessionId TEXT');
+  await ensureTableColumn(targetDb, MANAGER_SESSIONS_TABLE, 'ownerDomainId', 'ownerDomainId TEXT');
+  await ensureTableColumn(
+    targetDb,
+    MANAGER_SESSIONS_TABLE,
+    'compositeWorkflowStateData',
+    'compositeWorkflowStateData TEXT',
+  );
 }
 
 export async function initDB() {
@@ -215,12 +231,16 @@ export async function initDB() {
       CREATE TABLE IF NOT EXISTS ${MANAGER_SESSIONS_TABLE} (
         id TEXT PRIMARY KEY,
         sessionKey TEXT NOT NULL UNIQUE,
+        sessionKind TEXT NOT NULL DEFAULT 'domain_main',
+        parentSessionId TEXT,
+        ownerDomainId TEXT,
         title TEXT NOT NULL,
         status TEXT NOT NULL,
         domainId TEXT NOT NULL,
         runtimeDomainVersion TEXT,
         activeWorkflowType TEXT,
         activeWorkflowStateData TEXT,
+        compositeWorkflowStateData TEXT,
         latestSummaryId TEXT,
         latestMessageAt INTEGER NOT NULL,
         createdAt INTEGER NOT NULL,
@@ -290,6 +310,8 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_synced_matches_status ON ${SYNCED_MATCHES_TABLE}(status);
       CREATE INDEX IF NOT EXISTS idx_manager_sessions_status_updated ON ${MANAGER_SESSIONS_TABLE}(status, updatedAt DESC);
       CREATE INDEX IF NOT EXISTS idx_manager_sessions_domain_updated ON ${MANAGER_SESSIONS_TABLE}(domainId, updatedAt DESC);
+      CREATE INDEX IF NOT EXISTS idx_manager_sessions_kind_updated ON ${MANAGER_SESSIONS_TABLE}(sessionKind, updatedAt DESC);
+      CREATE INDEX IF NOT EXISTS idx_manager_sessions_parent ON ${MANAGER_SESSIONS_TABLE}(parentSessionId, updatedAt DESC);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_manager_messages_session_ordinal ON ${MANAGER_MESSAGES_TABLE}(sessionId, ordinal);
       CREATE INDEX IF NOT EXISTS idx_manager_messages_session_created ON ${MANAGER_MESSAGES_TABLE}(sessionId, createdAt DESC);
       CREATE INDEX IF NOT EXISTS idx_manager_runs_session_created ON ${MANAGER_RUNS_TABLE}(sessionId, createdAt DESC);

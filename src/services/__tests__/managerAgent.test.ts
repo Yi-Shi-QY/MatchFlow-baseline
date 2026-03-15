@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildFactorsFollowUp,
-  buildSequenceFollowUp,
   isTodayMatchesQuery,
   looksLikeTaskCommand,
+} from '@/src/services/managerAgent';
+import {
+  buildFactorsFollowUp,
+  buildSequenceFollowUp,
   parseSequencePreference,
   parseSourcePreferenceIds,
-} from '@/src/services/managerAgent';
+} from '@/src/services/manager-legacy/analysisProfile';
 
 describe('manager agent', () => {
   it('recognizes today match queries', () => {

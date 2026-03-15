@@ -69,6 +69,12 @@ function resolveProjectOpsSubjects(query: string): ProjectOpsSubjectDisplay[] {
   return searchProjectOpsLocalCases(query).slice(0, 5);
 }
 
+function hasProjectOpsQuerySignals(input: string): boolean {
+  return /(project|task|initiative|handoff|deadline|review|milestone|owner|blocker|ops|launch|cutover|support|项目|任务|专项|里程碑|负责人|阻塞|交接|截止|复盘|推进|上线|风险)/i.test(
+    input,
+  );
+}
+
 export const projectOpsRuntimeResolver: DomainResolver = {
   async resolveIntent(rawInput: string, _ctx: ResolveContext): Promise<AnalysisIntent | null> {
     const normalized = rawInput.trim();
@@ -80,11 +86,17 @@ export const projectOpsRuntimeResolver: DomainResolver = {
       return buildIntent('explain', normalized);
     }
 
-    if (looksLikeTaskCommand(normalized)) {
-      const subjectRefs = resolveProjectOpsSubjects(normalized).map(toRuntimeSubject);
+    const subjectRefs = resolveProjectOpsSubjects(normalized).map(toRuntimeSubject);
+    if (
+      looksLikeTaskCommand(normalized) ||
+      subjectRefs.length > 0 ||
+      hasProjectOpsQuerySignals(normalized)
+    ) {
       return {
         ...buildIntent(
-          /(every|daily|schedule|recurring|every day)/i.test(normalized) ? 'schedule' : 'analyze',
+          /(every|daily|schedule|recurring|every day|每天|定时|周期)/i.test(normalized)
+            ? 'schedule'
+            : 'analyze',
           normalized,
         ),
         subjectRefs: subjectRefs.length > 0 ? subjectRefs : undefined,

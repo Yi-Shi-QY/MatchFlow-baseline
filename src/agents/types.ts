@@ -23,6 +23,15 @@ export interface AgentContext {
     selectedSourceIds?: string[];
     sequencePreference?: string[];
   } | null;
+  managerTaskIntake?: {
+    workflowType: string;
+    sourceText: string;
+    activeStepId: string | null;
+    activeStepTitle?: string | null;
+    recognizedSlotIds: string[];
+    missingSlotIds: string[];
+    completed: boolean;
+  } | null;
   planningAgentCatalog?: PlanningAgentCapability[];
   planningAnimationCatalog?: PlanningAnimationCapability[];
   planningSourceCatalog?: PlanningSourceCapability[];

@@ -14,3 +14,7 @@ export function getManagerGateway(): ManagerGateway {
   }
   return managerGatewaySingleton;
 }
+
+export function resetManagerGatewayForTests(): void {
+  managerGatewaySingleton = null;
+}
